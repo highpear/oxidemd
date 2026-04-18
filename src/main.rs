@@ -1,5 +1,7 @@
 mod app;
 mod i18n;
+mod parser;
+mod renderer;
 
 use std::fs;
 use std::path::PathBuf;

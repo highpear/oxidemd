@@ -1,15 +1,17 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use eframe::egui::{self, CentralPanel, RichText, ScrollArea, TextEdit, TopBottomPanel};
+use eframe::egui::{self, CentralPanel, RichText, ScrollArea, TopBottomPanel};
 use rfd::FileDialog;
 
 use crate::i18n::{Language, tr};
+use crate::parser::{MarkdownDocument, parse_markdown};
+use crate::renderer::render_markdown_document;
 
 pub struct OxideMdApp {
     language: Language,
     current_file: Option<PathBuf>,
-    file_content: String,
+    document: Option<MarkdownDocument>,
     status_message: String,
 }
 
@@ -20,7 +22,7 @@ impl Default for OxideMdApp {
         Self {
             language,
             current_file: None,
-            file_content: String::new(),
+            document: None,
             status_message: tr(language, "status.no_file").to_owned(),
         }
     }
@@ -47,11 +49,12 @@ impl OxideMdApp {
             match self.load_file(&path) {
                 Ok(content) => {
                     self.current_file = Some(path.clone());
-                    self.file_content = content;
+                    self.document = Some(parse_markdown(&content));
                     self.status_message =
                         format!("{} {}", tr(self.language, "status.loaded"), path.display());
                 }
                 Err(error) => {
+                    self.document = None;
                     self.status_message =
                         format!("{} {}", tr(self.language, "status.load_failed"), error);
                 }
@@ -100,7 +103,7 @@ impl eframe::App for OxideMdApp {
         });
 
         CentralPanel::default().show(ctx, |ui| {
-            if self.file_content.is_empty() {
+            let Some(document) = self.document.as_ref() else {
                 ui.vertical_centered(|ui| {
                     ui.add_space(32.0);
                     ui.label(RichText::new(tr(self.language, "message.empty")).heading());
@@ -108,15 +111,10 @@ impl eframe::App for OxideMdApp {
                     ui.label(tr(self.language, "message.open_prompt"));
                 });
                 return;
-            }
+            };
 
             ScrollArea::vertical().show(ui, |ui| {
-                ui.add(
-                    TextEdit::multiline(&mut self.file_content)
-                        .font(egui::TextStyle::Monospace)
-                        .desired_width(f32::INFINITY)
-                        .interactive(false),
-                );
+                render_markdown_document(ui, document);
             });
         });
     }
