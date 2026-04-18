@@ -14,9 +14,11 @@ pub fn tr(language: Language, key: &str) -> &'static str {
 fn en(key: &str) -> &'static str {
     match key {
         "action.open" => "Open Markdown",
+        "action.reset_zoom" => "Reset",
         "action.switch_language" => "日本語 / English",
         "action.switch_theme" => "Theme:",
         "label.current_file" => "Current file:",
+        "label.zoom" => "Zoom:",
         "label.no_file" => "No file selected",
         "message.empty" => "No markdown file is open",
         "message.open_prompt" => "Choose a Markdown file to start reading.",
@@ -41,9 +43,11 @@ fn en(key: &str) -> &'static str {
 fn ja(key: &str) -> &'static str {
     match key {
         "action.open" => "Markdownを開く",
+        "action.reset_zoom" => "リセット",
         "action.switch_language" => "日本語 / English",
         "action.switch_theme" => "テーマ:",
         "label.current_file" => "現在のファイル:",
+        "label.zoom" => "ズーム:",
         "label.no_file" => "ファイル未選択",
         "message.empty" => "Markdownファイルはまだ開かれていません",
         "message.open_prompt" => "Markdownファイルを選択して読み込みます。",
