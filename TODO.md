@@ -178,10 +178,10 @@ Goal: make the viewer pleasant for daily use.
 * [x] Show the current file name
 * [x] Add reload status feedback
 * [x] Add a basic theme foundation
-* [ ] Expand the theme system
-* [ ] Add theme switching
+* [x] Expand the theme system
+* [x] Add theme switching
 * [ ] Add a dark mode friendly theme
-* [ ] Improve spacing and typography
+* [x] Improve spacing and typography
 * [ ] Add basic keyboard shortcuts
 * [ ] Add simple zoom in / zoom out
 
@@ -259,10 +259,10 @@ Exit criteria:
 
 ## Current Priority
 
-1. Re-parse live reload updates in the background
-2. Improve spacing and typography
-3. Expand the theme system
-4. Add syntax highlighting
-5. Add heading-based navigation
+1. Add a dark mode friendly theme
+2. Add syntax highlighting
+3. Add heading-based navigation
+4. Add basic keyboard shortcuts
+5. Add simple zoom in / zoom out
 
 ---

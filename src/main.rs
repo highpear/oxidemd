@@ -11,7 +11,7 @@ use std::path::PathBuf;
 
 use app::OxideMdApp;
 use eframe::egui::{self, FontData, FontDefinitions, FontFamily};
-use theme::apply_theme;
+use theme::{DEFAULT_THEME_ID, apply_theme, theme};
 
 const MEIRYO_FONT_NAME: &str = "meiryo";
 
@@ -23,7 +23,7 @@ fn main() -> eframe::Result<()> {
         options,
         Box::new(|cc| {
             configure_fonts(&cc.egui_ctx);
-            apply_theme(&cc.egui_ctx);
+            apply_theme(&cc.egui_ctx, &theme(DEFAULT_THEME_ID));
             Ok(Box::new(OxideMdApp::new(cc.egui_ctx.clone())))
         }),
     )
