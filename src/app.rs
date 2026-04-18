@@ -7,6 +7,7 @@ use rfd::FileDialog;
 
 use crate::i18n::{Language, tr};
 use crate::parser::{MarkdownDocument, parse_markdown};
+use crate::reload_worker::{ReloadResponse, ReloadWorkerHandle, spawn_reload_worker};
 use crate::renderer::render_markdown_document;
 use crate::theme::default_theme;
 use crate::watcher::{FileWatchEvent, FileWatcherHandle, watch_file};
@@ -25,8 +26,11 @@ pub struct OxideMdApp {
     document: Option<MarkdownDocument>,
     status_message: String,
     reload_status: ReloadStatus,
+    reload_worker: ReloadWorkerHandle,
     watcher: Option<FileWatcherHandle>,
     pending_reload_at: Option<Instant>,
+    queued_reload_id: u64,
+    in_flight_reload_id: Option<u64>,
 }
 
 impl OxideMdApp {
@@ -34,6 +38,7 @@ impl OxideMdApp {
         let language = Language::En;
 
         Self {
+            reload_worker: spawn_reload_worker(ui_context.clone()),
             ui_context,
             language,
             current_file: None,
@@ -42,6 +47,8 @@ impl OxideMdApp {
             reload_status: ReloadStatus::Idle,
             watcher: None,
             pending_reload_at: None,
+            queued_reload_id: 0,
+            in_flight_reload_id: None,
         }
     }
 
@@ -85,6 +92,7 @@ impl OxideMdApp {
                 self.current_file = Some(path.clone());
                 self.document = Some(document);
                 self.pending_reload_at = None;
+                self.in_flight_reload_id = None;
                 self.reload_status = ReloadStatus::Idle;
                 self.start_watching_file(&path);
                 self.status_message =
@@ -96,6 +104,7 @@ impl OxideMdApp {
                 self.reload_status = ReloadStatus::Error;
                 self.watcher = None;
                 self.pending_reload_at = None;
+                self.in_flight_reload_id = None;
                 self.status_message =
                     format!("{} {}", tr(self.language, "status.load_failed"), error);
             }
@@ -167,22 +176,30 @@ impl OxideMdApp {
             return;
         };
 
-        self.pending_reload_at = None;
+        if self.in_flight_reload_id.is_some() {
+            self.ui_context
+                .request_repaint_after(Duration::from_millis(100));
+            return;
+        }
 
-        match self.load_markdown_document(&path) {
-            Ok(document) => {
-                self.document = Some(document);
-                self.reload_status = ReloadStatus::Idle;
+        self.pending_reload_at = None;
+        self.queued_reload_id += 1;
+        let reload_id = self.queued_reload_id;
+
+        match self.reload_worker.request_reload(reload_id, path.clone()) {
+            Ok(()) => {
+                self.in_flight_reload_id = Some(reload_id);
+                self.reload_status = ReloadStatus::Reloading;
                 self.status_message = format!(
                     "{} {}",
-                    tr(self.language, "status.reloaded"),
+                    tr(self.language, "status.reload_started"),
                     path.display()
                 );
             }
             Err(error) => {
                 self.reload_status = ReloadStatus::Error;
                 self.status_message =
-                    format!("{} {}", tr(self.language, "status.reload_failed"), error);
+                    format!("{} {}", tr(self.language, "status.worker_failed"), error);
             }
         }
     }
@@ -194,11 +211,47 @@ impl OxideMdApp {
             ReloadStatus::Error => tr(self.language, "reload.error"),
         }
     }
+
+    fn process_reload_results(&mut self) {
+        while let Ok(result) = self.reload_worker.receiver.try_recv() {
+            match result {
+                ReloadResponse::Reloaded { id, path, document } => {
+                    if self.in_flight_reload_id != Some(id) {
+                        continue;
+                    }
+
+                    self.in_flight_reload_id = None;
+                    self.document = Some(document);
+                    self.reload_status = ReloadStatus::Idle;
+                    self.status_message = format!(
+                        "{} {}",
+                        tr(self.language, "status.reloaded"),
+                        path.display()
+                    );
+                }
+                ReloadResponse::Error { id, path, error } => {
+                    if self.in_flight_reload_id != Some(id) {
+                        continue;
+                    }
+
+                    self.in_flight_reload_id = None;
+                    self.reload_status = ReloadStatus::Error;
+                    self.status_message = format!(
+                        "{} {} ({})",
+                        tr(self.language, "status.reload_failed"),
+                        path.display(),
+                        error
+                    );
+                }
+            }
+        }
+    }
 }
 
 impl eframe::App for OxideMdApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.process_watch_events();
+        self.process_reload_results();
         self.reload_if_ready();
 
         let theme = default_theme();

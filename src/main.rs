@@ -1,6 +1,7 @@
 mod app;
 mod i18n;
 mod parser;
+mod reload_worker;
 mod renderer;
 mod theme;
 mod watcher;
