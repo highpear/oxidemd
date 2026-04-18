@@ -304,32 +304,35 @@ impl eframe::App for OxideMdApp {
         CentralPanel::default().show(ctx, |ui| {
             let Some(document) = self.document.as_ref() else {
                 ui.vertical_centered(|ui| {
-                    ui.add_space(32.0);
+                    ui.add_space(48.0);
                     ui.label(RichText::new(tr(self.language, "message.empty")).heading());
-                    ui.add_space(8.0);
+                    ui.add_space(12.0);
                     ui.label(tr(self.language, "message.open_prompt"));
                 });
                 return;
             };
 
             ScrollArea::vertical().show(ui, |ui| {
-                ui.add_space(10.0);
-                Frame::new()
-                    .fill(theme.content_background)
-                    .stroke(egui::Stroke::new(1.0, theme.content_border))
-                    .shadow(egui::epaint::Shadow {
-                        offset: [0, 6],
-                        blur: 24,
-                        spread: 0,
-                        color: theme.content_shadow,
-                    })
-                    .corner_radius(egui::CornerRadius::same(12))
-                    .inner_margin(Margin::symmetric(24, 20))
-                    .show(ui, |ui| {
-                        ui.set_max_width(860.0);
-                        render_markdown_document(ui, document, &theme);
-                    });
-                ui.add_space(16.0);
+                ui.add_space(18.0);
+                ui.vertical_centered(|ui| {
+                    ui.set_max_width(840.0);
+                    Frame::new()
+                        .fill(theme.content_background)
+                        .stroke(egui::Stroke::new(1.0, theme.content_border))
+                        .shadow(egui::epaint::Shadow {
+                            offset: [0, 8],
+                            blur: 28,
+                            spread: 0,
+                            color: theme.content_shadow,
+                        })
+                        .corner_radius(egui::CornerRadius::same(12))
+                        .inner_margin(Margin::symmetric(32, 28))
+                        .show(ui, |ui| {
+                            ui.set_max_width(760.0);
+                            render_markdown_document(ui, document, &theme);
+                        });
+                });
+                ui.add_space(24.0);
             });
         });
     }
