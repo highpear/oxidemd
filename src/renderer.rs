@@ -1,21 +1,22 @@
-use eframe::egui::{self, Color32, FontFamily, FontId, Frame, RichText, Stroke, Ui};
+use eframe::egui::{self, FontFamily, FontId, Frame, RichText, Stroke, Ui};
 use pulldown_cmark::HeadingLevel;
 
 use crate::parser::{Block, InlineContent, InlineSpan, MarkdownDocument};
+use crate::theme::Theme;
 
-pub fn render_markdown_document(ui: &mut Ui, document: &MarkdownDocument) {
+pub fn render_markdown_document(ui: &mut Ui, document: &MarkdownDocument, theme: &Theme) {
     for block in &document.blocks {
         match block {
-            Block::Heading { level, content } => render_heading(ui, *level, content),
+            Block::Heading { level, content } => render_heading(ui, *level, content, theme),
             Block::Paragraph(text) => {
-                render_inline(ui, text, InlineStyle::Body);
+                render_inline(ui, text, InlineStyle::Body, theme);
                 ui.add_space(12.0);
             }
             Block::UnorderedList(items) => {
                 for item in items {
                     ui.horizontal_wrapped(|ui| {
-                        ui.label("- ");
-                        render_inline(ui, item, InlineStyle::Body);
+                        ui.label(RichText::new("- ").color(theme.text_secondary));
+                        render_inline(ui, item, InlineStyle::Body, theme);
                     });
                 }
                 ui.add_space(12.0);
@@ -23,19 +24,24 @@ pub fn render_markdown_document(ui: &mut Ui, document: &MarkdownDocument) {
             Block::OrderedList { start, items } => {
                 for (index, item) in items.iter().enumerate() {
                     ui.horizontal_wrapped(|ui| {
-                        ui.label(format!("{}. ", start + index as u64));
-                        render_inline(ui, item, InlineStyle::Body);
+                        ui.label(
+                            RichText::new(format!("{}. ", start + index as u64))
+                                .color(theme.text_secondary),
+                        );
+                        render_inline(ui, item, InlineStyle::Body, theme);
                     });
                 }
                 ui.add_space(12.0);
             }
-            Block::BlockQuote(lines) => render_blockquote(ui, lines),
-            Block::CodeBlock { language, code } => render_code_block(ui, language.as_deref(), code),
+            Block::BlockQuote(lines) => render_blockquote(ui, lines, theme),
+            Block::CodeBlock { language, code } => {
+                render_code_block(ui, language.as_deref(), code, theme)
+            }
         }
     }
 }
 
-fn render_heading(ui: &mut Ui, level: HeadingLevel, content: &InlineContent) {
+fn render_heading(ui: &mut Ui, level: HeadingLevel, content: &InlineContent, theme: &Theme) {
     let size = match level {
         HeadingLevel::H1 => 28.0,
         HeadingLevel::H2 => 24.0,
@@ -45,36 +51,41 @@ fn render_heading(ui: &mut Ui, level: HeadingLevel, content: &InlineContent) {
         HeadingLevel::H6 => 15.0,
     };
 
-    render_inline(ui, content, InlineStyle::Heading(size));
+    render_inline(ui, content, InlineStyle::Heading(size), theme);
     ui.add_space(10.0);
 }
 
-fn render_blockquote(ui: &mut Ui, lines: &[InlineContent]) {
+fn render_blockquote(ui: &mut Ui, lines: &[InlineContent], theme: &Theme) {
     Frame::new()
-        .fill(Color32::from_rgb(245, 245, 245))
-        .stroke(Stroke::new(1.0, Color32::from_rgb(200, 200, 200)))
+        .fill(theme.quote_background)
+        .stroke(Stroke::new(1.0, theme.quote_border))
         .inner_margin(egui::Margin::same(10))
         .show(ui, |ui| {
             for line in lines {
-                render_inline(ui, line, InlineStyle::Quote);
+                render_inline(ui, line, InlineStyle::Quote, theme);
             }
         });
 
     ui.add_space(12.0);
 }
 
-fn render_code_block(ui: &mut Ui, language: Option<&str>, code: &str) {
+fn render_code_block(ui: &mut Ui, language: Option<&str>, code: &str, theme: &Theme) {
     Frame::new()
-        .fill(Color32::from_rgb(248, 248, 248))
-        .stroke(Stroke::new(1.0, Color32::from_rgb(220, 220, 220)))
+        .fill(theme.code_background)
+        .stroke(Stroke::new(1.0, theme.content_border))
         .inner_margin(egui::Margin::same(10))
         .show(ui, |ui| {
             if let Some(language) = language {
-                ui.label(RichText::new(language).small().strong());
+                ui.label(
+                    RichText::new(language)
+                        .small()
+                        .strong()
+                        .color(theme.text_secondary),
+                );
                 ui.add_space(4.0);
             }
 
-            ui.label(RichText::new(code).monospace());
+            ui.label(RichText::new(code).monospace().color(theme.text_primary));
         });
 
     ui.add_space(12.0);
@@ -87,7 +98,7 @@ enum InlineStyle {
     Heading(f32),
 }
 
-fn render_inline(ui: &mut Ui, content: &InlineContent, style: InlineStyle) {
+fn render_inline(ui: &mut Ui, content: &InlineContent, style: InlineStyle, theme: &Theme) {
     let mut lines: Vec<Vec<&InlineSpan>> = vec![Vec::new()];
 
     for span in &content.spans {
@@ -101,7 +112,7 @@ fn render_inline(ui: &mut Ui, content: &InlineContent, style: InlineStyle) {
     for line in lines {
         ui.horizontal_wrapped(|ui| {
             for span in line {
-                render_inline_span(ui, span, style);
+                render_inline_span(ui, span, style, theme);
             }
         });
     }
@@ -115,40 +126,38 @@ enum SpanKind {
     Link,
 }
 
-fn render_inline_span(ui: &mut Ui, span: &InlineSpan, style: InlineStyle) {
+fn render_inline_span(ui: &mut Ui, span: &InlineSpan, style: InlineStyle, theme: &Theme) {
     match span {
-        InlineSpan::Text(text) => render_text_label(ui, text, style, SpanKind::Plain),
-        InlineSpan::Strong(text) => render_text_label(ui, text, style, SpanKind::Strong),
-        InlineSpan::Emphasis(text) => render_text_label(ui, text, style, SpanKind::Emphasis),
-        InlineSpan::Code(text) => render_text_label(ui, text, style, SpanKind::Code),
+        InlineSpan::Text(text) => render_text_label(ui, text, style, SpanKind::Plain, theme),
+        InlineSpan::Strong(text) => render_text_label(ui, text, style, SpanKind::Strong, theme),
+        InlineSpan::Emphasis(text) => render_text_label(ui, text, style, SpanKind::Emphasis, theme),
+        InlineSpan::Code(text) => render_text_label(ui, text, style, SpanKind::Code, theme),
         InlineSpan::Link { text, destination } => {
-            let rich_text = styled_text(text, style, SpanKind::Link);
+            let rich_text = styled_text(text, style, SpanKind::Link, theme);
             ui.hyperlink_to(rich_text, destination);
         }
         InlineSpan::LineBreak => {}
     }
 }
 
-fn render_text_label(ui: &mut Ui, text: &str, style: InlineStyle, kind: SpanKind) {
+fn render_text_label(ui: &mut Ui, text: &str, style: InlineStyle, kind: SpanKind, theme: &Theme) {
     if text.is_empty() {
         return;
     }
 
-    ui.label(styled_text(text, style, kind));
+    ui.label(styled_text(text, style, kind, theme));
 }
 
-fn styled_text(text: &str, style: InlineStyle, kind: SpanKind) -> RichText {
+fn styled_text(text: &str, style: InlineStyle, kind: SpanKind, theme: &Theme) -> RichText {
     let mut rich_text = match style {
-        InlineStyle::Body => RichText::new(text)
-            .size(16.0)
-            .color(Color32::from_rgb(30, 30, 30)),
+        InlineStyle::Body => RichText::new(text).size(16.0).color(theme.text_primary),
         InlineStyle::Quote => RichText::new(text)
             .size(16.0)
-            .color(Color32::from_rgb(70, 70, 70))
+            .color(theme.text_secondary)
             .italics(),
         InlineStyle::Heading(size) => RichText::new(text)
             .size(size)
-            .color(Color32::from_rgb(20, 20, 20))
+            .color(theme.text_primary)
             .strong(),
     };
 
@@ -165,12 +174,12 @@ fn styled_text(text: &str, style: InlineStyle, kind: SpanKind) -> RichText {
             rich_text = rich_text
                 .family(FontFamily::Monospace)
                 .font(FontId::new(font_size, FontFamily::Monospace))
-                .background_color(Color32::from_rgb(240, 240, 240));
+                .background_color(theme.code_background);
 
             rich_text
         }
         SpanKind::Link => {
-            rich_text = rich_text.color(Color32::from_rgb(0, 92, 197)).underline();
+            rich_text = rich_text.color(theme.link).underline();
 
             rich_text
         }

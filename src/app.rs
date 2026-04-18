@@ -1,12 +1,13 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use eframe::egui::{self, CentralPanel, RichText, ScrollArea, TopBottomPanel};
+use eframe::egui::{self, CentralPanel, Frame, Margin, RichText, ScrollArea, TopBottomPanel};
 use rfd::FileDialog;
 
 use crate::i18n::{Language, tr};
 use crate::parser::{MarkdownDocument, parse_markdown};
 use crate::renderer::render_markdown_document;
+use crate::theme::default_theme;
 
 pub struct OxideMdApp {
     language: Language,
@@ -78,6 +79,8 @@ impl OxideMdApp {
 
 impl eframe::App for OxideMdApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        let theme = default_theme();
+
         TopBottomPanel::top("top_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if ui.button(tr(self.language, "action.open")).clicked() {
@@ -114,7 +117,23 @@ impl eframe::App for OxideMdApp {
             };
 
             ScrollArea::vertical().show(ui, |ui| {
-                render_markdown_document(ui, document);
+                ui.add_space(10.0);
+                Frame::new()
+                    .fill(theme.content_background)
+                    .stroke(egui::Stroke::new(1.0, theme.content_border))
+                    .shadow(egui::epaint::Shadow {
+                        offset: [0, 6],
+                        blur: 24,
+                        spread: 0,
+                        color: theme.content_shadow,
+                    })
+                    .corner_radius(egui::CornerRadius::same(12))
+                    .inner_margin(Margin::symmetric(24, 20))
+                    .show(ui, |ui| {
+                        ui.set_max_width(860.0);
+                        render_markdown_document(ui, document, &theme);
+                    });
+                ui.add_space(16.0);
             });
         });
     }
