@@ -2,7 +2,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use eframe::egui::{self, CentralPanel, Frame, Margin, RichText, ScrollArea, TopBottomPanel};
+use eframe::egui::{
+    self, CentralPanel, Frame, Key, KeyboardShortcut, Margin, Modifiers, RichText, ScrollArea,
+    TopBottomPanel,
+};
 use rfd::FileDialog;
 
 use crate::i18n::{Language, tr};
@@ -227,6 +230,38 @@ impl OxideMdApp {
         }
     }
 
+    fn request_manual_reload(&mut self) {
+        let Some(path) = self.current_file.clone() else {
+            self.status_message = tr(self.language, "status.no_file").to_owned();
+            return;
+        };
+
+        if self.in_flight_reload_id.is_some() {
+            return;
+        }
+
+        self.pending_reload_at = None;
+        self.queued_reload_id += 1;
+        let reload_id = self.queued_reload_id;
+
+        match self.reload_worker.request_reload(reload_id, path.clone()) {
+            Ok(()) => {
+                self.in_flight_reload_id = Some(reload_id);
+                self.reload_status = ReloadStatus::Reloading;
+                self.status_message = format!(
+                    "{} {}",
+                    tr(self.language, "status.reload_started"),
+                    path.display()
+                );
+            }
+            Err(error) => {
+                self.reload_status = ReloadStatus::Error;
+                self.status_message =
+                    format!("{} {}", tr(self.language, "status.worker_failed"), error);
+            }
+        }
+    }
+
     fn process_reload_results(&mut self) {
         while let Ok(result) = self.reload_worker.receiver.try_recv() {
             match result {
@@ -261,10 +296,43 @@ impl OxideMdApp {
             }
         }
     }
+
+    fn handle_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
+        let open_file = ctx.input_mut(|input| {
+            input.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::O))
+        });
+        let reload_file = ctx.input_mut(|input| {
+            input.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::R))
+                || input.consume_shortcut(&KeyboardShortcut::new(Modifiers::NONE, Key::F5))
+        });
+        let switch_language = ctx.input_mut(|input| {
+            input.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::L))
+        });
+        let switch_theme = ctx.input_mut(|input| {
+            input.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::T))
+        });
+
+        if open_file {
+            self.open_markdown_file();
+        }
+
+        if reload_file {
+            self.request_manual_reload();
+        }
+
+        if switch_language {
+            self.switch_language();
+        }
+
+        if switch_theme {
+            self.switch_theme();
+        }
+    }
 }
 
 impl eframe::App for OxideMdApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.handle_keyboard_shortcuts(ctx);
         self.process_watch_events();
         self.process_reload_results();
         self.reload_if_ready();

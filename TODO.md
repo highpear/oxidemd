@@ -182,7 +182,7 @@ Goal: make the viewer pleasant for daily use.
 * [x] Add theme switching
 * [x] Add a dark mode friendly theme
 * [x] Improve spacing and typography
-* [ ] Add basic keyboard shortcuts
+* [x] Add basic keyboard shortcuts
 * [ ] Add simple zoom in / zoom out
 
 Exit criteria:
@@ -261,8 +261,8 @@ Exit criteria:
 
 1. Add syntax highlighting
 2. Add heading-based navigation
-3. Add basic keyboard shortcuts
-4. Add simple zoom in / zoom out
-5. Measure reload time
+3. Add simple zoom in / zoom out
+4. Measure reload time
+5. Measure parse time
 
 ---
