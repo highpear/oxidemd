@@ -7,5 +7,6 @@ license = "MIT"
 
 [dependencies]
 eframe = "0.33"
+notify = "8"
 pulldown-cmark = "0.13"
 rfd = "0.15"

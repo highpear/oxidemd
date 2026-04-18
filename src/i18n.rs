@@ -22,6 +22,12 @@ fn en(key: &str) -> &'static str {
         "status.no_file" => "No file selected.",
         "status.loaded" => "Loaded:",
         "status.load_failed" => "Failed to load file:",
+        "status.reloaded" => "Reloaded:",
+        "status.reload_failed" => "Failed to reload file:",
+        "status.watch_failed" => "Failed to watch file:",
+        "reload.idle" => "Ready",
+        "reload.reloading" => "Reloading",
+        "reload.error" => "Error",
         _ => "missing translation",
     }
 }
@@ -37,6 +43,12 @@ fn ja(key: &str) -> &'static str {
         "status.no_file" => "ファイルが選択されていません。",
         "status.loaded" => "読み込み完了:",
         "status.load_failed" => "ファイルの読み込みに失敗しました:",
+        "status.reloaded" => "再読み込み完了:",
+        "status.reload_failed" => "ファイルの再読み込みに失敗しました:",
+        "status.watch_failed" => "ファイル監視の開始に失敗しました:",
+        "reload.idle" => "待機中",
+        "reload.reloading" => "再読み込み中",
+        "reload.error" => "エラー",
         _ => "missing translation",
     }
 }

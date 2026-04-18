@@ -13,6 +13,12 @@ pub struct Theme {
     pub quote_background: Color32,
     pub quote_border: Color32,
     pub code_background: Color32,
+    pub status_idle_background: Color32,
+    pub status_idle_text: Color32,
+    pub status_loading_background: Color32,
+    pub status_loading_text: Color32,
+    pub status_error_background: Color32,
+    pub status_error_text: Color32,
 }
 
 pub fn default_theme() -> Theme {
@@ -28,6 +34,12 @@ pub fn default_theme() -> Theme {
         quote_background: Color32::from_rgb(247, 245, 240),
         quote_border: Color32::from_rgb(214, 208, 198),
         code_background: Color32::from_rgb(244, 244, 244),
+        status_idle_background: Color32::from_rgb(231, 239, 229),
+        status_idle_text: Color32::from_rgb(58, 95, 60),
+        status_loading_background: Color32::from_rgb(243, 236, 214),
+        status_loading_text: Color32::from_rgb(122, 92, 25),
+        status_error_background: Color32::from_rgb(245, 224, 224),
+        status_error_text: Color32::from_rgb(150, 47, 47),
     }
 }
 
