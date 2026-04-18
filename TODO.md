@@ -137,9 +137,9 @@ Exit criteria:
 
 Goal: prepare the app for large files and frequent updates.
 
-* [ ] Measure startup time
-* [ ] Measure reload time
-* [ ] Measure parse time
+* [x] Measure startup time
+* [x] Measure reload time
+* [x] Measure parse time
 * [ ] Cache parsed output
 * [ ] Avoid unnecessary re-parsing
 * [ ] Avoid unnecessary allocations in hot paths
@@ -147,7 +147,7 @@ Goal: prepare the app for large files and frequent updates.
 
 Exit criteria:
 
-* [ ] Basic performance metrics are available
+* [x] Basic performance metrics are available
 * [ ] Major bottlenecks are visible
 * [ ] The codebase is ready for focused optimization
 
@@ -260,9 +260,9 @@ Exit criteria:
 ## Current Priority
 
 1. Add syntax highlighting
-2. Measure reload time
-3. Measure parse time
-4. Measure startup time
-5. Add table of contents (TOC)
+2. Add table of contents (TOC)
+3. Add in-document search
+4. Cache parsed output
+5. Avoid unnecessary re-parsing
 
 ---
