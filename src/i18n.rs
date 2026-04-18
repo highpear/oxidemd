@@ -15,6 +15,7 @@ fn en(key: &str) -> &'static str {
     match key {
         "action.open" => "Open Markdown",
         "action.switch_language" => "日本語 / English",
+        "action.switch_theme" => "Theme:",
         "label.current_file" => "Current file:",
         "label.no_file" => "No file selected",
         "message.empty" => "No markdown file is open",
@@ -30,6 +31,8 @@ fn en(key: &str) -> &'static str {
         "reload.idle" => "Ready",
         "reload.reloading" => "Reloading",
         "reload.error" => "Error",
+        "theme.warm_paper" => "Warm Paper",
+        "theme.mist" => "Mist",
         _ => "missing translation",
     }
 }
@@ -38,6 +41,7 @@ fn ja(key: &str) -> &'static str {
     match key {
         "action.open" => "Markdownを開く",
         "action.switch_language" => "日本語 / English",
+        "action.switch_theme" => "テーマ:",
         "label.current_file" => "現在のファイル:",
         "label.no_file" => "ファイル未選択",
         "message.empty" => "Markdownファイルはまだ開かれていません",
@@ -53,6 +57,8 @@ fn ja(key: &str) -> &'static str {
         "reload.idle" => "待機中",
         "reload.reloading" => "再読み込み中",
         "reload.error" => "エラー",
+        "theme.warm_paper" => "ウォームペーパー",
+        "theme.mist" => "ミスト",
         _ => "missing translation",
     }
 }

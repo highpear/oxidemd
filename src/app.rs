@@ -9,7 +9,7 @@ use crate::i18n::{Language, tr};
 use crate::parser::{MarkdownDocument, parse_markdown};
 use crate::reload_worker::{ReloadResponse, ReloadWorkerHandle, spawn_reload_worker};
 use crate::renderer::render_markdown_document;
-use crate::theme::default_theme;
+use crate::theme::{DEFAULT_THEME_ID, ThemeId, apply_theme, available_themes, theme};
 use crate::watcher::{FileWatchEvent, FileWatcherHandle, watch_file};
 
 #[derive(Clone, Copy)]
@@ -22,6 +22,7 @@ enum ReloadStatus {
 pub struct OxideMdApp {
     ui_context: egui::Context,
     language: Language,
+    theme_id: ThemeId,
     current_file: Option<PathBuf>,
     document: Option<MarkdownDocument>,
     status_message: String,
@@ -36,11 +37,13 @@ pub struct OxideMdApp {
 impl OxideMdApp {
     pub fn new(ui_context: egui::Context) -> Self {
         let language = Language::En;
+        debug_assert!(available_themes().contains(&DEFAULT_THEME_ID));
 
         Self {
             reload_worker: spawn_reload_worker(ui_context.clone()),
             ui_context,
             language,
+            theme_id: DEFAULT_THEME_ID,
             current_file: None,
             document: None,
             status_message: tr(language, "status.no_file").to_owned(),
@@ -60,6 +63,17 @@ impl OxideMdApp {
 
         if self.current_file.is_none() {
             self.status_message = tr(self.language, "status.no_file").to_owned();
+        }
+    }
+
+    fn switch_theme(&mut self) {
+        self.theme_id = self.theme_id.next();
+    }
+
+    fn current_theme_label(&self) -> &'static str {
+        match self.theme_id {
+            ThemeId::WarmPaper => tr(self.language, "theme.warm_paper"),
+            ThemeId::Mist => tr(self.language, "theme.mist"),
         }
     }
 
@@ -254,7 +268,8 @@ impl eframe::App for OxideMdApp {
         self.process_reload_results();
         self.reload_if_ready();
 
-        let theme = default_theme();
+        let theme = theme(self.theme_id);
+        apply_theme(ctx, &theme);
 
         TopBottomPanel::top("top_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
@@ -267,6 +282,17 @@ impl eframe::App for OxideMdApp {
                     .clicked()
                 {
                     self.switch_language();
+                }
+
+                if ui
+                    .button(format!(
+                        "{} {}",
+                        tr(self.language, "action.switch_theme"),
+                        self.current_theme_label()
+                    ))
+                    .clicked()
+                {
+                    self.switch_theme();
                 }
 
                 ui.separator();
