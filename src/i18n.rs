@@ -33,6 +33,7 @@ fn en(key: &str) -> &'static str {
         "reload.error" => "Error",
         "theme.warm_paper" => "Warm Paper",
         "theme.mist" => "Mist",
+        "theme.night_owl" => "Night Owl",
         _ => "missing translation",
     }
 }
@@ -59,6 +60,7 @@ fn ja(key: &str) -> &'static str {
         "reload.error" => "エラー",
         "theme.warm_paper" => "ウォームペーパー",
         "theme.mist" => "ミスト",
+        "theme.night_owl" => "ナイトアウル",
         _ => "missing translation",
     }
 }

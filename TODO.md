@@ -180,7 +180,7 @@ Goal: make the viewer pleasant for daily use.
 * [x] Add a basic theme foundation
 * [x] Expand the theme system
 * [x] Add theme switching
-* [ ] Add a dark mode friendly theme
+* [x] Add a dark mode friendly theme
 * [x] Improve spacing and typography
 * [ ] Add basic keyboard shortcuts
 * [ ] Add simple zoom in / zoom out
@@ -259,10 +259,10 @@ Exit criteria:
 
 ## Current Priority
 
-1. Add a dark mode friendly theme
-2. Add syntax highlighting
-3. Add heading-based navigation
-4. Add basic keyboard shortcuts
-5. Add simple zoom in / zoom out
+1. Add syntax highlighting
+2. Add heading-based navigation
+3. Add basic keyboard shortcuts
+4. Add simple zoom in / zoom out
+5. Measure reload time
 
 ---
