@@ -177,6 +177,8 @@ Goal: make the viewer pleasant for daily use.
 * [ ] Add a top bar or header
 * [ ] Show the current file name
 * [ ] Add reload status feedback
+* [ ] Expand the theme system
+* [ ] Add theme switching
 * [ ] Add a dark mode friendly theme
 * [ ] Improve spacing and typography
 * [ ] Add basic keyboard shortcuts
