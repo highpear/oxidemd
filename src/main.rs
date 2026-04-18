@@ -3,6 +3,7 @@ mod i18n;
 mod parser;
 mod renderer;
 mod theme;
+mod watcher;
 
 use std::fs;
 use std::path::PathBuf;
@@ -22,7 +23,7 @@ fn main() -> eframe::Result<()> {
         Box::new(|cc| {
             configure_fonts(&cc.egui_ctx);
             apply_theme(&cc.egui_ctx);
-            Ok(Box::new(OxideMdApp::default()))
+            Ok(Box::new(OxideMdApp::new(cc.egui_ctx.clone())))
         }),
     )
 }

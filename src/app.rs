@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use eframe::egui::{self, CentralPanel, Frame, Margin, RichText, ScrollArea, TopBottomPanel};
 use rfd::FileDialog;
@@ -8,28 +9,42 @@ use crate::i18n::{Language, tr};
 use crate::parser::{MarkdownDocument, parse_markdown};
 use crate::renderer::render_markdown_document;
 use crate::theme::default_theme;
+use crate::watcher::{FileWatchEvent, FileWatcherHandle, watch_file};
+
+#[derive(Clone, Copy)]
+enum ReloadStatus {
+    Idle,
+    Reloading,
+    Error,
+}
 
 pub struct OxideMdApp {
+    ui_context: egui::Context,
     language: Language,
     current_file: Option<PathBuf>,
     document: Option<MarkdownDocument>,
     status_message: String,
+    reload_status: ReloadStatus,
+    watcher: Option<FileWatcherHandle>,
+    pending_reload_at: Option<Instant>,
 }
 
-impl Default for OxideMdApp {
-    fn default() -> Self {
+impl OxideMdApp {
+    pub fn new(ui_context: egui::Context) -> Self {
         let language = Language::En;
 
         Self {
+            ui_context,
             language,
             current_file: None,
             document: None,
             status_message: tr(language, "status.no_file").to_owned(),
+            reload_status: ReloadStatus::Idle,
+            watcher: None,
+            pending_reload_at: None,
         }
     }
-}
 
-impl OxideMdApp {
     fn switch_language(&mut self) {
         self.language = match self.language {
             Language::En => Language::Ja,
@@ -47,19 +62,7 @@ impl OxideMdApp {
             .pick_file();
 
         if let Some(path) = selected_file {
-            match self.load_file(&path) {
-                Ok(content) => {
-                    self.current_file = Some(path.clone());
-                    self.document = Some(parse_markdown(&content));
-                    self.status_message =
-                        format!("{} {}", tr(self.language, "status.loaded"), path.display());
-                }
-                Err(error) => {
-                    self.document = None;
-                    self.status_message =
-                        format!("{} {}", tr(self.language, "status.load_failed"), error);
-                }
-            }
+            self.load_selected_file(path);
         }
     }
 
@@ -75,10 +78,129 @@ impl OxideMdApp {
             .map(ToOwned::to_owned)
             .unwrap_or_else(|| tr(self.language, "label.no_file").to_owned())
     }
+
+    fn load_selected_file(&mut self, path: PathBuf) {
+        match self.load_markdown_document(&path) {
+            Ok(document) => {
+                self.current_file = Some(path.clone());
+                self.document = Some(document);
+                self.pending_reload_at = None;
+                self.reload_status = ReloadStatus::Idle;
+                self.start_watching_file(&path);
+                self.status_message =
+                    format!("{} {}", tr(self.language, "status.loaded"), path.display());
+            }
+            Err(error) => {
+                self.document = None;
+                self.current_file = None;
+                self.reload_status = ReloadStatus::Error;
+                self.watcher = None;
+                self.pending_reload_at = None;
+                self.status_message =
+                    format!("{} {}", tr(self.language, "status.load_failed"), error);
+            }
+        }
+    }
+
+    fn load_markdown_document(&self, path: &Path) -> Result<MarkdownDocument, String> {
+        self.load_file(path).map(|content| parse_markdown(&content))
+    }
+
+    fn start_watching_file(&mut self, path: &Path) {
+        match watch_file(path, self.ui_context.clone()) {
+            Ok(handle) => {
+                self.watcher = Some(handle);
+            }
+            Err(error) => {
+                self.watcher = None;
+                self.reload_status = ReloadStatus::Error;
+                self.status_message =
+                    format!("{} {}", tr(self.language, "status.watch_failed"), error);
+            }
+        }
+    }
+
+    fn process_watch_events(&mut self) {
+        let mut watch_error = None;
+        let mut saw_change = false;
+
+        if let Some(watcher) = &self.watcher {
+            while let Ok(event) = watcher.receiver.try_recv() {
+                match event {
+                    FileWatchEvent::Changed => {
+                        saw_change = true;
+                    }
+                    FileWatchEvent::Error(error) => {
+                        watch_error = Some(error);
+                    }
+                }
+            }
+        }
+
+        if saw_change {
+            self.pending_reload_at = Some(Instant::now());
+            self.reload_status = ReloadStatus::Reloading;
+            self.status_message = tr(self.language, "reload.reloading").to_owned();
+            self.ui_context
+                .request_repaint_after(Duration::from_millis(100));
+        }
+
+        if let Some(error) = watch_error {
+            self.reload_status = ReloadStatus::Error;
+            self.status_message = format!("{} {}", tr(self.language, "status.watch_failed"), error);
+        }
+    }
+
+    fn reload_if_ready(&mut self) {
+        let Some(last_change_at) = self.pending_reload_at else {
+            return;
+        };
+
+        if last_change_at.elapsed() < Duration::from_millis(200) {
+            self.ui_context
+                .request_repaint_after(Duration::from_millis(100));
+            return;
+        }
+
+        let Some(path) = self.current_file.clone() else {
+            self.pending_reload_at = None;
+            return;
+        };
+
+        self.pending_reload_at = None;
+
+        match self.load_markdown_document(&path) {
+            Ok(document) => {
+                self.document = Some(document);
+                self.reload_status = ReloadStatus::Idle;
+                self.status_message = format!(
+                    "{} {}",
+                    tr(self.language, "status.reloaded"),
+                    path.display()
+                );
+            }
+            Err(error) => {
+                self.reload_status = ReloadStatus::Error;
+                self.status_message =
+                    format!("{} {}", tr(self.language, "status.reload_failed"), error);
+            }
+        }
+    }
+
+    fn reload_status_label(&self) -> &'static str {
+        match self.reload_status {
+            ReloadStatus::Idle => tr(self.language, "reload.idle"),
+            ReloadStatus::Reloading => tr(self.language, "reload.reloading"),
+            ReloadStatus::Error => tr(self.language, "reload.error"),
+        }
+    }
 }
 
 impl eframe::App for OxideMdApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.process_watch_events();
+        self.reload_if_ready();
+
         let theme = default_theme();
 
         TopBottomPanel::top("top_bar").show(ctx, |ui| {
@@ -100,6 +222,27 @@ impl eframe::App for OxideMdApp {
                     tr(self.language, "label.current_file"),
                     self.current_file_label()
                 ));
+
+                ui.separator();
+                let (status_bg, status_text) = match self.reload_status {
+                    ReloadStatus::Idle => (theme.status_idle_background, theme.status_idle_text),
+                    ReloadStatus::Reloading => {
+                        (theme.status_loading_background, theme.status_loading_text)
+                    }
+                    ReloadStatus::Error => (theme.status_error_background, theme.status_error_text),
+                };
+
+                Frame::new()
+                    .fill(status_bg)
+                    .corner_radius(egui::CornerRadius::same(255))
+                    .inner_margin(Margin::symmetric(10, 4))
+                    .show(ui, |ui| {
+                        ui.label(
+                            RichText::new(self.reload_status_label())
+                                .color(status_text)
+                                .strong(),
+                        );
+                    });
             });
 
             ui.label(&self.status_message);
