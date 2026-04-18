@@ -74,6 +74,7 @@ impl OxideMdApp {
         match self.theme_id {
             ThemeId::WarmPaper => tr(self.language, "theme.warm_paper"),
             ThemeId::Mist => tr(self.language, "theme.mist"),
+            ThemeId::NightOwl => tr(self.language, "theme.night_owl"),
         }
     }
 

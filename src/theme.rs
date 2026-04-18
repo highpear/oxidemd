@@ -4,6 +4,7 @@ use eframe::egui::{self, Color32, CornerRadius, Stroke, Style, Visuals};
 pub enum ThemeId {
     WarmPaper,
     Mist,
+    NightOwl,
 }
 
 impl ThemeId {
@@ -16,6 +17,7 @@ impl ThemeId {
 
 #[derive(Clone, Copy)]
 pub struct Theme {
+    pub is_dark: bool,
     pub app_background: Color32,
     pub top_bar_background: Color32,
     pub content_background: Color32,
@@ -41,20 +43,25 @@ pub struct Theme {
 pub const DEFAULT_THEME_ID: ThemeId = ThemeId::WarmPaper;
 
 pub fn available_themes() -> &'static [ThemeId] {
-    &[ThemeId::WarmPaper, ThemeId::Mist]
+    &[ThemeId::WarmPaper, ThemeId::Mist, ThemeId::NightOwl]
 }
 
 pub fn theme(theme_id: ThemeId) -> Theme {
     match theme_id {
         ThemeId::WarmPaper => warm_paper_theme(),
         ThemeId::Mist => mist_theme(),
+        ThemeId::NightOwl => night_owl_theme(),
     }
 }
 
 pub fn apply_theme(ctx: &egui::Context, theme: &Theme) {
     let mut style: Style = (*ctx.style()).clone();
 
-    style.visuals = Visuals::light();
+    style.visuals = if theme.is_dark {
+        Visuals::dark()
+    } else {
+        Visuals::light()
+    };
     style.visuals.panel_fill = theme.app_background;
     style.visuals.window_fill = theme.content_background;
     style.visuals.extreme_bg_color = theme.content_background;
@@ -78,6 +85,7 @@ pub fn apply_theme(ctx: &egui::Context, theme: &Theme) {
 
 fn warm_paper_theme() -> Theme {
     Theme {
+        is_dark: false,
         app_background: Color32::from_rgb(241, 238, 232),
         top_bar_background: Color32::from_rgb(236, 232, 224),
         content_background: Color32::from_rgb(255, 255, 255),
@@ -103,6 +111,7 @@ fn warm_paper_theme() -> Theme {
 
 fn mist_theme() -> Theme {
     Theme {
+        is_dark: false,
         app_background: Color32::from_rgb(234, 240, 242),
         top_bar_background: Color32::from_rgb(226, 234, 237),
         content_background: Color32::from_rgb(252, 254, 255),
@@ -123,5 +132,31 @@ fn mist_theme() -> Theme {
         widget_inactive_background: Color32::from_rgb(244, 248, 250),
         widget_hovered_background: Color32::from_rgb(236, 243, 246),
         widget_active_background: Color32::from_rgb(228, 237, 241),
+    }
+}
+
+fn night_owl_theme() -> Theme {
+    Theme {
+        is_dark: true,
+        app_background: Color32::from_rgb(14, 19, 26),
+        top_bar_background: Color32::from_rgb(19, 26, 35),
+        content_background: Color32::from_rgb(23, 31, 42),
+        content_border: Color32::from_rgb(53, 71, 92),
+        content_shadow: Color32::from_rgba_unmultiplied(0, 0, 0, 48),
+        text_primary: Color32::from_rgb(224, 232, 242),
+        text_secondary: Color32::from_rgb(154, 170, 188),
+        link: Color32::from_rgb(107, 183, 255),
+        quote_background: Color32::from_rgb(28, 38, 51),
+        quote_border: Color32::from_rgb(63, 83, 107),
+        code_background: Color32::from_rgb(18, 25, 34),
+        status_idle_background: Color32::from_rgb(27, 56, 46),
+        status_idle_text: Color32::from_rgb(161, 222, 196),
+        status_loading_background: Color32::from_rgb(73, 58, 21),
+        status_loading_text: Color32::from_rgb(245, 221, 142),
+        status_error_background: Color32::from_rgb(84, 34, 38),
+        status_error_text: Color32::from_rgb(255, 182, 186),
+        widget_inactive_background: Color32::from_rgb(29, 39, 52),
+        widget_hovered_background: Color32::from_rgb(37, 48, 63),
+        widget_active_background: Color32::from_rgb(47, 61, 79),
     }
 }
