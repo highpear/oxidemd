@@ -9,6 +9,7 @@ use eframe::egui::{
 use rfd::FileDialog;
 
 use crate::i18n::{Language, tr};
+use crate::metrics::{self, DocumentTiming};
 use crate::parser::{HeadingNavItem, MarkdownDocument, parse_markdown};
 use crate::reload_worker::{ReloadResponse, ReloadWorkerHandle, spawn_reload_worker};
 use crate::renderer::render_markdown_document;
@@ -42,10 +43,11 @@ pub struct OxideMdApp {
     queued_reload_id: u64,
     in_flight_reload_id: Option<u64>,
     pending_heading_scroll: Option<usize>,
+    startup_started: Option<Instant>,
 }
 
 impl OxideMdApp {
-    pub fn new(ui_context: egui::Context) -> Self {
+    pub fn new(ui_context: egui::Context, startup_started: Instant) -> Self {
         let language = Language::En;
         debug_assert!(available_themes().contains(&DEFAULT_THEME_ID));
 
@@ -64,6 +66,7 @@ impl OxideMdApp {
             queued_reload_id: 0,
             in_flight_reload_id: None,
             pending_heading_scroll: None,
+            startup_started: Some(startup_started),
         }
     }
 
@@ -146,13 +149,14 @@ impl OxideMdApp {
 
     fn load_selected_file(&mut self, path: PathBuf) {
         match self.load_markdown_document(&path) {
-            Ok(document) => {
+            Ok((document, timing)) => {
                 self.current_file = Some(path.clone());
                 self.document = Some(document);
                 self.pending_reload_at = None;
                 self.in_flight_reload_id = None;
                 self.reload_status = ReloadStatus::Idle;
                 self.start_watching_file(&path);
+                metrics::log_initial_load(&path, &timing);
                 self.status_message =
                     format!("{} {}", tr(self.language, "status.loaded"), path.display());
             }
@@ -169,8 +173,20 @@ impl OxideMdApp {
         }
     }
 
-    fn load_markdown_document(&self, path: &Path) -> Result<MarkdownDocument, String> {
-        self.load_file(path).map(|content| parse_markdown(&content))
+    fn load_markdown_document(
+        &self,
+        path: &Path,
+    ) -> Result<(MarkdownDocument, DocumentTiming), String> {
+        let load_started = Instant::now();
+        let content = self.load_file(path)?;
+        let parse_started = Instant::now();
+        let document = parse_markdown(&content);
+        let timing = DocumentTiming {
+            total: load_started.elapsed(),
+            parse: parse_started.elapsed(),
+        };
+
+        Ok((document, timing))
     }
 
     fn start_watching_file(&mut self, path: &Path) {
@@ -305,7 +321,12 @@ impl OxideMdApp {
     fn process_reload_results(&mut self) {
         while let Ok(result) = self.reload_worker.receiver.try_recv() {
             match result {
-                ReloadResponse::Reloaded { id, path, document } => {
+                ReloadResponse::Reloaded {
+                    id,
+                    path,
+                    document,
+                    timing,
+                } => {
                     if self.in_flight_reload_id != Some(id) {
                         continue;
                     }
@@ -313,6 +334,7 @@ impl OxideMdApp {
                     self.in_flight_reload_id = None;
                     self.document = Some(document);
                     self.reload_status = ReloadStatus::Idle;
+                    metrics::log_reload(&path, &timing);
                     self.status_message = format!(
                         "{} {}",
                         tr(self.language, "status.reloaded"),
@@ -394,6 +416,10 @@ impl OxideMdApp {
 
 impl eframe::App for OxideMdApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if let Some(startup_started) = self.startup_started.take() {
+            metrics::log_startup(startup_started.elapsed());
+        }
+
         self.handle_keyboard_shortcuts(ctx);
         self.process_watch_events();
         self.process_reload_results();

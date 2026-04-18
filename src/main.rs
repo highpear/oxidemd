@@ -1,5 +1,6 @@
 mod app;
 mod i18n;
+mod metrics;
 mod parser;
 mod reload_worker;
 mod renderer;
@@ -8,6 +9,7 @@ mod watcher;
 
 use std::fs;
 use std::path::PathBuf;
+use std::time::Instant;
 
 use app::OxideMdApp;
 use eframe::egui::{self, FontData, FontDefinitions, FontFamily};
@@ -16,6 +18,7 @@ use theme::{DEFAULT_THEME_ID, apply_theme, theme};
 const MEIRYO_FONT_NAME: &str = "meiryo";
 
 fn main() -> eframe::Result<()> {
+    let startup_started = Instant::now();
     let options = eframe::NativeOptions::default();
 
     eframe::run_native(
@@ -24,7 +27,10 @@ fn main() -> eframe::Result<()> {
         Box::new(|cc| {
             configure_fonts(&cc.egui_ctx);
             apply_theme(&cc.egui_ctx, &theme(DEFAULT_THEME_ID));
-            Ok(Box::new(OxideMdApp::new(cc.egui_ctx.clone())))
+            Ok(Box::new(OxideMdApp::new(
+                cc.egui_ctx.clone(),
+                startup_started,
+            )))
         }),
     )
 }
