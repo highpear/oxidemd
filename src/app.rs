@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use eframe::egui::{
-    self, CentralPanel, Frame, Key, KeyboardShortcut, Margin, Modifiers, RichText, ScrollArea,
-    TopBottomPanel,
+    self, Align, CentralPanel, Frame, Key, KeyboardShortcut, Layout, Margin, Modifiers, RichText,
+    ScrollArea, Slider, TopBottomPanel,
 };
 use rfd::FileDialog;
 
@@ -22,10 +22,16 @@ enum ReloadStatus {
     Error,
 }
 
+const DEFAULT_ZOOM_FACTOR: f32 = 1.0;
+const MIN_ZOOM_FACTOR: f32 = 0.8;
+const MAX_ZOOM_FACTOR: f32 = 1.8;
+const ZOOM_STEP: f32 = 0.1;
+
 pub struct OxideMdApp {
     ui_context: egui::Context,
     language: Language,
     theme_id: ThemeId,
+    zoom_factor: f32,
     current_file: Option<PathBuf>,
     document: Option<MarkdownDocument>,
     status_message: String,
@@ -47,6 +53,7 @@ impl OxideMdApp {
             ui_context,
             language,
             theme_id: DEFAULT_THEME_ID,
+            zoom_factor: DEFAULT_ZOOM_FACTOR,
             current_file: None,
             document: None,
             status_message: tr(language, "status.no_file").to_owned(),
@@ -79,6 +86,30 @@ impl OxideMdApp {
             ThemeId::Mist => tr(self.language, "theme.mist"),
             ThemeId::NightOwl => tr(self.language, "theme.night_owl"),
         }
+    }
+
+    fn zoom_in(&mut self) {
+        self.zoom_factor = (self.zoom_factor + ZOOM_STEP).clamp(MIN_ZOOM_FACTOR, MAX_ZOOM_FACTOR);
+    }
+
+    fn zoom_out(&mut self) {
+        self.zoom_factor = (self.zoom_factor - ZOOM_STEP).clamp(MIN_ZOOM_FACTOR, MAX_ZOOM_FACTOR);
+    }
+
+    fn reset_zoom(&mut self) {
+        self.zoom_factor = DEFAULT_ZOOM_FACTOR;
+    }
+
+    fn zoom_label(&self) -> String {
+        format!(
+            "{} {}%",
+            tr(self.language, "label.zoom"),
+            (self.zoom_factor * 100.0).round()
+        )
+    }
+
+    fn zoom_percent(&self) -> f32 {
+        self.zoom_factor * 100.0
     }
 
     fn open_markdown_file(&mut self) {
@@ -311,6 +342,16 @@ impl OxideMdApp {
         let switch_theme = ctx.input_mut(|input| {
             input.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::T))
         });
+        let zoom_in = ctx.input_mut(|input| {
+            input.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::Plus))
+                || input.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::Equals))
+        });
+        let zoom_out = ctx.input_mut(|input| {
+            input.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::Minus))
+        });
+        let reset_zoom = ctx.input_mut(|input| {
+            input.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::Num0))
+        });
 
         if open_file {
             self.open_markdown_file();
@@ -326,6 +367,18 @@ impl OxideMdApp {
 
         if switch_theme {
             self.switch_theme();
+        }
+
+        if zoom_in {
+            self.zoom_in();
+        }
+
+        if zoom_out {
+            self.zoom_out();
+        }
+
+        if reset_zoom {
+            self.reset_zoom();
         }
     }
 }
@@ -396,6 +449,27 @@ impl eframe::App for OxideMdApp {
             ui.label(&self.status_message);
         });
 
+        TopBottomPanel::bottom("bottom_bar").show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(self.zoom_label());
+
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if ui.button(tr(self.language, "action.reset_zoom")).clicked() {
+                        self.reset_zoom();
+                    }
+
+                    let slider =
+                        Slider::new(&mut self.zoom_factor, MIN_ZOOM_FACTOR..=MAX_ZOOM_FACTOR)
+                            .show_value(false)
+                            .step_by(ZOOM_STEP.into())
+                            .smart_aim(false);
+                    ui.add_sized([160.0, 0.0], slider);
+
+                    ui.label(format!("{:.0}%", self.zoom_percent()));
+                });
+            });
+        });
+
         CentralPanel::default().show(ctx, |ui| {
             let Some(document) = self.document.as_ref() else {
                 ui.vertical_centered(|ui| {
@@ -424,7 +498,7 @@ impl eframe::App for OxideMdApp {
                         .inner_margin(Margin::symmetric(32, 28))
                         .show(ui, |ui| {
                             ui.set_max_width(760.0);
-                            render_markdown_document(ui, document, &theme);
+                            render_markdown_document(ui, document, &theme, self.zoom_factor);
                         });
                 });
                 ui.add_space(24.0);

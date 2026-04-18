@@ -11,13 +11,20 @@ const BLOCK_SPACING_PARAGRAPH: f32 = 18.0;
 const BLOCK_SPACING_SECTION: f32 = 24.0;
 const LIST_ITEM_SPACING: f32 = 8.0;
 
-pub fn render_markdown_document(ui: &mut Ui, document: &MarkdownDocument, theme: &Theme) {
+pub fn render_markdown_document(
+    ui: &mut Ui,
+    document: &MarkdownDocument,
+    theme: &Theme,
+    zoom_factor: f32,
+) {
     for block in &document.blocks {
         match block {
-            Block::Heading { level, content } => render_heading(ui, *level, content, theme),
+            Block::Heading { level, content } => {
+                render_heading(ui, *level, content, theme, zoom_factor)
+            }
             Block::Paragraph(text) => {
-                render_inline(ui, text, InlineStyle::Body, theme);
-                ui.add_space(BLOCK_SPACING_PARAGRAPH);
+                render_inline(ui, text, InlineStyle::Body, theme, zoom_factor);
+                ui.add_space(scale_spacing(BLOCK_SPACING_PARAGRAPH, zoom_factor));
             }
             Block::UnorderedList(items) => {
                 for item in items {
@@ -26,10 +33,11 @@ pub fn render_markdown_document(ui: &mut Ui, document: &MarkdownDocument, theme:
                         RichText::new("- ").color(theme.text_secondary),
                         item,
                         theme,
+                        zoom_factor,
                     );
-                    ui.add_space(LIST_ITEM_SPACING);
+                    ui.add_space(scale_spacing(LIST_ITEM_SPACING, zoom_factor));
                 }
-                ui.add_space(BLOCK_SPACING_SECTION);
+                ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
             }
             Block::OrderedList { start, items } => {
                 for (index, item) in items.iter().enumerate() {
@@ -39,20 +47,27 @@ pub fn render_markdown_document(ui: &mut Ui, document: &MarkdownDocument, theme:
                             .color(theme.text_secondary),
                         item,
                         theme,
+                        zoom_factor,
                     );
-                    ui.add_space(LIST_ITEM_SPACING);
+                    ui.add_space(scale_spacing(LIST_ITEM_SPACING, zoom_factor));
                 }
-                ui.add_space(BLOCK_SPACING_SECTION);
+                ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
             }
-            Block::BlockQuote(lines) => render_blockquote(ui, lines, theme),
+            Block::BlockQuote(lines) => render_blockquote(ui, lines, theme, zoom_factor),
             Block::CodeBlock { language, code } => {
-                render_code_block(ui, language.as_deref(), code, theme)
+                render_code_block(ui, language.as_deref(), code, theme, zoom_factor)
             }
         }
     }
 }
 
-fn render_heading(ui: &mut Ui, level: HeadingLevel, content: &InlineContent, theme: &Theme) {
+fn render_heading(
+    ui: &mut Ui,
+    level: HeadingLevel,
+    content: &InlineContent,
+    theme: &Theme,
+    zoom_factor: f32,
+) {
     let size = match level {
         HeadingLevel::H1 => 31.0,
         HeadingLevel::H2 => 26.0,
@@ -60,61 +75,85 @@ fn render_heading(ui: &mut Ui, level: HeadingLevel, content: &InlineContent, the
         HeadingLevel::H4 => 19.0,
         HeadingLevel::H5 => 17.0,
         HeadingLevel::H6 => 16.0,
-    };
+    } * zoom_factor;
 
-    render_inline(ui, content, InlineStyle::Heading(size), theme);
-    ui.add_space(BLOCK_SPACING_SECTION);
+    render_inline(ui, content, InlineStyle::Heading(size), theme, zoom_factor);
+    ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
 }
 
-fn render_list_item(ui: &mut Ui, marker: RichText, item: &InlineContent, theme: &Theme) {
+fn render_list_item(
+    ui: &mut Ui,
+    marker: RichText,
+    item: &InlineContent,
+    theme: &Theme,
+    zoom_factor: f32,
+) {
     ui.horizontal_top(|ui| {
-        ui.add_sized([24.0, 0.0], egui::Label::new(marker));
+        ui.add_sized(
+            [scale_spacing(24.0, zoom_factor), 0.0],
+            egui::Label::new(marker.size(BODY_TEXT_SIZE * zoom_factor)),
+        );
 
         ui.vertical(|ui| {
-            render_inline(ui, item, InlineStyle::Body, theme);
+            render_inline(ui, item, InlineStyle::Body, theme, zoom_factor);
         });
     });
 }
 
-fn render_blockquote(ui: &mut Ui, lines: &[InlineContent], theme: &Theme) {
+fn render_blockquote(ui: &mut Ui, lines: &[InlineContent], theme: &Theme, zoom_factor: f32) {
     Frame::new()
         .fill(theme.quote_background)
         .stroke(Stroke::new(1.0, theme.quote_border))
-        .inner_margin(egui::Margin::symmetric(16, 14))
+        .inner_margin(egui::Margin::symmetric(
+            scale_margin(16, zoom_factor),
+            scale_margin(14, zoom_factor),
+        ))
         .show(ui, |ui| {
             for line in lines {
-                render_inline(ui, line, InlineStyle::Quote, theme);
-                ui.add_space(6.0);
+                render_inline(ui, line, InlineStyle::Quote, theme, zoom_factor);
+                ui.add_space(scale_spacing(6.0, zoom_factor));
             }
         });
 
-    ui.add_space(BLOCK_SPACING_SECTION);
+    ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
 }
 
-fn render_code_block(ui: &mut Ui, language: Option<&str>, code: &str, theme: &Theme) {
+fn render_code_block(
+    ui: &mut Ui,
+    language: Option<&str>,
+    code: &str,
+    theme: &Theme,
+    zoom_factor: f32,
+) {
     Frame::new()
         .fill(theme.code_background)
         .stroke(Stroke::new(1.0, theme.content_border))
-        .inner_margin(egui::Margin::symmetric(16, 14))
+        .inner_margin(egui::Margin::symmetric(
+            scale_margin(16, zoom_factor),
+            scale_margin(14, zoom_factor),
+        ))
         .show(ui, |ui| {
             if let Some(language) = language {
                 ui.label(
                     RichText::new(language)
-                        .small()
+                        .size(12.0 * zoom_factor)
                         .strong()
                         .color(theme.text_secondary),
                 );
-                ui.add_space(4.0);
+                ui.add_space(scale_spacing(4.0, zoom_factor));
             }
 
             ui.label(
                 RichText::new(code)
-                    .font(FontId::new(INLINE_CODE_TEXT_SIZE, FontFamily::Monospace))
+                    .font(FontId::new(
+                        INLINE_CODE_TEXT_SIZE * zoom_factor,
+                        FontFamily::Monospace,
+                    ))
                     .color(theme.text_primary),
             );
         });
 
-    ui.add_space(BLOCK_SPACING_SECTION);
+    ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
 }
 
 #[derive(Clone, Copy)]
@@ -124,7 +163,13 @@ enum InlineStyle {
     Heading(f32),
 }
 
-fn render_inline(ui: &mut Ui, content: &InlineContent, style: InlineStyle, theme: &Theme) {
+fn render_inline(
+    ui: &mut Ui,
+    content: &InlineContent,
+    style: InlineStyle,
+    theme: &Theme,
+    zoom_factor: f32,
+) {
     let mut lines: Vec<Vec<&InlineSpan>> = vec![Vec::new()];
 
     for span in &content.spans {
@@ -138,7 +183,7 @@ fn render_inline(ui: &mut Ui, content: &InlineContent, style: InlineStyle, theme
     for line in lines {
         ui.horizontal_wrapped(|ui| {
             for span in line {
-                render_inline_span(ui, span, style, theme);
+                render_inline_span(ui, span, style, theme, zoom_factor);
             }
         });
     }
@@ -152,35 +197,62 @@ enum SpanKind {
     Link,
 }
 
-fn render_inline_span(ui: &mut Ui, span: &InlineSpan, style: InlineStyle, theme: &Theme) {
+fn render_inline_span(
+    ui: &mut Ui,
+    span: &InlineSpan,
+    style: InlineStyle,
+    theme: &Theme,
+    zoom_factor: f32,
+) {
     match span {
-        InlineSpan::Text(text) => render_text_label(ui, text, style, SpanKind::Plain, theme),
-        InlineSpan::Strong(text) => render_text_label(ui, text, style, SpanKind::Strong, theme),
-        InlineSpan::Emphasis(text) => render_text_label(ui, text, style, SpanKind::Emphasis, theme),
-        InlineSpan::Code(text) => render_text_label(ui, text, style, SpanKind::Code, theme),
+        InlineSpan::Text(text) => {
+            render_text_label(ui, text, style, SpanKind::Plain, theme, zoom_factor)
+        }
+        InlineSpan::Strong(text) => {
+            render_text_label(ui, text, style, SpanKind::Strong, theme, zoom_factor)
+        }
+        InlineSpan::Emphasis(text) => {
+            render_text_label(ui, text, style, SpanKind::Emphasis, theme, zoom_factor)
+        }
+        InlineSpan::Code(text) => {
+            render_text_label(ui, text, style, SpanKind::Code, theme, zoom_factor)
+        }
         InlineSpan::Link { text, destination } => {
-            let rich_text = styled_text(text, style, SpanKind::Link, theme);
+            let rich_text = styled_text(text, style, SpanKind::Link, theme, zoom_factor);
             ui.hyperlink_to(rich_text, destination);
         }
         InlineSpan::LineBreak => {}
     }
 }
 
-fn render_text_label(ui: &mut Ui, text: &str, style: InlineStyle, kind: SpanKind, theme: &Theme) {
+fn render_text_label(
+    ui: &mut Ui,
+    text: &str,
+    style: InlineStyle,
+    kind: SpanKind,
+    theme: &Theme,
+    zoom_factor: f32,
+) {
     if text.is_empty() {
         return;
     }
 
-    ui.label(styled_text(text, style, kind, theme));
+    ui.label(styled_text(text, style, kind, theme, zoom_factor));
 }
 
-fn styled_text(text: &str, style: InlineStyle, kind: SpanKind, theme: &Theme) -> RichText {
+fn styled_text(
+    text: &str,
+    style: InlineStyle,
+    kind: SpanKind,
+    theme: &Theme,
+    zoom_factor: f32,
+) -> RichText {
     let mut rich_text = match style {
         InlineStyle::Body => RichText::new(text)
-            .size(BODY_TEXT_SIZE)
+            .size(BODY_TEXT_SIZE * zoom_factor)
             .color(theme.text_primary),
         InlineStyle::Quote => RichText::new(text)
-            .size(QUOTE_TEXT_SIZE)
+            .size(QUOTE_TEXT_SIZE * zoom_factor)
             .color(theme.text_secondary)
             .italics(),
         InlineStyle::Heading(size) => RichText::new(text)
@@ -195,8 +267,8 @@ fn styled_text(text: &str, style: InlineStyle, kind: SpanKind, theme: &Theme) ->
         SpanKind::Emphasis => rich_text.italics(),
         SpanKind::Code => {
             let font_size = match style {
-                InlineStyle::Heading(size) => (size - 1.0).max(INLINE_CODE_TEXT_SIZE),
-                _ => INLINE_CODE_TEXT_SIZE,
+                InlineStyle::Heading(size) => (size - zoom_factor).max(INLINE_CODE_TEXT_SIZE),
+                _ => INLINE_CODE_TEXT_SIZE * zoom_factor,
             };
 
             rich_text = rich_text
@@ -212,4 +284,14 @@ fn styled_text(text: &str, style: InlineStyle, kind: SpanKind, theme: &Theme) ->
             rich_text
         }
     }
+}
+
+fn scale_spacing(value: f32, zoom_factor: f32) -> f32 {
+    value * zoom_factor
+}
+
+fn scale_margin(value: i8, zoom_factor: f32) -> i8 {
+    ((value as f32) * zoom_factor)
+        .round()
+        .clamp(0.0, i8::MAX as f32) as i8
 }
