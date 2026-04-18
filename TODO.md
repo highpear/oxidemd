@@ -197,7 +197,7 @@ Exit criteria:
 Goal: improve usability for larger Markdown documents.
 
 * [ ] Add table of contents (TOC)
-* [ ] Support heading-based navigation
+* [x] Support heading-based navigation
 * [ ] Add in-document search
 * [ ] Highlight search matches
 * [ ] Add jump-to-section behavior
@@ -260,9 +260,9 @@ Exit criteria:
 ## Current Priority
 
 1. Add syntax highlighting
-2. Add heading-based navigation
-3. Measure reload time
-4. Measure parse time
-5. Measure startup time
+2. Measure reload time
+3. Measure parse time
+4. Measure startup time
+5. Add table of contents (TOC)
 
 ---

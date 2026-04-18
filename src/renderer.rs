@@ -1,4 +1,4 @@
-use eframe::egui::{self, FontFamily, FontId, Frame, RichText, Stroke, Ui};
+use eframe::egui::{self, Align, FontFamily, FontId, Frame, RichText, Stroke, Ui};
 use pulldown_cmark::HeadingLevel;
 
 use crate::parser::{Block, InlineContent, InlineSpan, MarkdownDocument};
@@ -16,11 +16,22 @@ pub fn render_markdown_document(
     document: &MarkdownDocument,
     theme: &Theme,
     zoom_factor: f32,
-) {
-    for block in &document.blocks {
+    scroll_to_heading: Option<usize>,
+) -> bool {
+    let mut did_scroll = false;
+
+    for (block_index, block) in document.blocks.iter().enumerate() {
         match block {
             Block::Heading { level, content } => {
-                render_heading(ui, *level, content, theme, zoom_factor)
+                did_scroll |= render_heading(
+                    ui,
+                    *level,
+                    content,
+                    theme,
+                    zoom_factor,
+                    scroll_to_heading,
+                    block_index,
+                );
             }
             Block::Paragraph(text) => {
                 render_inline(ui, text, InlineStyle::Body, theme, zoom_factor);
@@ -59,6 +70,8 @@ pub fn render_markdown_document(
             }
         }
     }
+
+    did_scroll
 }
 
 fn render_heading(
@@ -67,7 +80,9 @@ fn render_heading(
     content: &InlineContent,
     theme: &Theme,
     zoom_factor: f32,
-) {
+    scroll_to_heading: Option<usize>,
+    block_index: usize,
+) -> bool {
     let size = match level {
         HeadingLevel::H1 => 31.0,
         HeadingLevel::H2 => 26.0,
@@ -77,8 +92,15 @@ fn render_heading(
         HeadingLevel::H6 => 16.0,
     } * zoom_factor;
 
+    let anchor = ui.allocate_response(egui::vec2(0.0, 0.0), egui::Sense::hover());
+
+    if scroll_to_heading == Some(block_index) {
+        ui.scroll_to_rect(anchor.rect, Some(Align::TOP));
+    }
+
     render_inline(ui, content, InlineStyle::Heading(size), theme, zoom_factor);
     ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
+    scroll_to_heading == Some(block_index)
 }
 
 fn render_list_item(

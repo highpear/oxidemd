@@ -4,6 +4,12 @@ pub struct MarkdownDocument {
     pub blocks: Vec<Block>,
 }
 
+pub struct HeadingNavItem {
+    pub block_index: usize,
+    pub level: HeadingLevel,
+    pub title: String,
+}
+
 #[derive(Clone)]
 pub struct InlineContent {
     pub spans: Vec<InlineSpan>,
@@ -279,5 +285,47 @@ impl InlineContent {
             InlineSpan::Link { text, .. } => text.is_empty(),
             InlineSpan::LineBreak => false,
         })
+    }
+
+    pub fn plain_text(&self) -> String {
+        let mut text = String::new();
+
+        for span in &self.spans {
+            match span {
+                InlineSpan::Text(value)
+                | InlineSpan::Strong(value)
+                | InlineSpan::Emphasis(value)
+                | InlineSpan::Code(value) => text.push_str(value),
+                InlineSpan::Link { text: value, .. } => text.push_str(value),
+                InlineSpan::LineBreak => text.push(' '),
+            }
+        }
+
+        text.split_whitespace().collect::<Vec<_>>().join(" ")
+    }
+}
+
+impl MarkdownDocument {
+    pub fn headings(&self) -> Vec<HeadingNavItem> {
+        self.blocks
+            .iter()
+            .enumerate()
+            .filter_map(|(block_index, block)| match block {
+                Block::Heading { level, content } => {
+                    let title = content.plain_text();
+
+                    if title.is_empty() {
+                        None
+                    } else {
+                        Some(HeadingNavItem {
+                            block_index,
+                            level: *level,
+                            title,
+                        })
+                    }
+                }
+                _ => None,
+            })
+            .collect()
     }
 }
