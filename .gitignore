@@ -1,0 +1,9 @@
+/target/
+
+# Optional local editor settings
+.vscode/
+.idea/
+
+# Optional OS noise
+.DS_Store
+Thumbs.db
