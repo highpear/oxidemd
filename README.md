@@ -28,6 +28,7 @@ Current capabilities:
 - Open links from rendered content
 - Live reload when the opened file changes
 - English and Japanese UI strings
+- Theme switching, document zoom, and heading navigation
 
 Currently supported Markdown elements:
 
@@ -97,3 +98,4 @@ Items such as tabs, TOC, search, syntax highlighting, math, and Mermaid are plan
 - Current i18n approach: Rust static mappings
 
 Shared manual test files live in `samples/`.
+Use `samples/long-form.md` to test longer reading flows such as heading navigation, zoom, theme changes, and live reload on a larger document.

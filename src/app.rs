@@ -4,12 +4,12 @@ use std::time::{Duration, Instant};
 
 use eframe::egui::{
     self, Align, CentralPanel, Frame, Key, KeyboardShortcut, Layout, Margin, Modifiers, RichText,
-    ScrollArea, Slider, TopBottomPanel,
+    ScrollArea, SidePanel, Slider, TopBottomPanel,
 };
 use rfd::FileDialog;
 
 use crate::i18n::{Language, tr};
-use crate::parser::{MarkdownDocument, parse_markdown};
+use crate::parser::{HeadingNavItem, MarkdownDocument, parse_markdown};
 use crate::reload_worker::{ReloadResponse, ReloadWorkerHandle, spawn_reload_worker};
 use crate::renderer::render_markdown_document;
 use crate::theme::{DEFAULT_THEME_ID, ThemeId, apply_theme, available_themes, theme};
@@ -41,6 +41,7 @@ pub struct OxideMdApp {
     pending_reload_at: Option<Instant>,
     queued_reload_id: u64,
     in_flight_reload_id: Option<u64>,
+    pending_heading_scroll: Option<usize>,
 }
 
 impl OxideMdApp {
@@ -62,6 +63,7 @@ impl OxideMdApp {
             pending_reload_at: None,
             queued_reload_id: 0,
             in_flight_reload_id: None,
+            pending_heading_scroll: None,
         }
     }
 
@@ -133,6 +135,13 @@ impl OxideMdApp {
             .and_then(|name| name.to_str())
             .map(ToOwned::to_owned)
             .unwrap_or_else(|| tr(self.language, "label.no_file").to_owned())
+    }
+
+    fn heading_nav_items(&self) -> Vec<HeadingNavItem> {
+        self.document
+            .as_ref()
+            .map(MarkdownDocument::headings)
+            .unwrap_or_default()
     }
 
     fn load_selected_file(&mut self, path: PathBuf) {
@@ -470,6 +479,44 @@ impl eframe::App for OxideMdApp {
             });
         });
 
+        let headings = self.heading_nav_items();
+
+        if !headings.is_empty() {
+            SidePanel::left("heading_navigation")
+                .resizable(true)
+                .default_width(220.0)
+                .width_range(180.0..=320.0)
+                .show(ctx, |ui| {
+                    ui.heading(tr(self.language, "nav.sections"));
+                    ui.add_space(8.0);
+
+                    ScrollArea::vertical().show(ui, |ui| {
+                        for item in &headings {
+                            let indent = match item.level {
+                                pulldown_cmark::HeadingLevel::H1 => 0.0,
+                                pulldown_cmark::HeadingLevel::H2 => 10.0,
+                                pulldown_cmark::HeadingLevel::H3 => 20.0,
+                                pulldown_cmark::HeadingLevel::H4 => 30.0,
+                                pulldown_cmark::HeadingLevel::H5 => 40.0,
+                                pulldown_cmark::HeadingLevel::H6 => 50.0,
+                            };
+
+                            ui.horizontal(|ui| {
+                                ui.add_space(indent);
+
+                                if ui
+                                    .selectable_label(false, &item.title)
+                                    .on_hover_text(tr(self.language, "nav.jump_to_heading"))
+                                    .clicked()
+                                {
+                                    self.pending_heading_scroll = Some(item.block_index);
+                                }
+                            });
+                        }
+                    });
+                });
+        }
+
         CentralPanel::default().show(ctx, |ui| {
             let Some(document) = self.document.as_ref() else {
                 ui.vertical_centered(|ui| {
@@ -498,7 +545,17 @@ impl eframe::App for OxideMdApp {
                         .inner_margin(Margin::symmetric(32, 28))
                         .show(ui, |ui| {
                             ui.set_max_width(760.0);
-                            render_markdown_document(ui, document, &theme, self.zoom_factor);
+                            let did_scroll = render_markdown_document(
+                                ui,
+                                document,
+                                &theme,
+                                self.zoom_factor,
+                                self.pending_heading_scroll,
+                            );
+
+                            if did_scroll {
+                                self.pending_heading_scroll = None;
+                            }
                         });
                 });
                 ui.add_space(24.0);
