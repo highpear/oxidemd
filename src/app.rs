@@ -398,21 +398,9 @@ impl OxideMdApp {
             self.reset_zoom();
         }
     }
-}
 
-impl eframe::App for OxideMdApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        if let Some(startup_started) = self.startup_started.take() {
-            metrics::log_startup(startup_started.elapsed());
-        }
-
-        self.handle_keyboard_shortcuts(ctx);
-        self.process_watch_events();
-        self.process_reload_results();
-        self.reload_if_ready();
-
+    fn render_top_bar(&mut self, ctx: &egui::Context) {
         let theme = theme(self.theme_id);
-        apply_theme(ctx, &theme);
 
         TopBottomPanel::top("top_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
@@ -469,7 +457,9 @@ impl eframe::App for OxideMdApp {
 
             ui.label(&self.status_message);
         });
+    }
 
+    fn render_bottom_bar(&mut self, ctx: &egui::Context) {
         TopBottomPanel::bottom("bottom_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.label(self.zoom_label());
@@ -490,44 +480,52 @@ impl eframe::App for OxideMdApp {
                 });
             });
         });
+    }
 
+    fn render_heading_panel(&mut self, ctx: &egui::Context) {
         let headings = self.heading_nav_items();
 
-        if !headings.is_empty() {
-            SidePanel::left("heading_navigation")
-                .resizable(true)
-                .default_width(220.0)
-                .width_range(180.0..=320.0)
-                .show(ctx, |ui| {
-                    ui.heading(tr(self.language, "nav.sections"));
-                    ui.add_space(8.0);
-
-                    ScrollArea::vertical().show(ui, |ui| {
-                        for item in &headings {
-                            let indent = match item.level {
-                                pulldown_cmark::HeadingLevel::H1 => 0.0,
-                                pulldown_cmark::HeadingLevel::H2 => 10.0,
-                                pulldown_cmark::HeadingLevel::H3 => 20.0,
-                                pulldown_cmark::HeadingLevel::H4 => 30.0,
-                                pulldown_cmark::HeadingLevel::H5 => 40.0,
-                                pulldown_cmark::HeadingLevel::H6 => 50.0,
-                            };
-
-                            ui.horizontal(|ui| {
-                                ui.add_space(indent);
-
-                                if ui
-                                    .selectable_label(false, &item.title)
-                                    .on_hover_text(tr(self.language, "nav.jump_to_heading"))
-                                    .clicked()
-                                {
-                                    self.pending_heading_scroll = Some(item.block_index);
-                                }
-                            });
-                        }
-                    });
-                });
+        if headings.is_empty() {
+            return;
         }
+
+        SidePanel::left("heading_navigation")
+            .resizable(true)
+            .default_width(220.0)
+            .width_range(180.0..=320.0)
+            .show(ctx, |ui| {
+                ui.heading(tr(self.language, "nav.sections"));
+                ui.add_space(8.0);
+
+                ScrollArea::vertical().show(ui, |ui| {
+                    for item in &headings {
+                        let indent = match item.level {
+                            pulldown_cmark::HeadingLevel::H1 => 0.0,
+                            pulldown_cmark::HeadingLevel::H2 => 10.0,
+                            pulldown_cmark::HeadingLevel::H3 => 20.0,
+                            pulldown_cmark::HeadingLevel::H4 => 30.0,
+                            pulldown_cmark::HeadingLevel::H5 => 40.0,
+                            pulldown_cmark::HeadingLevel::H6 => 50.0,
+                        };
+
+                        ui.horizontal(|ui| {
+                            ui.add_space(indent);
+
+                            if ui
+                                .selectable_label(false, &item.title)
+                                .on_hover_text(tr(self.language, "nav.jump_to_heading"))
+                                .clicked()
+                            {
+                                self.pending_heading_scroll = Some(item.block_index);
+                            }
+                        });
+                    }
+                });
+            });
+    }
+
+    fn render_document_panel(&mut self, ctx: &egui::Context) {
+        let theme = theme(self.theme_id);
 
         CentralPanel::default().show(ctx, |ui| {
             let Some(document) = self.document.as_ref() else {
@@ -574,5 +572,25 @@ impl eframe::App for OxideMdApp {
                 ui.add_space(24.0);
             });
         });
+    }
+}
+
+impl eframe::App for OxideMdApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if let Some(startup_started) = self.startup_started.take() {
+            metrics::log_startup(startup_started.elapsed());
+        }
+
+        self.handle_keyboard_shortcuts(ctx);
+        self.process_watch_events();
+        self.process_reload_results();
+        self.reload_if_ready();
+
+        let theme = theme(self.theme_id);
+        apply_theme(ctx, &theme);
+        self.render_top_bar(ctx);
+        self.render_bottom_bar(ctx);
+        self.render_heading_panel(ctx);
+        self.render_document_panel(ctx);
     }
 }
