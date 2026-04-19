@@ -800,9 +800,7 @@ impl OxideMdApp {
                                 &theme,
                                 self.zoom_factor,
                                 self.pending_block_scroll,
-                                self.active_search_index
-                                    .and_then(|index| self.search_matches.get(index))
-                                    .map(|entry| entry.block_index),
+                                Some(self.search_query.as_str()),
                             );
 
                             if let Some(active_heading) = render_outcome.active_heading {
