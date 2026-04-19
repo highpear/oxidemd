@@ -63,7 +63,7 @@ fn text_format(style: Style, font_size: f32) -> TextFormat {
     TextFormat {
         font_id: FontId::new(font_size, FontFamily::Monospace),
         color: color32(style.foreground),
-        background: color32(style.background),
+        background: Color32::TRANSPARENT,
         ..Default::default()
     }
 }
