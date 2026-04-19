@@ -4,6 +4,7 @@ use eframe::egui::{
 };
 use pulldown_cmark::HeadingLevel;
 
+use crate::i18n::{Language, tr};
 use crate::parser::{Block, InlineContent, InlineSpan, MarkdownDocument};
 use crate::syntax::highlight_code;
 use crate::theme::Theme;
@@ -19,6 +20,7 @@ const LIST_ITEM_SPACING: f32 = 8.0;
 pub fn render_markdown_document(
     ui: &mut Ui,
     document: &MarkdownDocument,
+    ui_language: Language,
     theme: &Theme,
     zoom_factor: f32,
     scroll_to_heading: Option<usize>,
@@ -74,6 +76,7 @@ pub fn render_markdown_document(
                 render_code_block(
                     ui,
                     block_index,
+                    ui_language,
                     language.as_deref(),
                     code,
                     theme,
@@ -155,6 +158,7 @@ fn render_blockquote(ui: &mut Ui, lines: &[InlineContent], theme: &Theme, zoom_f
 fn render_code_block(
     ui: &mut Ui,
     block_index: usize,
+    ui_language: Language,
     language: Option<&str>,
     code: &str,
     theme: &Theme,
@@ -177,10 +181,8 @@ fn render_code_block(
         ))
         .show(ui, |ui| {
             ui.with_layout(Layout::top_down(Align::Min), |ui| {
-                if let Some(language) = language.filter(|language| !language.trim().is_empty()) {
-                    render_code_language_label(ui, language, theme, zoom_factor);
-                    ui.add_space(scale_spacing(6.0, zoom_factor));
-                }
+                render_code_block_header(ui, ui_language, language, code, theme, zoom_factor);
+                ui.add_space(scale_spacing(6.0, zoom_factor));
 
                 ScrollArea::horizontal()
                     .id_salt(("code_block_scroll", block_index))
@@ -213,6 +215,27 @@ fn render_code_block(
     }
 
     ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
+}
+
+fn render_code_block_header(
+    ui: &mut Ui,
+    ui_language: Language,
+    language: Option<&str>,
+    code: &str,
+    theme: &Theme,
+    zoom_factor: f32,
+) {
+    ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+        if let Some(language) = language.filter(|language| !language.trim().is_empty()) {
+            render_code_language_label(ui, language, theme, zoom_factor);
+        }
+
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            if ui.button(tr(ui_language, "action.copy")).clicked() {
+                ui.ctx().copy_text(code.to_owned());
+            }
+        });
+    });
 }
 
 fn render_code_language_label(ui: &mut Ui, language: &str, theme: &Theme, zoom_factor: f32) {

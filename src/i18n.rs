@@ -13,6 +13,7 @@ pub fn tr(language: Language, key: &str) -> &'static str {
 
 fn en(key: &str) -> &'static str {
     match key {
+        "action.copy" => "Copy",
         "action.open" => "Open Markdown",
         "action.reset_zoom" => "Reset",
         "action.switch_language" => "日本語 / English",
@@ -44,6 +45,7 @@ fn en(key: &str) -> &'static str {
 
 fn ja(key: &str) -> &'static str {
     match key {
+        "action.copy" => "コピー",
         "action.open" => "Markdownを開く",
         "action.reset_zoom" => "リセット",
         "action.switch_language" => "日本語 / English",
