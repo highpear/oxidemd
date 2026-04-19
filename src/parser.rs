@@ -128,35 +128,11 @@ where
     let mut spans = Vec::new();
 
     while let Some(event) = parser.next() {
-        match event {
-            Event::End(tag) if tag == end_tag => break,
-            Event::Text(value) => push_text_span(&mut spans, value.as_ref()),
-            Event::Code(value) => spans.push(InlineSpan::Code(value.to_string())),
-            Event::SoftBreak | Event::HardBreak => spans.push(InlineSpan::LineBreak),
-            Event::Start(Tag::Strong) => {
-                let text = collect_text_until(parser, TagEnd::Strong);
-                if !text.is_empty() {
-                    spans.push(InlineSpan::Strong(text));
-                }
-            }
-            Event::Start(Tag::Emphasis) => {
-                let text = collect_text_until(parser, TagEnd::Emphasis);
-                if !text.is_empty() {
-                    spans.push(InlineSpan::Emphasis(text));
-                }
-            }
-            Event::Start(Tag::Link {
-                link_type,
-                dest_url,
-                ..
-            }) => {
-                let link = collect_link_span(parser, link_type, dest_url.to_string());
-                if let Some(link) = link {
-                    spans.push(link);
-                }
-            }
-            _ => {}
+        if matches!(event, Event::End(tag) if tag == end_tag) {
+            break;
         }
+
+        push_inline_span(&mut spans, parser, event);
     }
 
     InlineContent { spans }
@@ -196,33 +172,8 @@ where
                 let content = collect_inline_content(parser, TagEnd::Paragraph);
                 spans.extend(content.spans);
             }
-            Event::Text(value) => push_text_span(&mut spans, value.as_ref()),
-            Event::Code(value) => spans.push(InlineSpan::Code(value.to_string())),
-            Event::SoftBreak | Event::HardBreak => spans.push(InlineSpan::LineBreak),
-            Event::Start(Tag::Strong) => {
-                let text = collect_text_until(parser, TagEnd::Strong);
-                if !text.is_empty() {
-                    spans.push(InlineSpan::Strong(text));
-                }
-            }
-            Event::Start(Tag::Emphasis) => {
-                let text = collect_text_until(parser, TagEnd::Emphasis);
-                if !text.is_empty() {
-                    spans.push(InlineSpan::Emphasis(text));
-                }
-            }
-            Event::Start(Tag::Link {
-                link_type,
-                dest_url,
-                ..
-            }) => {
-                let link = collect_link_span(parser, link_type, dest_url.to_string());
-                if let Some(link) = link {
-                    spans.push(link);
-                }
-            }
             Event::End(TagEnd::Item) => break,
-            _ => {}
+            _ => push_inline_span(&mut spans, parser, event),
         }
     }
 
@@ -264,6 +215,40 @@ where
         None
     } else {
         Some(InlineSpan::Link { text, destination })
+    }
+}
+
+fn push_inline_span<'a, I>(spans: &mut Vec<InlineSpan>, parser: &mut I, event: Event<'a>)
+where
+    I: Iterator<Item = Event<'a>>,
+{
+    match event {
+        Event::Text(value) => push_text_span(spans, value.as_ref()),
+        Event::Code(value) => spans.push(InlineSpan::Code(value.to_string())),
+        Event::SoftBreak | Event::HardBreak => spans.push(InlineSpan::LineBreak),
+        Event::Start(Tag::Strong) => {
+            let text = collect_text_until(parser, TagEnd::Strong);
+            if !text.is_empty() {
+                spans.push(InlineSpan::Strong(text));
+            }
+        }
+        Event::Start(Tag::Emphasis) => {
+            let text = collect_text_until(parser, TagEnd::Emphasis);
+            if !text.is_empty() {
+                spans.push(InlineSpan::Emphasis(text));
+            }
+        }
+        Event::Start(Tag::Link {
+            link_type,
+            dest_url,
+            ..
+        }) => {
+            let link = collect_link_span(parser, link_type, dest_url.to_string());
+            if let Some(link) = link {
+                spans.push(link);
+            }
+        }
+        _ => {}
     }
 }
 
