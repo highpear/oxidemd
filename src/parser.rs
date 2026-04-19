@@ -6,6 +6,12 @@ pub struct MarkdownDocument {
 }
 
 #[derive(Clone)]
+pub struct SearchMatch {
+    pub block_index: usize,
+    pub preview: String,
+}
+
+#[derive(Clone)]
 pub struct HeadingNavItem {
     pub block_index: usize,
     pub level: HeadingLevel,
@@ -316,8 +322,74 @@ impl InlineContent {
     }
 }
 
+impl Block {
+    pub fn plain_text(&self) -> String {
+        match self {
+            Block::Heading { content, .. } | Block::Paragraph(content) => content.plain_text(),
+            Block::UnorderedList(items) => join_inline_items(items),
+            Block::OrderedList { items, .. } => join_inline_items(items),
+            Block::BlockQuote(lines) => join_inline_items(lines),
+            Block::CodeBlock { code, .. } => code.split_whitespace().collect::<Vec<_>>().join(" "),
+        }
+    }
+}
+
 impl MarkdownDocument {
     pub fn headings(&self) -> &[HeadingNavItem] {
         &self.headings
     }
+
+    pub fn search_matches(&self, query: &str) -> Vec<SearchMatch> {
+        let normalized_query = query.trim().to_lowercase();
+        if normalized_query.is_empty() {
+            return Vec::new();
+        }
+
+        self.blocks
+            .iter()
+            .enumerate()
+            .filter_map(|(block_index, block)| {
+                let plain_text = block.plain_text();
+                let normalized_block = plain_text.to_lowercase();
+
+                if normalized_block.contains(&normalized_query) {
+                    Some(SearchMatch {
+                        block_index,
+                        preview: preview_text(&plain_text),
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+}
+
+fn join_inline_items(items: &[InlineContent]) -> String {
+    items
+        .iter()
+        .map(InlineContent::plain_text)
+        .filter(|text| !text.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn preview_text(text: &str) -> String {
+    const MAX_PREVIEW_CHARS: usize = 72;
+
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    let mut preview = String::new();
+    for character in trimmed.chars().take(MAX_PREVIEW_CHARS) {
+        preview.push(character);
+    }
+
+    if trimmed.chars().count() > MAX_PREVIEW_CHARS {
+        preview.push_str("...");
+    }
+
+    preview
 }

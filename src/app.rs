@@ -3,14 +3,14 @@ use std::time::{Duration, Instant};
 
 use eframe::egui::{
     self, Align, CentralPanel, Frame, Key, KeyboardShortcut, Layout, Margin, Modifiers, RichText,
-    ScrollArea, SidePanel, Slider, TopBottomPanel,
+    ScrollArea, SidePanel, Slider, TextEdit, TopBottomPanel,
 };
 use rfd::FileDialog;
 
 use crate::document_loader::load_markdown_document;
 use crate::i18n::{Language, TranslationKey, tr};
 use crate::metrics;
-use crate::parser::{HeadingNavItem, MarkdownDocument};
+use crate::parser::{HeadingNavItem, MarkdownDocument, SearchMatch};
 use crate::reload_worker::{ReloadResponse, ReloadWorkerHandle, spawn_reload_worker};
 use crate::renderer::render_markdown_document;
 use crate::theme::{DEFAULT_THEME_ID, ThemeId, apply_theme, available_themes, theme};
@@ -27,6 +27,7 @@ const DEFAULT_ZOOM_FACTOR: f32 = 1.0;
 const MIN_ZOOM_FACTOR: f32 = 0.8;
 const MAX_ZOOM_FACTOR: f32 = 1.8;
 const ZOOM_STEP: f32 = 0.1;
+const SEARCH_INPUT_ID: &str = "document_search_input";
 
 pub struct OxideMdApp {
     ui_context: egui::Context,
@@ -42,9 +43,13 @@ pub struct OxideMdApp {
     pending_reload_at: Option<Instant>,
     queued_reload_id: u64,
     in_flight_reload_id: Option<u64>,
-    pending_heading_scroll: Option<usize>,
+    pending_block_scroll: Option<usize>,
     active_heading: Option<usize>,
     selected_heading: Option<usize>,
+    search_query: String,
+    search_matches: Vec<SearchMatch>,
+    active_search_index: Option<usize>,
+    focus_search_input: bool,
     startup_started: Option<Instant>,
 }
 
@@ -67,9 +72,13 @@ impl OxideMdApp {
             pending_reload_at: None,
             queued_reload_id: 0,
             in_flight_reload_id: None,
-            pending_heading_scroll: None,
+            pending_block_scroll: None,
             active_heading: None,
             selected_heading: None,
+            search_query: String::new(),
+            search_matches: Vec::new(),
+            active_search_index: None,
+            focus_search_input: false,
             startup_started: Some(startup_started),
         }
     }
@@ -156,8 +165,10 @@ impl OxideMdApp {
                 self.pending_reload_at = None;
                 self.in_flight_reload_id = None;
                 self.reload_status = ReloadStatus::Idle;
+                self.pending_block_scroll = None;
                 self.active_heading = active_heading;
                 self.selected_heading = None;
+                self.refresh_search_matches();
                 self.start_watching_file(&path);
                 metrics::log_initial_load(&path, &timing);
                 self.status_message = self.status_with_path(TranslationKey::StatusLoaded, &path);
@@ -168,8 +179,11 @@ impl OxideMdApp {
                 self.watcher = None;
                 self.pending_reload_at = None;
                 self.in_flight_reload_id = None;
+                self.pending_block_scroll = None;
                 self.active_heading = None;
                 self.selected_heading = None;
+                self.search_matches.clear();
+                self.active_search_index = None;
                 self.set_reload_error(TranslationKey::StatusLoadFailed, error);
             }
         }
@@ -317,9 +331,11 @@ impl OxideMdApp {
     ) {
         let active_heading = document.headings().first().map(|item| item.block_index);
         self.in_flight_reload_id = None;
+        self.pending_block_scroll = None;
         self.active_heading = active_heading;
         self.selected_heading = None;
         self.document = Some(document);
+        self.refresh_search_matches();
         self.reload_status = ReloadStatus::Idle;
         metrics::log_reload(&path, &timing);
         self.status_message = self.status_with_path(TranslationKey::StatusReloaded, &path);
@@ -357,9 +373,18 @@ impl OxideMdApp {
         let open_file = ctx.input_mut(|input| {
             input.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::O))
         });
+        let focus_search = ctx.input_mut(|input| {
+            input.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::F))
+        });
         let reload_file = ctx.input_mut(|input| {
             input.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::R))
                 || input.consume_shortcut(&KeyboardShortcut::new(Modifiers::NONE, Key::F5))
+        });
+        let next_search = ctx.input_mut(|input| {
+            input.consume_shortcut(&KeyboardShortcut::new(Modifiers::NONE, Key::F3))
+        });
+        let previous_search = ctx.input_mut(|input| {
+            input.consume_shortcut(&KeyboardShortcut::new(Modifiers::SHIFT, Key::F3))
         });
         let switch_language = ctx.input_mut(|input| {
             input.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::L))
@@ -382,8 +407,20 @@ impl OxideMdApp {
             self.open_markdown_file();
         }
 
+        if focus_search {
+            self.focus_search_input = true;
+        }
+
         if reload_file {
             self.request_manual_reload();
+        }
+
+        if previous_search {
+            self.select_previous_search_match();
+        }
+
+        if next_search {
+            self.select_next_search_match();
         }
 
         if switch_language {
@@ -407,12 +444,181 @@ impl OxideMdApp {
         }
     }
 
+    fn refresh_search_matches(&mut self) {
+        let Some(document) = self.document.as_ref() else {
+            self.search_matches.clear();
+            self.active_search_index = None;
+            return;
+        };
+
+        let previous_block = self
+            .active_search_index
+            .and_then(|index| self.search_matches.get(index))
+            .map(|entry| entry.block_index);
+
+        self.search_matches = document.search_matches(&self.search_query);
+
+        self.active_search_index = previous_block
+            .and_then(|block_index| {
+                self.search_matches
+                    .iter()
+                    .position(|entry| entry.block_index == block_index)
+            })
+            .or_else(|| (!self.search_matches.is_empty()).then_some(0));
+    }
+
+    fn select_search_match(&mut self, index: usize) {
+        let Some(search_match) = self.search_matches.get(index) else {
+            return;
+        };
+
+        self.active_search_index = Some(index);
+        self.pending_block_scroll = Some(search_match.block_index);
+        self.selected_heading = None;
+    }
+
+    fn select_next_search_match(&mut self) {
+        if self.search_matches.is_empty() {
+            return;
+        }
+
+        let next_index = match self.active_search_index {
+            Some(index) => (index + 1) % self.search_matches.len(),
+            None => 0,
+        };
+
+        self.select_search_match(next_index);
+    }
+
+    fn select_previous_search_match(&mut self) {
+        if self.search_matches.is_empty() {
+            return;
+        }
+
+        let previous_index = match self.active_search_index {
+            Some(0) | None => self.search_matches.len() - 1,
+            Some(index) => index - 1,
+        };
+
+        self.select_search_match(previous_index);
+    }
+
     fn clear_selected_heading_on_manual_scroll(&mut self, ctx: &egui::Context) {
         let scroll_delta_y = ctx.input(|input| input.raw_scroll_delta.y);
 
         if scroll_delta_y.abs() > f32::EPSILON {
             self.selected_heading = None;
         }
+    }
+
+    fn render_search_controls(&mut self, ui: &mut egui::Ui) {
+        ui.label(tr(self.language, TranslationKey::LabelSearch));
+
+        let search_input_id = egui::Id::new(SEARCH_INPUT_ID);
+        let response = ui.add(
+            TextEdit::singleline(&mut self.search_query)
+                .id(search_input_id)
+                .desired_width(f32::INFINITY),
+        );
+
+        if self.focus_search_input {
+            response.request_focus();
+            self.focus_search_input = false;
+        }
+
+        if response.changed() {
+            self.refresh_search_matches();
+
+            if !self.search_matches.is_empty() {
+                self.select_search_match(0);
+            }
+        }
+
+        if response.has_focus() && ui.input(|input| input.key_pressed(Key::Enter)) {
+            self.select_next_search_match();
+        }
+
+        ui.horizontal(|ui| {
+            let result_label = if self.search_matches.is_empty() {
+                tr(self.language, TranslationKey::MessageSearchNoResults).to_owned()
+            } else {
+                let position = self.active_search_index.map(|index| index + 1).unwrap_or(0);
+                format!(
+                    "{} {}/{}",
+                    tr(self.language, TranslationKey::LabelSearchResults),
+                    position,
+                    self.search_matches.len()
+                )
+            };
+            ui.label(result_label);
+
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if ui
+                    .add_enabled(
+                        !self.search_query.is_empty(),
+                        egui::Button::new(tr(self.language, TranslationKey::ActionSearchClear)),
+                    )
+                    .clicked()
+                {
+                    self.search_query.clear();
+                    self.search_matches.clear();
+                    self.active_search_index = None;
+                }
+
+                if ui
+                    .add_enabled(
+                        !self.search_matches.is_empty(),
+                        egui::Button::new(tr(self.language, TranslationKey::ActionSearchNext)),
+                    )
+                    .clicked()
+                {
+                    self.select_next_search_match();
+                }
+
+                if ui
+                    .add_enabled(
+                        !self.search_matches.is_empty(),
+                        egui::Button::new(tr(self.language, TranslationKey::ActionSearchPrevious)),
+                    )
+                    .clicked()
+                {
+                    self.select_previous_search_match();
+                }
+            });
+        });
+    }
+
+    fn render_search_results(&mut self, ui: &mut egui::Ui) {
+        if self.search_query.trim().is_empty() {
+            return;
+        }
+
+        ui.add_space(8.0);
+        ScrollArea::vertical()
+            .id_salt("search_results_scroll")
+            .max_height(180.0)
+            .show(ui, |ui| {
+            if self.search_matches.is_empty() {
+                ui.label(tr(self.language, TranslationKey::MessageSearchNoResults));
+                return;
+            }
+
+            let items: Vec<(usize, SearchMatch)> =
+                self.search_matches.iter().cloned().enumerate().collect();
+
+            for (index, search_match) in items {
+                let is_active = self.active_search_index == Some(index);
+                let label = if search_match.preview.is_empty() {
+                    format!("#{}", search_match.block_index + 1)
+                } else {
+                    search_match.preview
+                };
+
+                if ui.selectable_label(is_active, label).clicked() {
+                    self.select_search_match(index);
+                }
+            }
+        });
     }
 
     fn render_top_bar(&mut self, ctx: &egui::Context) {
@@ -504,19 +710,26 @@ impl OxideMdApp {
     fn render_heading_panel(&mut self, ctx: &egui::Context) {
         let headings = self.heading_nav_items();
 
-        if headings.is_empty() {
-            return;
-        }
-
         SidePanel::left("heading_navigation")
             .resizable(true)
             .default_width(220.0)
             .width_range(180.0..=320.0)
             .show(ctx, |ui| {
+                self.render_search_controls(ui);
+                self.render_search_results(ui);
+                ui.add_space(12.0);
+                ui.separator();
+                ui.add_space(8.0);
                 ui.heading(tr(self.language, TranslationKey::NavSections));
                 ui.add_space(8.0);
 
-                ScrollArea::vertical().show(ui, |ui| {
+                if headings.is_empty() {
+                    return;
+                }
+
+                ScrollArea::vertical()
+                    .id_salt("heading_navigation_scroll")
+                    .show(ui, |ui| {
                     for item in &headings {
                         let highlighted_heading = self.selected_heading.or(self.active_heading);
                         let is_active = highlighted_heading == Some(item.block_index);
@@ -539,7 +752,7 @@ impl OxideMdApp {
                             {
                                 self.selected_heading = Some(item.block_index);
                                 self.active_heading = Some(item.block_index);
-                                self.pending_heading_scroll = Some(item.block_index);
+                                self.pending_block_scroll = Some(item.block_index);
                             }
                         });
                     }
@@ -586,7 +799,10 @@ impl OxideMdApp {
                                 self.language,
                                 &theme,
                                 self.zoom_factor,
-                                self.pending_heading_scroll,
+                                self.pending_block_scroll,
+                                self.active_search_index
+                                    .and_then(|index| self.search_matches.get(index))
+                                    .map(|entry| entry.block_index),
                             );
 
                             if let Some(active_heading) = render_outcome.active_heading {
@@ -594,7 +810,7 @@ impl OxideMdApp {
                             }
 
                             if render_outcome.did_scroll {
-                                self.pending_heading_scroll = None;
+                                self.pending_block_scroll = None;
                             }
                         });
                 });
