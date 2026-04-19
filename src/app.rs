@@ -8,7 +8,7 @@ use eframe::egui::{
 };
 use rfd::FileDialog;
 
-use crate::i18n::{Language, tr};
+use crate::i18n::{Language, TranslationKey, tr};
 use crate::metrics::{self, DocumentTiming};
 use crate::parser::{HeadingNavItem, MarkdownDocument, parse_markdown};
 use crate::reload_worker::{ReloadResponse, ReloadWorkerHandle, spawn_reload_worker};
@@ -59,7 +59,7 @@ impl OxideMdApp {
             zoom_factor: DEFAULT_ZOOM_FACTOR,
             current_file: None,
             document: None,
-            status_message: tr(language, "status.no_file").to_owned(),
+            status_message: tr(language, TranslationKey::StatusNoFile).to_owned(),
             reload_status: ReloadStatus::Idle,
             watcher: None,
             pending_reload_at: None,
@@ -77,7 +77,7 @@ impl OxideMdApp {
         };
 
         if self.current_file.is_none() {
-            self.status_message = tr(self.language, "status.no_file").to_owned();
+            self.status_message = tr(self.language, TranslationKey::StatusNoFile).to_owned();
         }
     }
 
@@ -87,9 +87,9 @@ impl OxideMdApp {
 
     fn current_theme_label(&self) -> &'static str {
         match self.theme_id {
-            ThemeId::WarmPaper => tr(self.language, "theme.warm_paper"),
-            ThemeId::Mist => tr(self.language, "theme.mist"),
-            ThemeId::NightOwl => tr(self.language, "theme.night_owl"),
+            ThemeId::WarmPaper => tr(self.language, TranslationKey::ThemeWarmPaper),
+            ThemeId::Mist => tr(self.language, TranslationKey::ThemeMist),
+            ThemeId::NightOwl => tr(self.language, TranslationKey::ThemeNightOwl),
         }
     }
 
@@ -108,7 +108,7 @@ impl OxideMdApp {
     fn zoom_label(&self) -> String {
         format!(
             "{} {}%",
-            tr(self.language, "label.zoom"),
+            tr(self.language, TranslationKey::LabelZoom),
             (self.zoom_factor * 100.0).round()
         )
     }
@@ -137,7 +137,7 @@ impl OxideMdApp {
             .and_then(|path| path.file_name())
             .and_then(|name| name.to_str())
             .map(ToOwned::to_owned)
-            .unwrap_or_else(|| tr(self.language, "label.no_file").to_owned())
+            .unwrap_or_else(|| tr(self.language, TranslationKey::LabelNoFile).to_owned())
     }
 
     fn heading_nav_items(&self) -> Vec<HeadingNavItem> {
@@ -158,7 +158,7 @@ impl OxideMdApp {
                 self.start_watching_file(&path);
                 metrics::log_initial_load(&path, &timing);
                 self.status_message =
-                    format!("{} {}", tr(self.language, "status.loaded"), path.display());
+                    format!("{} {}", tr(self.language, TranslationKey::StatusLoaded), path.display());
             }
             Err(error) => {
                 self.document = None;
@@ -168,7 +168,7 @@ impl OxideMdApp {
                 self.pending_reload_at = None;
                 self.in_flight_reload_id = None;
                 self.status_message =
-                    format!("{} {}", tr(self.language, "status.load_failed"), error);
+                    format!("{} {}", tr(self.language, TranslationKey::StatusLoadFailed), error);
             }
         }
     }
@@ -198,7 +198,7 @@ impl OxideMdApp {
                 self.watcher = None;
                 self.reload_status = ReloadStatus::Error;
                 self.status_message =
-                    format!("{} {}", tr(self.language, "status.watch_failed"), error);
+                    format!("{} {}", tr(self.language, TranslationKey::StatusWatchFailed), error);
             }
         }
     }
@@ -223,14 +223,18 @@ impl OxideMdApp {
         if saw_change {
             self.pending_reload_at = Some(Instant::now());
             self.reload_status = ReloadStatus::Reloading;
-            self.status_message = tr(self.language, "reload.reloading").to_owned();
+            self.status_message = tr(self.language, TranslationKey::ReloadReloading).to_owned();
             self.ui_context
                 .request_repaint_after(Duration::from_millis(100));
         }
 
         if let Some(error) = watch_error {
             self.reload_status = ReloadStatus::Error;
-            self.status_message = format!("{} {}", tr(self.language, "status.watch_failed"), error);
+            self.status_message = format!(
+                "{} {}",
+                tr(self.language, TranslationKey::StatusWatchFailed),
+                error
+            );
         }
     }
 
@@ -262,15 +266,15 @@ impl OxideMdApp {
 
     fn reload_status_label(&self) -> &'static str {
         match self.reload_status {
-            ReloadStatus::Idle => tr(self.language, "reload.idle"),
-            ReloadStatus::Reloading => tr(self.language, "reload.reloading"),
-            ReloadStatus::Error => tr(self.language, "reload.error"),
+            ReloadStatus::Idle => tr(self.language, TranslationKey::ReloadIdle),
+            ReloadStatus::Reloading => tr(self.language, TranslationKey::ReloadReloading),
+            ReloadStatus::Error => tr(self.language, TranslationKey::ReloadError),
         }
     }
 
     fn request_manual_reload(&mut self) {
         let Some(path) = self.current_file.clone() else {
-            self.status_message = tr(self.language, "status.no_file").to_owned();
+            self.status_message = tr(self.language, TranslationKey::StatusNoFile).to_owned();
             return;
         };
 
@@ -292,14 +296,14 @@ impl OxideMdApp {
                 self.reload_status = ReloadStatus::Reloading;
                 self.status_message = format!(
                     "{} {}",
-                    tr(self.language, "status.reload_started"),
+                    tr(self.language, TranslationKey::StatusReloadStarted),
                     path.display()
                 );
             }
             Err(error) => {
                 self.reload_status = ReloadStatus::Error;
                 self.status_message =
-                    format!("{} {}", tr(self.language, "status.worker_failed"), error);
+                    format!("{} {}", tr(self.language, TranslationKey::StatusWorkerFailed), error);
             }
         }
     }
@@ -323,7 +327,7 @@ impl OxideMdApp {
                     metrics::log_reload(&path, &timing);
                     self.status_message = format!(
                         "{} {}",
-                        tr(self.language, "status.reloaded"),
+                        tr(self.language, TranslationKey::StatusReloaded),
                         path.display()
                     );
                 }
@@ -336,7 +340,7 @@ impl OxideMdApp {
                     self.reload_status = ReloadStatus::Error;
                     self.status_message = format!(
                         "{} {} ({})",
-                        tr(self.language, "status.reload_failed"),
+                        tr(self.language, TranslationKey::StatusReloadFailed),
                         path.display(),
                         error
                     );
@@ -404,12 +408,12 @@ impl OxideMdApp {
 
         TopBottomPanel::top("top_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                if ui.button(tr(self.language, "action.open")).clicked() {
+                if ui.button(tr(self.language, TranslationKey::ActionOpen)).clicked() {
                     self.open_markdown_file();
                 }
 
                 if ui
-                    .button(tr(self.language, "action.switch_language"))
+                    .button(tr(self.language, TranslationKey::ActionSwitchLanguage))
                     .clicked()
                 {
                     self.switch_language();
@@ -418,7 +422,7 @@ impl OxideMdApp {
                 if ui
                     .button(format!(
                         "{} {}",
-                        tr(self.language, "action.switch_theme"),
+                        tr(self.language, TranslationKey::ActionSwitchTheme),
                         self.current_theme_label()
                     ))
                     .clicked()
@@ -429,7 +433,7 @@ impl OxideMdApp {
                 ui.separator();
                 ui.label(format!(
                     "{} {}",
-                    tr(self.language, "label.current_file"),
+                    tr(self.language, TranslationKey::LabelCurrentFile),
                     self.current_file_label()
                 ));
 
@@ -465,7 +469,10 @@ impl OxideMdApp {
                 ui.label(self.zoom_label());
 
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if ui.button(tr(self.language, "action.reset_zoom")).clicked() {
+                    if ui
+                        .button(tr(self.language, TranslationKey::ActionResetZoom))
+                        .clicked()
+                    {
                         self.reset_zoom();
                     }
 
@@ -494,7 +501,7 @@ impl OxideMdApp {
             .default_width(220.0)
             .width_range(180.0..=320.0)
             .show(ctx, |ui| {
-                ui.heading(tr(self.language, "nav.sections"));
+                ui.heading(tr(self.language, TranslationKey::NavSections));
                 ui.add_space(8.0);
 
                 ScrollArea::vertical().show(ui, |ui| {
@@ -513,7 +520,7 @@ impl OxideMdApp {
 
                             if ui
                                 .selectable_label(false, &item.title)
-                                .on_hover_text(tr(self.language, "nav.jump_to_heading"))
+                                .on_hover_text(tr(self.language, TranslationKey::NavJumpToHeading))
                                 .clicked()
                             {
                                 self.pending_heading_scroll = Some(item.block_index);
@@ -531,9 +538,11 @@ impl OxideMdApp {
             let Some(document) = self.document.as_ref() else {
                 ui.vertical_centered(|ui| {
                     ui.add_space(48.0);
-                    ui.label(RichText::new(tr(self.language, "message.empty")).heading());
+                    ui.label(
+                        RichText::new(tr(self.language, TranslationKey::MessageEmpty)).heading(),
+                    );
                     ui.add_space(12.0);
-                    ui.label(tr(self.language, "message.open_prompt"));
+                    ui.label(tr(self.language, TranslationKey::MessageOpenPrompt));
                 });
                 return;
             };
