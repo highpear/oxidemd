@@ -2,6 +2,7 @@ use eframe::egui::{self, Align, FontFamily, FontId, Frame, RichText, Stroke, Ui}
 use pulldown_cmark::HeadingLevel;
 
 use crate::parser::{Block, InlineContent, InlineSpan, MarkdownDocument};
+use crate::syntax::highlight_code;
 use crate::theme::Theme;
 
 const BODY_TEXT_SIZE: f32 = 17.0;
@@ -147,7 +148,14 @@ fn render_code_block(
     theme: &Theme,
     zoom_factor: f32,
 ) {
-    Frame::new()
+    let highlighted = highlight_code(
+        language,
+        code,
+        theme.is_dark,
+        INLINE_CODE_TEXT_SIZE * zoom_factor,
+    );
+
+    let response = Frame::new()
         .fill(theme.code_background)
         .stroke(Stroke::new(1.0, theme.content_border))
         .inner_margin(egui::Margin::symmetric(
@@ -165,15 +173,24 @@ fn render_code_block(
                 ui.add_space(scale_spacing(4.0, zoom_factor));
             }
 
-            ui.label(
-                RichText::new(code)
-                    .font(FontId::new(
-                        INLINE_CODE_TEXT_SIZE * zoom_factor,
-                        FontFamily::Monospace,
-                    ))
-                    .color(theme.text_primary),
-            );
-        });
+            if let Some(job) = highlighted {
+                ui.label(job);
+            } else {
+                ui.label(
+                    RichText::new(code)
+                        .font(FontId::new(
+                            INLINE_CODE_TEXT_SIZE * zoom_factor,
+                            FontFamily::Monospace,
+                        ))
+                        .color(theme.text_primary),
+                );
+            }
+        })
+        .response;
+
+    if let Some(language) = language {
+        response.on_hover_text(language);
+    }
 
     ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
 }
