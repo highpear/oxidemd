@@ -19,13 +19,16 @@ pub fn render_markdown_document(
     ui_language: Language,
     theme: &Theme,
     zoom_factor: f32,
-    scroll_to_heading: Option<usize>,
+    scroll_to_block: Option<usize>,
+    highlighted_block: Option<usize>,
 ) -> RenderOutcome {
     let mut did_scroll = false;
     let mut active_heading = None;
     let viewport_top = ui.clip_rect().top();
 
     for (block_index, block) in document.blocks.iter().enumerate() {
+        let should_highlight = highlighted_block == Some(block_index);
+
         match block {
             Block::Heading { level, content } => {
                 let heading_state = render_heading(
@@ -34,9 +37,10 @@ pub fn render_markdown_document(
                     content,
                     theme,
                     zoom_factor,
-                    scroll_to_heading,
+                    scroll_to_block,
                     block_index,
                     viewport_top,
+                    should_highlight,
                 );
                 did_scroll |= heading_state.did_scroll;
 
@@ -45,46 +49,85 @@ pub fn render_markdown_document(
                 }
             }
             Block::Paragraph(text) => {
-                render_inline(ui, text, InlineStyle::Body, theme, zoom_factor);
-                ui.add_space(scale_spacing(BLOCK_SPACING_PARAGRAPH, zoom_factor));
+                render_highlighted_block(ui, should_highlight, theme, zoom_factor, |ui| {
+                    render_inline(ui, text, InlineStyle::Body, theme, zoom_factor);
+                    ui.add_space(scale_spacing(BLOCK_SPACING_PARAGRAPH, zoom_factor));
+                });
+
+                if scroll_to_block == Some(block_index) {
+                    ui.scroll_to_cursor(Some(Align::TOP));
+                    did_scroll = true;
+                }
             }
             Block::UnorderedList(items) => {
-                for item in items {
-                    render_list_item(
-                        ui,
-                        RichText::new("- ").color(theme.text_secondary),
-                        item,
-                        theme,
-                        zoom_factor,
-                    );
-                    ui.add_space(scale_spacing(LIST_ITEM_SPACING, zoom_factor));
+                render_highlighted_block(ui, should_highlight, theme, zoom_factor, |ui| {
+                    for item in items {
+                        render_list_item(
+                            ui,
+                            RichText::new("- ").color(theme.text_secondary),
+                            item,
+                            theme,
+                            zoom_factor,
+                        );
+                        ui.add_space(scale_spacing(LIST_ITEM_SPACING, zoom_factor));
+                    }
+                    ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
+                });
+
+                if scroll_to_block == Some(block_index) {
+                    ui.scroll_to_cursor(Some(Align::TOP));
+                    did_scroll = true;
                 }
-                ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
             }
             Block::OrderedList { start, items } => {
-                for (index, item) in items.iter().enumerate() {
-                    render_list_item(
+                render_highlighted_block(ui, should_highlight, theme, zoom_factor, |ui| {
+                    for (index, item) in items.iter().enumerate() {
+                        render_list_item(
+                            ui,
+                            RichText::new(format!("{}. ", start + index as u64))
+                                .color(theme.text_secondary),
+                            item,
+                            theme,
+                            zoom_factor,
+                        );
+                        ui.add_space(scale_spacing(LIST_ITEM_SPACING, zoom_factor));
+                    }
+                    ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
+                });
+
+                if scroll_to_block == Some(block_index) {
+                    ui.scroll_to_cursor(Some(Align::TOP));
+                    did_scroll = true;
+                }
+            }
+            Block::BlockQuote(lines) => {
+                render_highlighted_block(ui, should_highlight, theme, zoom_factor, |ui| {
+                    render_blockquote(ui, lines, theme, zoom_factor);
+                });
+
+                if scroll_to_block == Some(block_index) {
+                    ui.scroll_to_cursor(Some(Align::TOP));
+                    did_scroll = true;
+                }
+            }
+            Block::CodeBlock { language, code } => {
+                render_highlighted_block(ui, should_highlight, theme, zoom_factor, |ui| {
+                    render_code_block(
                         ui,
-                        RichText::new(format!("{}. ", start + index as u64))
-                            .color(theme.text_secondary),
-                        item,
+                        block_index,
+                        ui_language,
+                        language.as_deref(),
+                        code,
                         theme,
                         zoom_factor,
                     );
-                    ui.add_space(scale_spacing(LIST_ITEM_SPACING, zoom_factor));
+                });
+
+                if scroll_to_block == Some(block_index) {
+                    ui.scroll_to_cursor(Some(Align::TOP));
+                    did_scroll = true;
                 }
-                ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
             }
-            Block::BlockQuote(lines) => render_blockquote(ui, lines, theme, zoom_factor),
-            Block::CodeBlock { language, code } => render_code_block(
-                ui,
-                block_index,
-                ui_language,
-                language.as_deref(),
-                code,
-                theme,
-                zoom_factor,
-            ),
         }
     }
 
@@ -110,9 +153,10 @@ fn render_heading(
     content: &InlineContent,
     theme: &Theme,
     zoom_factor: f32,
-    scroll_to_heading: Option<usize>,
+    scroll_to_block: Option<usize>,
     block_index: usize,
     viewport_top: f32,
+    should_highlight: bool,
 ) -> HeadingRenderState {
     let size = match level {
         HeadingLevel::H1 => 31.0,
@@ -125,11 +169,11 @@ fn render_heading(
 
     let anchor = ui.allocate_response(egui::vec2(0.0, 0.0), egui::Sense::hover());
 
-    if scroll_to_heading == Some(block_index) {
+    if scroll_to_block == Some(block_index) {
         ui.scroll_to_rect(anchor.rect, Some(Align::TOP));
     }
 
-    let heading_response = ui.scope(|ui| {
+    let heading_response = render_highlighted_block(ui, should_highlight, theme, zoom_factor, |ui| {
         render_inline(ui, content, InlineStyle::Heading(size), theme, zoom_factor);
         ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
     });
@@ -138,8 +182,34 @@ fn render_heading(
     let is_active = heading_rect.top() <= viewport_top + scale_spacing(8.0, zoom_factor);
 
     HeadingRenderState {
-        did_scroll: scroll_to_heading == Some(block_index),
+        did_scroll: scroll_to_block == Some(block_index),
         is_active,
+    }
+}
+
+fn render_highlighted_block<R>(
+    ui: &mut Ui,
+    should_highlight: bool,
+    theme: &Theme,
+    zoom_factor: f32,
+    add_contents: impl FnOnce(&mut Ui) -> R,
+) -> egui::InnerResponse<R> {
+    if should_highlight {
+        Frame::new()
+            .fill(theme.status_loading_background.gamma_multiply(if theme.is_dark {
+                0.35
+            } else {
+                0.65
+            }))
+            .stroke(Stroke::new(1.0, theme.status_loading_text))
+            .corner_radius(egui::CornerRadius::same(8))
+            .inner_margin(egui::Margin::symmetric(
+                scale_margin(10, zoom_factor),
+                scale_margin(8, zoom_factor),
+            ))
+            .show(ui, add_contents)
+    } else {
+        ui.scope(add_contents)
     }
 }
 
