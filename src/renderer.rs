@@ -20,13 +20,15 @@ pub fn render_markdown_document(
     theme: &Theme,
     zoom_factor: f32,
     scroll_to_heading: Option<usize>,
-) -> bool {
+) -> RenderOutcome {
     let mut did_scroll = false;
+    let mut active_heading = None;
+    let viewport_top = ui.clip_rect().top();
 
     for (block_index, block) in document.blocks.iter().enumerate() {
         match block {
             Block::Heading { level, content } => {
-                did_scroll |= render_heading(
+                let heading_state = render_heading(
                     ui,
                     *level,
                     content,
@@ -34,7 +36,13 @@ pub fn render_markdown_document(
                     zoom_factor,
                     scroll_to_heading,
                     block_index,
+                    viewport_top,
                 );
+                did_scroll |= heading_state.did_scroll;
+
+                if heading_state.is_active {
+                    active_heading = Some(block_index);
+                }
             }
             Block::Paragraph(text) => {
                 render_inline(ui, text, InlineStyle::Body, theme, zoom_factor);
@@ -80,7 +88,20 @@ pub fn render_markdown_document(
         }
     }
 
-    did_scroll
+    RenderOutcome {
+        did_scroll,
+        active_heading,
+    }
+}
+
+pub struct RenderOutcome {
+    pub did_scroll: bool,
+    pub active_heading: Option<usize>,
+}
+
+struct HeadingRenderState {
+    did_scroll: bool,
+    is_active: bool,
 }
 
 fn render_heading(
@@ -91,7 +112,8 @@ fn render_heading(
     zoom_factor: f32,
     scroll_to_heading: Option<usize>,
     block_index: usize,
-) -> bool {
+    viewport_top: f32,
+) -> HeadingRenderState {
     let size = match level {
         HeadingLevel::H1 => 31.0,
         HeadingLevel::H2 => 26.0,
@@ -107,9 +129,18 @@ fn render_heading(
         ui.scroll_to_rect(anchor.rect, Some(Align::TOP));
     }
 
-    render_inline(ui, content, InlineStyle::Heading(size), theme, zoom_factor);
-    ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
-    scroll_to_heading == Some(block_index)
+    let heading_response = ui.scope(|ui| {
+        render_inline(ui, content, InlineStyle::Heading(size), theme, zoom_factor);
+        ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
+    });
+
+    let heading_rect = anchor.rect.union(heading_response.response.rect);
+    let is_active = heading_rect.top() <= viewport_top + scale_spacing(8.0, zoom_factor);
+
+    HeadingRenderState {
+        did_scroll: scroll_to_heading == Some(block_index),
+        is_active,
+    }
 }
 
 fn render_list_item(
