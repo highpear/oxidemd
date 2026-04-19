@@ -1,13 +1,12 @@
-use std::fs;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
-use std::time::Instant;
 
 use eframe::egui;
 
+use crate::document_loader::load_markdown_document;
 use crate::metrics::DocumentTiming;
-use crate::parser::{MarkdownDocument, parse_markdown};
+use crate::parser::MarkdownDocument;
 
 enum ReloadRequest {
     Reload { id: u64, path: PathBuf },
@@ -41,23 +40,13 @@ pub fn spawn_reload_worker(ctx: egui::Context) -> ReloadWorkerHandle {
         while let Ok(request) = request_receiver.recv() {
             match request {
                 ReloadRequest::Reload { id, path } => {
-                    let reload_started = Instant::now();
-                    let response = match fs::read_to_string(&path) {
-                        Ok(content) => {
-                            let parse_started = Instant::now();
-                            let document = parse_markdown(&content);
-                            let timing = DocumentTiming {
-                                total: reload_started.elapsed(),
-                                parse: parse_started.elapsed(),
-                            };
-
-                            ReloadResponse::Reloaded {
-                                id,
-                                path,
-                                document,
-                                timing,
-                            }
-                        }
+                    let response = match load_markdown_document(&path) {
+                        Ok((document, timing)) => ReloadResponse::Reloaded {
+                            id,
+                            path,
+                            document,
+                            timing,
+                        },
                         Err(error) => ReloadResponse::Error {
                             id,
                             path,

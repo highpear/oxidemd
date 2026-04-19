@@ -1,4 +1,3 @@
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -8,9 +7,10 @@ use eframe::egui::{
 };
 use rfd::FileDialog;
 
+use crate::document_loader::load_markdown_document;
 use crate::i18n::{Language, TranslationKey, tr};
-use crate::metrics::{self, DocumentTiming};
-use crate::parser::{HeadingNavItem, MarkdownDocument, parse_markdown};
+use crate::metrics;
+use crate::parser::{HeadingNavItem, MarkdownDocument};
 use crate::reload_worker::{ReloadResponse, ReloadWorkerHandle, spawn_reload_worker};
 use crate::renderer::render_markdown_document;
 use crate::theme::{DEFAULT_THEME_ID, ThemeId, apply_theme, available_themes, theme};
@@ -127,10 +127,6 @@ impl OxideMdApp {
         }
     }
 
-    fn load_file(&self, path: &Path) -> Result<String, String> {
-        fs::read_to_string(path).map_err(|error| error.to_string())
-    }
-
     fn current_file_label(&self) -> String {
         self.current_file
             .as_ref()
@@ -148,7 +144,7 @@ impl OxideMdApp {
     }
 
     fn load_selected_file(&mut self, path: PathBuf) {
-        match self.load_markdown_document(&path) {
+        match load_markdown_document(&path) {
             Ok((document, timing)) => {
                 self.current_file = Some(path.clone());
                 self.document = Some(document);
@@ -171,22 +167,6 @@ impl OxideMdApp {
                     format!("{} {}", tr(self.language, TranslationKey::StatusLoadFailed), error);
             }
         }
-    }
-
-    fn load_markdown_document(
-        &self,
-        path: &Path,
-    ) -> Result<(MarkdownDocument, DocumentTiming), String> {
-        let load_started = Instant::now();
-        let content = self.load_file(path)?;
-        let parse_started = Instant::now();
-        let document = parse_markdown(&content);
-        let timing = DocumentTiming {
-            total: load_started.elapsed(),
-            parse: parse_started.elapsed(),
-        };
-
-        Ok((document, timing))
     }
 
     fn start_watching_file(&mut self, path: &Path) {
