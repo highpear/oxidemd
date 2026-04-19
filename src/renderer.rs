@@ -1,4 +1,4 @@
-use eframe::egui::{self, Align, FontFamily, FontId, Frame, RichText, Stroke, Ui};
+use eframe::egui::{self, Align, FontFamily, FontId, Frame, Layout, RichText, Stroke, Ui};
 use pulldown_cmark::HeadingLevel;
 
 use crate::parser::{Block, InlineContent, InlineSpan, MarkdownDocument};
@@ -163,28 +163,30 @@ fn render_code_block(
             scale_margin(14, zoom_factor),
         ))
         .show(ui, |ui| {
-            if let Some(language) = language {
-                ui.label(
-                    RichText::new(language)
-                        .size(12.0 * zoom_factor)
-                        .strong()
-                        .color(theme.text_secondary),
-                );
-                ui.add_space(scale_spacing(4.0, zoom_factor));
-            }
+            ui.with_layout(Layout::top_down(Align::Min), |ui| {
+                if let Some(language) = language {
+                    ui.label(
+                        RichText::new(language)
+                            .size(12.0 * zoom_factor)
+                            .strong()
+                            .color(theme.text_secondary),
+                    );
+                    ui.add_space(scale_spacing(4.0, zoom_factor));
+                }
 
-            if let Some(job) = highlighted {
-                ui.label(job);
-            } else {
-                ui.label(
-                    RichText::new(code)
-                        .font(FontId::new(
-                            INLINE_CODE_TEXT_SIZE * zoom_factor,
-                            FontFamily::Monospace,
-                        ))
-                        .color(theme.text_primary),
-                );
-            }
+                if let Some(job) = highlighted {
+                    ui.label(job);
+                } else {
+                    ui.label(
+                        RichText::new(code)
+                            .font(FontId::new(
+                                INLINE_CODE_TEXT_SIZE * zoom_factor,
+                                FontFamily::Monospace,
+                            ))
+                            .color(theme.text_primary),
+                    );
+                }
+            });
         })
         .response;
 
