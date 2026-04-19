@@ -5,7 +5,7 @@ use eframe::egui::{
     TextWrapMode, Ui,
 };
 
-use crate::i18n::{Language, tr};
+use crate::i18n::{Language, TranslationKey, tr};
 use crate::syntax::highlight_code;
 use crate::theme::Theme;
 
@@ -142,7 +142,7 @@ fn render_code_block_header(
             |ui| {
                 if show_copied {
                     ui.label(
-                        RichText::new(tr(ui_language, "message.copied"))
+                        RichText::new(tr(ui_language, TranslationKey::MessageCopied))
                             .size(CODE_LANGUAGE_TEXT_SIZE * zoom_factor)
                             .color(theme.text_secondary),
                     );
@@ -152,7 +152,10 @@ fn render_code_block_header(
 
         ui.add_space(scale_spacing(8.0, zoom_factor));
 
-        if ui.button(tr(ui_language, "action.copy")).clicked() {
+        if ui
+            .button(tr(ui_language, TranslationKey::ActionCopy))
+            .clicked()
+        {
             let copied_at = ui.ctx().input(|input| input.time);
             ui.ctx().copy_text(code.to_owned());
             ui.ctx().data_mut(|data| {
