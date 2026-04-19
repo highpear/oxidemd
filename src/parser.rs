@@ -2,8 +2,10 @@ use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, LinkType, Options, Pars
 
 pub struct MarkdownDocument {
     pub blocks: Vec<Block>,
+    headings: Vec<HeadingNavItem>,
 }
 
+#[derive(Clone)]
 pub struct HeadingNavItem {
     pub block_index: usize,
     pub level: HeadingLevel,
@@ -100,7 +102,8 @@ pub fn parse_markdown(input: &str) -> MarkdownDocument {
         }
     }
 
-    MarkdownDocument { blocks }
+    let headings = collect_heading_nav_items(&blocks);
+    MarkdownDocument { blocks, headings }
 }
 
 fn collect_text_until<'a, I>(parser: &mut I, end_tag: TagEnd) -> String
@@ -260,6 +263,29 @@ fn push_text_span(spans: &mut Vec<InlineSpan>, text: &str) {
     spans.push(InlineSpan::Text(text.to_owned()));
 }
 
+fn collect_heading_nav_items(blocks: &[Block]) -> Vec<HeadingNavItem> {
+    blocks
+        .iter()
+        .enumerate()
+        .filter_map(|(block_index, block)| match block {
+            Block::Heading { level, content } => {
+                let title = content.plain_text();
+
+                if title.is_empty() {
+                    None
+                } else {
+                    Some(HeadingNavItem {
+                        block_index,
+                        level: *level,
+                        title,
+                    })
+                }
+            }
+            _ => None,
+        })
+        .collect()
+}
+
 impl InlineContent {
     pub fn is_empty(&self) -> bool {
         self.spans.iter().all(|span| match span {
@@ -291,26 +317,7 @@ impl InlineContent {
 }
 
 impl MarkdownDocument {
-    pub fn headings(&self) -> Vec<HeadingNavItem> {
-        self.blocks
-            .iter()
-            .enumerate()
-            .filter_map(|(block_index, block)| match block {
-                Block::Heading { level, content } => {
-                    let title = content.plain_text();
-
-                    if title.is_empty() {
-                        None
-                    } else {
-                        Some(HeadingNavItem {
-                            block_index,
-                            level: *level,
-                            title,
-                        })
-                    }
-                }
-                _ => None,
-            })
-            .collect()
+    pub fn headings(&self) -> &[HeadingNavItem] {
+        &self.headings
     }
 }

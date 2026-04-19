@@ -139,7 +139,7 @@ impl OxideMdApp {
     fn heading_nav_items(&self) -> Vec<HeadingNavItem> {
         self.document
             .as_ref()
-            .map(MarkdownDocument::headings)
+            .map(|document| document.headings().to_vec())
             .unwrap_or_default()
     }
 
