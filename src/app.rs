@@ -153,18 +153,15 @@ impl OxideMdApp {
                 self.reload_status = ReloadStatus::Idle;
                 self.start_watching_file(&path);
                 metrics::log_initial_load(&path, &timing);
-                self.status_message =
-                    format!("{} {}", tr(self.language, TranslationKey::StatusLoaded), path.display());
+                self.status_message = self.status_with_path(TranslationKey::StatusLoaded, &path);
             }
             Err(error) => {
                 self.document = None;
                 self.current_file = None;
-                self.reload_status = ReloadStatus::Error;
                 self.watcher = None;
                 self.pending_reload_at = None;
                 self.in_flight_reload_id = None;
-                self.status_message =
-                    format!("{} {}", tr(self.language, TranslationKey::StatusLoadFailed), error);
+                self.set_reload_error(TranslationKey::StatusLoadFailed, error);
             }
         }
     }
@@ -176,9 +173,7 @@ impl OxideMdApp {
             }
             Err(error) => {
                 self.watcher = None;
-                self.reload_status = ReloadStatus::Error;
-                self.status_message =
-                    format!("{} {}", tr(self.language, TranslationKey::StatusWatchFailed), error);
+                self.set_reload_error(TranslationKey::StatusWatchFailed, error);
             }
         }
     }
@@ -201,20 +196,13 @@ impl OxideMdApp {
         }
 
         if saw_change {
-            self.pending_reload_at = Some(Instant::now());
-            self.reload_status = ReloadStatus::Reloading;
-            self.status_message = tr(self.language, TranslationKey::ReloadReloading).to_owned();
+            self.schedule_reload();
             self.ui_context
                 .request_repaint_after(Duration::from_millis(100));
         }
 
         if let Some(error) = watch_error {
-            self.reload_status = ReloadStatus::Error;
-            self.status_message = format!(
-                "{} {}",
-                tr(self.language, TranslationKey::StatusWatchFailed),
-                error
-            );
+            self.set_reload_error(TranslationKey::StatusWatchFailed, error);
         }
     }
 
@@ -273,17 +261,10 @@ impl OxideMdApp {
         match self.reload_worker.request_reload(reload_id, path.clone()) {
             Ok(()) => {
                 self.in_flight_reload_id = Some(reload_id);
-                self.reload_status = ReloadStatus::Reloading;
-                self.status_message = format!(
-                    "{} {}",
-                    tr(self.language, TranslationKey::StatusReloadStarted),
-                    path.display()
-                );
+                self.set_reload_in_progress(TranslationKey::StatusReloadStarted, Some(&path));
             }
             Err(error) => {
-                self.reload_status = ReloadStatus::Error;
-                self.status_message =
-                    format!("{} {}", tr(self.language, TranslationKey::StatusWorkerFailed), error);
+                self.set_reload_error(TranslationKey::StatusWorkerFailed, error);
             }
         }
     }
@@ -301,32 +282,63 @@ impl OxideMdApp {
                         continue;
                     }
 
-                    self.in_flight_reload_id = None;
-                    self.document = Some(document);
-                    self.reload_status = ReloadStatus::Idle;
-                    metrics::log_reload(&path, &timing);
-                    self.status_message = format!(
-                        "{} {}",
-                        tr(self.language, TranslationKey::StatusReloaded),
-                        path.display()
-                    );
+                    self.finish_reload_success(path, document, timing);
                 }
                 ReloadResponse::Error { id, path, error } => {
                     if self.in_flight_reload_id != Some(id) {
                         continue;
                     }
 
-                    self.in_flight_reload_id = None;
-                    self.reload_status = ReloadStatus::Error;
-                    self.status_message = format!(
-                        "{} {} ({})",
-                        tr(self.language, TranslationKey::StatusReloadFailed),
-                        path.display(),
-                        error
-                    );
+                    self.finish_reload_error(path, error);
                 }
             }
         }
+    }
+
+    fn schedule_reload(&mut self) {
+        self.pending_reload_at = Some(Instant::now());
+        self.set_reload_in_progress(TranslationKey::ReloadReloading, None);
+    }
+
+    fn finish_reload_success(
+        &mut self,
+        path: PathBuf,
+        document: MarkdownDocument,
+        timing: metrics::DocumentTiming,
+    ) {
+        self.in_flight_reload_id = None;
+        self.document = Some(document);
+        self.reload_status = ReloadStatus::Idle;
+        metrics::log_reload(&path, &timing);
+        self.status_message = self.status_with_path(TranslationKey::StatusReloaded, &path);
+    }
+
+    fn finish_reload_error(&mut self, path: PathBuf, error: String) {
+        self.in_flight_reload_id = None;
+        self.reload_status = ReloadStatus::Error;
+        self.status_message = format!(
+            "{} {} ({})",
+            tr(self.language, TranslationKey::StatusReloadFailed),
+            path.display(),
+            error
+        );
+    }
+
+    fn set_reload_in_progress(&mut self, key: TranslationKey, path: Option<&Path>) {
+        self.reload_status = ReloadStatus::Reloading;
+        self.status_message = match path {
+            Some(path) => self.status_with_path(key, path),
+            None => tr(self.language, key).to_owned(),
+        };
+    }
+
+    fn set_reload_error(&mut self, key: TranslationKey, error: String) {
+        self.reload_status = ReloadStatus::Error;
+        self.status_message = format!("{} {}", tr(self.language, key), error);
+    }
+
+    fn status_with_path(&self, key: TranslationKey, path: &Path) -> String {
+        format!("{} {}", tr(self.language, key), path.display())
     }
 
     fn handle_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
