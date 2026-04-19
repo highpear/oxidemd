@@ -170,6 +170,7 @@ fn render_code_block(
     let response = Frame::new()
         .fill(theme.code_background)
         .stroke(Stroke::new(1.0, theme.content_border))
+        .corner_radius(egui::CornerRadius::same(scale_margin(8, zoom_factor) as u8))
         .inner_margin(egui::Margin::symmetric(
             scale_margin(16, zoom_factor),
             scale_margin(10, zoom_factor),
