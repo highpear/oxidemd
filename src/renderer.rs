@@ -20,15 +20,13 @@ pub fn render_markdown_document(
     theme: &Theme,
     zoom_factor: f32,
     scroll_to_block: Option<usize>,
-    highlighted_block: Option<usize>,
+    search_query: Option<&str>,
 ) -> RenderOutcome {
     let mut did_scroll = false;
     let mut active_heading = None;
     let viewport_top = ui.clip_rect().top();
 
     for (block_index, block) in document.blocks.iter().enumerate() {
-        let should_highlight = highlighted_block == Some(block_index);
-
         match block {
             Block::Heading { level, content } => {
                 let heading_state = render_heading(
@@ -40,7 +38,7 @@ pub fn render_markdown_document(
                     scroll_to_block,
                     block_index,
                     viewport_top,
-                    should_highlight,
+                    search_query,
                 );
                 did_scroll |= heading_state.did_scroll;
 
@@ -49,10 +47,8 @@ pub fn render_markdown_document(
                 }
             }
             Block::Paragraph(text) => {
-                render_highlighted_block(ui, should_highlight, theme, zoom_factor, |ui| {
-                    render_inline(ui, text, InlineStyle::Body, theme, zoom_factor);
-                    ui.add_space(scale_spacing(BLOCK_SPACING_PARAGRAPH, zoom_factor));
-                });
+                render_inline(ui, text, InlineStyle::Body, theme, zoom_factor, search_query);
+                ui.add_space(scale_spacing(BLOCK_SPACING_PARAGRAPH, zoom_factor));
 
                 if scroll_to_block == Some(block_index) {
                     ui.scroll_to_cursor(Some(Align::TOP));
@@ -60,19 +56,18 @@ pub fn render_markdown_document(
                 }
             }
             Block::UnorderedList(items) => {
-                render_highlighted_block(ui, should_highlight, theme, zoom_factor, |ui| {
-                    for item in items {
-                        render_list_item(
-                            ui,
-                            RichText::new("- ").color(theme.text_secondary),
-                            item,
-                            theme,
-                            zoom_factor,
-                        );
-                        ui.add_space(scale_spacing(LIST_ITEM_SPACING, zoom_factor));
-                    }
-                    ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
-                });
+                for item in items {
+                    render_list_item(
+                        ui,
+                        RichText::new("- ").color(theme.text_secondary),
+                        item,
+                        theme,
+                        zoom_factor,
+                        search_query,
+                    );
+                    ui.add_space(scale_spacing(LIST_ITEM_SPACING, zoom_factor));
+                }
+                ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
 
                 if scroll_to_block == Some(block_index) {
                     ui.scroll_to_cursor(Some(Align::TOP));
@@ -80,20 +75,19 @@ pub fn render_markdown_document(
                 }
             }
             Block::OrderedList { start, items } => {
-                render_highlighted_block(ui, should_highlight, theme, zoom_factor, |ui| {
-                    for (index, item) in items.iter().enumerate() {
-                        render_list_item(
-                            ui,
-                            RichText::new(format!("{}. ", start + index as u64))
-                                .color(theme.text_secondary),
-                            item,
-                            theme,
-                            zoom_factor,
-                        );
-                        ui.add_space(scale_spacing(LIST_ITEM_SPACING, zoom_factor));
-                    }
-                    ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
-                });
+                for (index, item) in items.iter().enumerate() {
+                    render_list_item(
+                        ui,
+                        RichText::new(format!("{}. ", start + index as u64))
+                            .color(theme.text_secondary),
+                        item,
+                        theme,
+                        zoom_factor,
+                        search_query,
+                    );
+                    ui.add_space(scale_spacing(LIST_ITEM_SPACING, zoom_factor));
+                }
+                ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
 
                 if scroll_to_block == Some(block_index) {
                     ui.scroll_to_cursor(Some(Align::TOP));
@@ -101,27 +95,22 @@ pub fn render_markdown_document(
                 }
             }
             Block::BlockQuote(lines) => {
-                render_highlighted_block(ui, should_highlight, theme, zoom_factor, |ui| {
-                    render_blockquote(ui, lines, theme, zoom_factor);
-                });
-
+                render_blockquote(ui, lines, theme, zoom_factor, search_query);
                 if scroll_to_block == Some(block_index) {
                     ui.scroll_to_cursor(Some(Align::TOP));
                     did_scroll = true;
                 }
             }
             Block::CodeBlock { language, code } => {
-                render_highlighted_block(ui, should_highlight, theme, zoom_factor, |ui| {
-                    render_code_block(
-                        ui,
-                        block_index,
-                        ui_language,
-                        language.as_deref(),
-                        code,
-                        theme,
-                        zoom_factor,
-                    );
-                });
+                render_code_block(
+                    ui,
+                    block_index,
+                    ui_language,
+                    language.as_deref(),
+                    code,
+                    theme,
+                    zoom_factor,
+                );
 
                 if scroll_to_block == Some(block_index) {
                     ui.scroll_to_cursor(Some(Align::TOP));
@@ -156,7 +145,7 @@ fn render_heading(
     scroll_to_block: Option<usize>,
     block_index: usize,
     viewport_top: f32,
-    should_highlight: bool,
+    search_query: Option<&str>,
 ) -> HeadingRenderState {
     let size = match level {
         HeadingLevel::H1 => 31.0,
@@ -173,8 +162,15 @@ fn render_heading(
         ui.scroll_to_rect(anchor.rect, Some(Align::TOP));
     }
 
-    let heading_response = render_highlighted_block(ui, should_highlight, theme, zoom_factor, |ui| {
-        render_inline(ui, content, InlineStyle::Heading(size), theme, zoom_factor);
+    let heading_response = ui.scope(|ui| {
+        render_inline(
+            ui,
+            content,
+            InlineStyle::Heading(size),
+            theme,
+            zoom_factor,
+            search_query,
+        );
         ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
     });
 
@@ -187,38 +183,13 @@ fn render_heading(
     }
 }
 
-fn render_highlighted_block<R>(
-    ui: &mut Ui,
-    should_highlight: bool,
-    theme: &Theme,
-    zoom_factor: f32,
-    add_contents: impl FnOnce(&mut Ui) -> R,
-) -> egui::InnerResponse<R> {
-    if should_highlight {
-        Frame::new()
-            .fill(theme.status_loading_background.gamma_multiply(if theme.is_dark {
-                0.35
-            } else {
-                0.65
-            }))
-            .stroke(Stroke::new(1.0, theme.status_loading_text))
-            .corner_radius(egui::CornerRadius::same(8))
-            .inner_margin(egui::Margin::symmetric(
-                scale_margin(10, zoom_factor),
-                scale_margin(8, zoom_factor),
-            ))
-            .show(ui, add_contents)
-    } else {
-        ui.scope(add_contents)
-    }
-}
-
 fn render_list_item(
     ui: &mut Ui,
     marker: RichText,
     item: &InlineContent,
     theme: &Theme,
     zoom_factor: f32,
+    search_query: Option<&str>,
 ) {
     ui.horizontal_top(|ui| {
         ui.add_sized(
@@ -227,12 +198,18 @@ fn render_list_item(
         );
 
         ui.vertical(|ui| {
-            render_inline(ui, item, InlineStyle::Body, theme, zoom_factor);
+            render_inline(ui, item, InlineStyle::Body, theme, zoom_factor, search_query);
         });
     });
 }
 
-fn render_blockquote(ui: &mut Ui, lines: &[InlineContent], theme: &Theme, zoom_factor: f32) {
+fn render_blockquote(
+    ui: &mut Ui,
+    lines: &[InlineContent],
+    theme: &Theme,
+    zoom_factor: f32,
+    search_query: Option<&str>,
+) {
     Frame::new()
         .fill(theme.quote_background)
         .stroke(Stroke::new(1.0, theme.quote_border))
@@ -242,7 +219,7 @@ fn render_blockquote(ui: &mut Ui, lines: &[InlineContent], theme: &Theme, zoom_f
         ))
         .show(ui, |ui| {
             for line in lines {
-                render_inline(ui, line, InlineStyle::Quote, theme, zoom_factor);
+                render_inline(ui, line, InlineStyle::Quote, theme, zoom_factor, search_query);
                 ui.add_space(scale_spacing(6.0, zoom_factor));
             }
         });
@@ -263,6 +240,7 @@ fn render_inline(
     style: InlineStyle,
     theme: &Theme,
     zoom_factor: f32,
+    search_query: Option<&str>,
 ) {
     let mut lines: Vec<Vec<&InlineSpan>> = vec![Vec::new()];
 
@@ -277,12 +255,13 @@ fn render_inline(
     for line in lines {
         ui.horizontal_wrapped(|ui| {
             for span in line {
-                render_inline_span(ui, span, style, theme, zoom_factor);
+                render_inline_span(ui, span, style, theme, zoom_factor, search_query);
             }
         });
     }
 }
 
+#[derive(Clone, Copy)]
 enum SpanKind {
     Plain,
     Strong,
@@ -297,22 +276,32 @@ fn render_inline_span(
     style: InlineStyle,
     theme: &Theme,
     zoom_factor: f32,
+    search_query: Option<&str>,
 ) {
     match span {
         InlineSpan::Text(text) => {
-            render_text_label(ui, text, style, SpanKind::Plain, theme, zoom_factor)
+            render_text_label(ui, text, style, SpanKind::Plain, theme, zoom_factor, search_query)
         }
         InlineSpan::Strong(text) => {
-            render_text_label(ui, text, style, SpanKind::Strong, theme, zoom_factor)
+            render_text_label(ui, text, style, SpanKind::Strong, theme, zoom_factor, search_query)
         }
         InlineSpan::Emphasis(text) => {
-            render_text_label(ui, text, style, SpanKind::Emphasis, theme, zoom_factor)
+            render_text_label(
+                ui,
+                text,
+                style,
+                SpanKind::Emphasis,
+                theme,
+                zoom_factor,
+                search_query,
+            )
         }
         InlineSpan::Code(text) => {
-            render_text_label(ui, text, style, SpanKind::Code, theme, zoom_factor)
+            render_text_label(ui, text, style, SpanKind::Code, theme, zoom_factor, search_query)
         }
         InlineSpan::Link { text, destination } => {
-            let rich_text = styled_text(text, style, SpanKind::Link, theme, zoom_factor);
+            let rich_text = styled_text(text, style, SpanKind::Link, theme, zoom_factor)
+                .background_color(search_highlight_for_text(text, theme, search_query));
             ui.hyperlink_to(rich_text, destination);
         }
         InlineSpan::LineBreak => {}
@@ -326,12 +315,28 @@ fn render_text_label(
     kind: SpanKind,
     theme: &Theme,
     zoom_factor: f32,
+    search_query: Option<&str>,
 ) {
     if text.is_empty() {
         return;
     }
 
-    ui.label(styled_text(text, style, kind, theme, zoom_factor));
+    let segments = split_highlighted_segments(text, search_query);
+
+    if segments.len() == 1 && !segments[0].is_match {
+        ui.label(styled_text(text, style, kind, theme, zoom_factor));
+        return;
+    }
+
+    for segment in segments {
+        let mut rich_text = styled_text(segment.text, style, kind, theme, zoom_factor);
+
+        if segment.is_match {
+            rich_text = rich_text.background_color(search_highlight_color(theme));
+        }
+
+        ui.label(rich_text);
+    }
 }
 
 fn styled_text(
@@ -388,4 +393,83 @@ fn scale_margin(value: i8, zoom_factor: f32) -> i8 {
     ((value as f32) * zoom_factor)
         .round()
         .clamp(0.0, i8::MAX as f32) as i8
+}
+
+struct HighlightSegment<'a> {
+    text: &'a str,
+    is_match: bool,
+}
+
+fn split_highlighted_segments<'a>(
+    text: &'a str,
+    search_query: Option<&str>,
+) -> Vec<HighlightSegment<'a>> {
+    let Some(query) = normalized_search_query(search_query) else {
+        return vec![HighlightSegment {
+            text,
+            is_match: false,
+        }];
+    };
+
+    let normalized_text = text.to_lowercase();
+    let mut segments = Vec::new();
+    let mut current_start = 0usize;
+    let mut search_start = 0usize;
+
+    while let Some(relative_match_start) = normalized_text[search_start..].find(query) {
+        let match_start = search_start + relative_match_start;
+        let match_end = match_start + query.len();
+
+        if current_start < match_start {
+            segments.push(HighlightSegment {
+                text: &text[current_start..match_start],
+                is_match: false,
+            });
+        }
+
+        segments.push(HighlightSegment {
+            text: &text[match_start..match_end],
+            is_match: true,
+        });
+
+        current_start = match_end;
+        search_start = match_end;
+    }
+
+    if current_start < text.len() {
+        segments.push(HighlightSegment {
+            text: &text[current_start..],
+            is_match: false,
+        });
+    }
+
+    if segments.is_empty() {
+        vec![HighlightSegment {
+            text,
+            is_match: false,
+        }]
+    } else {
+        segments
+    }
+}
+
+fn normalized_search_query(search_query: Option<&str>) -> Option<&str> {
+    search_query
+        .map(str::trim)
+        .filter(|query| !query.is_empty())
+}
+
+fn search_highlight_for_text(
+    text: &str,
+    theme: &Theme,
+    search_query: Option<&str>,
+) -> egui::Color32 {
+    match normalized_search_query(search_query) {
+        Some(query) if text.to_lowercase().contains(query) => search_highlight_color(theme),
+        _ => egui::Color32::TRANSPARENT,
+    }
+}
+
+fn search_highlight_color(theme: &Theme) -> egui::Color32 {
+    theme.status_loading_background.gamma_multiply(if theme.is_dark { 0.65 } else { 0.9 })
 }

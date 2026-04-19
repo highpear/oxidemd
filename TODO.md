@@ -199,7 +199,7 @@ Goal: improve usability for larger Markdown documents.
 * [x] Add table of contents (TOC)
 * [x] Support heading-based navigation
 * [x] Add in-document search
-* [ ] Highlight search matches
+* [x] Highlight search matches
 * [ ] Add jump-to-section behavior
 
 Exit criteria:
@@ -260,7 +260,7 @@ Exit criteria:
 ## Current Priority
 
 1. Cache highlighted results if needed
-2. Highlight search matches
+2. Add jump-to-section behavior
 3. Cache parsed output
 4. Avoid unnecessary re-parsing
 5. Re-parse content in the background
