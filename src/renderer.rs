@@ -172,13 +172,13 @@ fn render_code_block(
         .stroke(Stroke::new(1.0, theme.content_border))
         .inner_margin(egui::Margin::symmetric(
             scale_margin(16, zoom_factor),
-            scale_margin(14, zoom_factor),
+            scale_margin(10, zoom_factor),
         ))
         .show(ui, |ui| {
             ui.with_layout(Layout::top_down(Align::Min), |ui| {
                 if let Some(language) = language.filter(|language| !language.trim().is_empty()) {
                     render_code_language_label(ui, language, theme, zoom_factor);
-                    ui.add_space(scale_spacing(10.0, zoom_factor));
+                    ui.add_space(scale_spacing(6.0, zoom_factor));
                 }
 
                 ScrollArea::horizontal()
