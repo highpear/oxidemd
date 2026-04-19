@@ -1,4 +1,5 @@
 mod app;
+mod code_block;
 mod i18n;
 mod metrics;
 mod parser;
