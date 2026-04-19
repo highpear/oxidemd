@@ -257,25 +257,7 @@ impl OxideMdApp {
         }
 
         self.pending_reload_at = None;
-        self.queued_reload_id += 1;
-        let reload_id = self.queued_reload_id;
-
-        match self.reload_worker.request_reload(reload_id, path.clone()) {
-            Ok(()) => {
-                self.in_flight_reload_id = Some(reload_id);
-                self.reload_status = ReloadStatus::Reloading;
-                self.status_message = format!(
-                    "{} {}",
-                    tr(self.language, "status.reload_started"),
-                    path.display()
-                );
-            }
-            Err(error) => {
-                self.reload_status = ReloadStatus::Error;
-                self.status_message =
-                    format!("{} {}", tr(self.language, "status.worker_failed"), error);
-            }
-        }
+        self.enqueue_reload(path);
     }
 
     fn reload_status_label(&self) -> &'static str {
@@ -297,6 +279,10 @@ impl OxideMdApp {
         }
 
         self.pending_reload_at = None;
+        self.enqueue_reload(path);
+    }
+
+    fn enqueue_reload(&mut self, path: PathBuf) {
         self.queued_reload_id += 1;
         let reload_id = self.queued_reload_id;
 
