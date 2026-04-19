@@ -574,6 +574,7 @@ impl eframe::App for OxideMdApp {
                             let did_scroll = render_markdown_document(
                                 ui,
                                 document,
+                                self.language,
                                 &theme,
                                 self.zoom_factor,
                                 self.pending_heading_scroll,
