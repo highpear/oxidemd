@@ -1,4 +1,7 @@
-use eframe::egui::{self, Align, FontFamily, FontId, Frame, Layout, RichText, Stroke, Ui};
+use eframe::egui::{
+    self, Align, FontFamily, FontId, Frame, Label, Layout, RichText, ScrollArea, Stroke,
+    TextWrapMode, Ui,
+};
 use pulldown_cmark::HeadingLevel;
 
 use crate::parser::{Block, InlineContent, InlineSpan, MarkdownDocument};
@@ -67,7 +70,14 @@ pub fn render_markdown_document(
             }
             Block::BlockQuote(lines) => render_blockquote(ui, lines, theme, zoom_factor),
             Block::CodeBlock { language, code } => {
-                render_code_block(ui, language.as_deref(), code, theme, zoom_factor)
+                render_code_block(
+                    ui,
+                    block_index,
+                    language.as_deref(),
+                    code,
+                    theme,
+                    zoom_factor,
+                )
             }
         }
     }
@@ -143,6 +153,7 @@ fn render_blockquote(ui: &mut Ui, lines: &[InlineContent], theme: &Theme, zoom_f
 
 fn render_code_block(
     ui: &mut Ui,
+    block_index: usize,
     language: Option<&str>,
     code: &str,
     theme: &Theme,
@@ -174,18 +185,28 @@ fn render_code_block(
                     ui.add_space(scale_spacing(4.0, zoom_factor));
                 }
 
-                if let Some(job) = highlighted {
-                    ui.label(job);
-                } else {
-                    ui.label(
-                        RichText::new(code)
-                            .font(FontId::new(
-                                INLINE_CODE_TEXT_SIZE * zoom_factor,
-                                FontFamily::Monospace,
-                            ))
-                            .color(theme.text_primary),
-                    );
-                }
+                ScrollArea::horizontal()
+                    .id_salt(("code_block_scroll", block_index))
+                    .auto_shrink([false, true])
+                    .show(ui, |ui| {
+                        ui.style_mut().wrap_mode = Some(TextWrapMode::Extend);
+
+                        if let Some(job) = highlighted {
+                            ui.add(Label::new(job).wrap_mode(TextWrapMode::Extend));
+                        } else {
+                            ui.add(
+                                Label::new(
+                                    RichText::new(code)
+                                        .font(FontId::new(
+                                            INLINE_CODE_TEXT_SIZE * zoom_factor,
+                                            FontFamily::Monospace,
+                                        ))
+                                        .color(theme.text_primary),
+                                )
+                                .wrap_mode(TextWrapMode::Extend),
+                            );
+                        }
+                    });
             });
         })
         .response;
