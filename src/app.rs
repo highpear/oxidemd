@@ -43,6 +43,8 @@ pub struct OxideMdApp {
     queued_reload_id: u64,
     in_flight_reload_id: Option<u64>,
     pending_heading_scroll: Option<usize>,
+    active_heading: Option<usize>,
+    selected_heading: Option<usize>,
     startup_started: Option<Instant>,
 }
 
@@ -66,6 +68,8 @@ impl OxideMdApp {
             queued_reload_id: 0,
             in_flight_reload_id: None,
             pending_heading_scroll: None,
+            active_heading: None,
+            selected_heading: None,
             startup_started: Some(startup_started),
         }
     }
@@ -146,11 +150,14 @@ impl OxideMdApp {
     fn load_selected_file(&mut self, path: PathBuf) {
         match load_markdown_document(&path) {
             Ok((document, timing)) => {
+                let active_heading = document.headings().first().map(|item| item.block_index);
                 self.current_file = Some(path.clone());
                 self.document = Some(document);
                 self.pending_reload_at = None;
                 self.in_flight_reload_id = None;
                 self.reload_status = ReloadStatus::Idle;
+                self.active_heading = active_heading;
+                self.selected_heading = None;
                 self.start_watching_file(&path);
                 metrics::log_initial_load(&path, &timing);
                 self.status_message = self.status_with_path(TranslationKey::StatusLoaded, &path);
@@ -161,6 +168,8 @@ impl OxideMdApp {
                 self.watcher = None;
                 self.pending_reload_at = None;
                 self.in_flight_reload_id = None;
+                self.active_heading = None;
+                self.selected_heading = None;
                 self.set_reload_error(TranslationKey::StatusLoadFailed, error);
             }
         }
@@ -306,7 +315,10 @@ impl OxideMdApp {
         document: MarkdownDocument,
         timing: metrics::DocumentTiming,
     ) {
+        let active_heading = document.headings().first().map(|item| item.block_index);
         self.in_flight_reload_id = None;
+        self.active_heading = active_heading;
+        self.selected_heading = None;
         self.document = Some(document);
         self.reload_status = ReloadStatus::Idle;
         metrics::log_reload(&path, &timing);
@@ -392,6 +404,14 @@ impl OxideMdApp {
 
         if reset_zoom {
             self.reset_zoom();
+        }
+    }
+
+    fn clear_selected_heading_on_manual_scroll(&mut self, ctx: &egui::Context) {
+        let scroll_delta_y = ctx.input(|input| input.raw_scroll_delta.y);
+
+        if scroll_delta_y.abs() > f32::EPSILON {
+            self.selected_heading = None;
         }
     }
 
@@ -498,6 +518,8 @@ impl OxideMdApp {
 
                 ScrollArea::vertical().show(ui, |ui| {
                     for item in &headings {
+                        let highlighted_heading = self.selected_heading.or(self.active_heading);
+                        let is_active = highlighted_heading == Some(item.block_index);
                         let indent = match item.level {
                             pulldown_cmark::HeadingLevel::H1 => 0.0,
                             pulldown_cmark::HeadingLevel::H2 => 10.0,
@@ -511,10 +533,12 @@ impl OxideMdApp {
                             ui.add_space(indent);
 
                             if ui
-                                .selectable_label(false, &item.title)
+                                .selectable_label(is_active, &item.title)
                                 .on_hover_text(tr(self.language, TranslationKey::NavJumpToHeading))
                                 .clicked()
                             {
+                                self.selected_heading = Some(item.block_index);
+                                self.active_heading = Some(item.block_index);
                                 self.pending_heading_scroll = Some(item.block_index);
                             }
                         });
@@ -556,7 +580,7 @@ impl OxideMdApp {
                         .inner_margin(Margin::symmetric(32, 28))
                         .show(ui, |ui| {
                             ui.set_max_width(760.0);
-                            let did_scroll = render_markdown_document(
+                            let render_outcome = render_markdown_document(
                                 ui,
                                 document,
                                 self.language,
@@ -565,7 +589,11 @@ impl OxideMdApp {
                                 self.pending_heading_scroll,
                             );
 
-                            if did_scroll {
+                            if let Some(active_heading) = render_outcome.active_heading {
+                                self.active_heading = Some(active_heading);
+                            }
+
+                            if render_outcome.did_scroll {
                                 self.pending_heading_scroll = None;
                             }
                         });
@@ -583,6 +611,7 @@ impl eframe::App for OxideMdApp {
         }
 
         self.handle_keyboard_shortcuts(ctx);
+        self.clear_selected_heading_on_manual_scroll(ctx);
         self.process_watch_events();
         self.process_reload_results();
         self.reload_if_ready();
