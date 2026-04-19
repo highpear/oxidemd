@@ -11,6 +11,7 @@ use crate::theme::Theme;
 const BODY_TEXT_SIZE: f32 = 17.0;
 const QUOTE_TEXT_SIZE: f32 = 16.0;
 const INLINE_CODE_TEXT_SIZE: f32 = 15.0;
+const CODE_LANGUAGE_TEXT_SIZE: f32 = 11.0;
 const BLOCK_SPACING_PARAGRAPH: f32 = 18.0;
 const BLOCK_SPACING_SECTION: f32 = 24.0;
 const LIST_ITEM_SPACING: f32 = 8.0;
@@ -175,14 +176,9 @@ fn render_code_block(
         ))
         .show(ui, |ui| {
             ui.with_layout(Layout::top_down(Align::Min), |ui| {
-                if let Some(language) = language {
-                    ui.label(
-                        RichText::new(language)
-                            .size(12.0 * zoom_factor)
-                            .strong()
-                            .color(theme.text_secondary),
-                    );
-                    ui.add_space(scale_spacing(4.0, zoom_factor));
+                if let Some(language) = language.filter(|language| !language.trim().is_empty()) {
+                    render_code_language_label(ui, language, theme, zoom_factor);
+                    ui.add_space(scale_spacing(10.0, zoom_factor));
                 }
 
                 ScrollArea::horizontal()
@@ -216,6 +212,25 @@ fn render_code_block(
     }
 
     ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
+}
+
+fn render_code_language_label(ui: &mut Ui, language: &str, theme: &Theme, zoom_factor: f32) {
+    Frame::new()
+        .fill(theme.top_bar_background)
+        .stroke(Stroke::new(1.0, theme.content_border))
+        .corner_radius(egui::CornerRadius::same(scale_margin(6, zoom_factor) as u8))
+        .inner_margin(egui::Margin::symmetric(
+            scale_margin(8, zoom_factor),
+            scale_margin(4, zoom_factor),
+        ))
+        .show(ui, |ui| {
+            ui.label(
+                RichText::new(language.trim())
+                    .size(CODE_LANGUAGE_TEXT_SIZE * zoom_factor)
+                    .strong()
+                    .color(theme.text_secondary),
+            );
+        });
 }
 
 #[derive(Clone, Copy)]
