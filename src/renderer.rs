@@ -1,10 +1,8 @@
-use eframe::egui::{
-    self, Align, FontFamily, FontId, Frame, RichText, Stroke, Ui,
-};
+use eframe::egui::{self, Align, FontFamily, FontId, Frame, RichText, Stroke, Ui};
 use pulldown_cmark::HeadingLevel;
 
-use crate::i18n::Language;
 use crate::code_block::render_code_block;
+use crate::i18n::Language;
 use crate::parser::{Block, InlineContent, InlineSpan, MarkdownDocument};
 use crate::theme::Theme;
 
@@ -70,17 +68,15 @@ pub fn render_markdown_document(
                 ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
             }
             Block::BlockQuote(lines) => render_blockquote(ui, lines, theme, zoom_factor),
-            Block::CodeBlock { language, code } => {
-                render_code_block(
-                    ui,
-                    block_index,
-                    ui_language,
-                    language.as_deref(),
-                    code,
-                    theme,
-                    zoom_factor,
-                )
-            }
+            Block::CodeBlock { language, code } => render_code_block(
+                ui,
+                block_index,
+                ui_language,
+                language.as_deref(),
+                code,
+                theme,
+                zoom_factor,
+            ),
         }
     }
 
