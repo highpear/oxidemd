@@ -225,16 +225,16 @@ fn render_code_block_header(
     theme: &Theme,
     zoom_factor: f32,
 ) {
-    ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+    ui.horizontal(|ui| {
         if let Some(language) = language.filter(|language| !language.trim().is_empty()) {
             render_code_language_label(ui, language, theme, zoom_factor);
         }
 
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if ui.button(tr(ui_language, "action.copy")).clicked() {
-                ui.ctx().copy_text(code.to_owned());
-            }
-        });
+        ui.add_space(ui.available_width());
+
+        if ui.button(tr(ui_language, "action.copy")).clicked() {
+            ui.ctx().copy_text(code.to_owned());
+        }
     });
 }
 
