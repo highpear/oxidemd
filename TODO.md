@@ -157,15 +157,15 @@ Exit criteria:
 
 Goal: improve readability of fenced code blocks.
 
-* [ ] Add `syntect`
-* [ ] Highlight fenced code blocks
-* [ ] Support common languages
-* [ ] Add fallback behavior for unknown languages
+* [x] Add `syntect`
+* [x] Highlight fenced code blocks
+* [x] Support common languages
+* [x] Add fallback behavior for unknown languages
 * [ ] Cache highlighted results if needed
 
 Exit criteria:
 
-* [ ] Code blocks are clearly easier to read
+* [x] Code blocks are clearly easier to read
 * [ ] Highlighting does not noticeably hurt responsiveness
 
 ---
@@ -259,7 +259,7 @@ Exit criteria:
 
 ## Current Priority
 
-1. Add syntax highlighting
+1. Cache highlighted results if needed
 2. Add table of contents (TOC)
 3. Add in-document search
 4. Cache parsed output
