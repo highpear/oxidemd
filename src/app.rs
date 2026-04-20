@@ -7,7 +7,7 @@ use eframe::egui::{
 };
 use rfd::FileDialog;
 
-use crate::document_loader::load_markdown_document;
+use crate::document_loader::{DocumentFingerprint, load_markdown_document};
 use crate::i18n::{Language, TranslationKey, tr};
 use crate::metrics;
 use crate::parser::{HeadingNavItem, MarkdownDocument, SearchMatch};
@@ -36,6 +36,7 @@ pub struct OxideMdApp {
     zoom_factor: f32,
     current_file: Option<PathBuf>,
     document: Option<MarkdownDocument>,
+    document_fingerprint: Option<DocumentFingerprint>,
     status_message: String,
     reload_status: ReloadStatus,
     reload_worker: ReloadWorkerHandle,
@@ -66,6 +67,7 @@ impl OxideMdApp {
             zoom_factor: DEFAULT_ZOOM_FACTOR,
             current_file: None,
             document: None,
+            document_fingerprint: None,
             status_message: tr(language, TranslationKey::StatusNoFile).to_owned(),
             reload_status: ReloadStatus::Idle,
             watcher: None,
@@ -158,10 +160,12 @@ impl OxideMdApp {
 
     fn load_selected_file(&mut self, path: PathBuf) {
         match load_markdown_document(&path) {
-            Ok((document, timing)) => {
+            Ok(loaded) => {
+                let document = loaded.document;
                 let active_heading = document.headings().first().map(|item| item.block_index);
                 self.current_file = Some(path.clone());
                 self.document = Some(document);
+                self.document_fingerprint = Some(loaded.fingerprint);
                 self.pending_reload_at = None;
                 self.in_flight_reload_id = None;
                 self.reload_status = ReloadStatus::Idle;
@@ -170,11 +174,12 @@ impl OxideMdApp {
                 self.selected_heading = None;
                 self.refresh_search_matches();
                 self.start_watching_file(&path);
-                metrics::log_initial_load(&path, &timing);
+                metrics::log_initial_load(&path, &loaded.timing);
                 self.status_message = self.status_with_path(TranslationKey::StatusLoaded, &path);
             }
             Err(error) => {
                 self.document = None;
+                self.document_fingerprint = None;
                 self.current_file = None;
                 self.watcher = None;
                 self.pending_reload_at = None;
@@ -281,7 +286,10 @@ impl OxideMdApp {
         self.queued_reload_id += 1;
         let reload_id = self.queued_reload_id;
 
-        match self.reload_worker.request_reload(reload_id, path.clone()) {
+        match self
+            .reload_worker
+            .request_reload(reload_id, path.clone(), self.document_fingerprint)
+        {
             Ok(()) => {
                 self.in_flight_reload_id = Some(reload_id);
                 self.set_reload_in_progress(TranslationKey::StatusReloadStarted, Some(&path));
@@ -300,12 +308,25 @@ impl OxideMdApp {
                     path,
                     document,
                     timing,
+                    fingerprint,
                 } => {
                     if self.in_flight_reload_id != Some(id) {
                         continue;
                     }
 
-                    self.finish_reload_success(path, document, timing);
+                    self.finish_reload_success(path, document, timing, fingerprint);
+                }
+                ReloadResponse::Unchanged {
+                    id,
+                    path,
+                    timing,
+                    fingerprint,
+                } => {
+                    if self.in_flight_reload_id != Some(id) {
+                        continue;
+                    }
+
+                    self.finish_reload_unchanged(path, timing, fingerprint);
                 }
                 ReloadResponse::Error { id, path, error } => {
                     if self.in_flight_reload_id != Some(id) {
@@ -328,6 +349,7 @@ impl OxideMdApp {
         path: PathBuf,
         document: MarkdownDocument,
         timing: metrics::DocumentTiming,
+        fingerprint: DocumentFingerprint,
     ) {
         let active_heading = document.headings().first().map(|item| item.block_index);
         self.in_flight_reload_id = None;
@@ -335,10 +357,24 @@ impl OxideMdApp {
         self.active_heading = active_heading;
         self.selected_heading = None;
         self.document = Some(document);
+        self.document_fingerprint = Some(fingerprint);
         self.refresh_search_matches();
         self.reload_status = ReloadStatus::Idle;
         metrics::log_reload(&path, &timing);
         self.status_message = self.status_with_path(TranslationKey::StatusReloaded, &path);
+    }
+
+    fn finish_reload_unchanged(
+        &mut self,
+        path: PathBuf,
+        timing: metrics::DocumentTiming,
+        fingerprint: DocumentFingerprint,
+    ) {
+        self.in_flight_reload_id = None;
+        self.document_fingerprint = Some(fingerprint);
+        self.reload_status = ReloadStatus::Idle;
+        metrics::log_reload_skipped(&path, &timing);
+        self.status_message = self.status_with_path(TranslationKey::StatusReloadSkipped, &path);
     }
 
     fn finish_reload_error(&mut self, path: PathBuf, error: String) {
@@ -598,27 +634,27 @@ impl OxideMdApp {
             .id_salt("search_results_scroll")
             .max_height(180.0)
             .show(ui, |ui| {
-            if self.search_matches.is_empty() {
-                ui.label(tr(self.language, TranslationKey::MessageSearchNoResults));
-                return;
-            }
-
-            let items: Vec<(usize, SearchMatch)> =
-                self.search_matches.iter().cloned().enumerate().collect();
-
-            for (index, search_match) in items {
-                let is_active = self.active_search_index == Some(index);
-                let label = if search_match.preview.is_empty() {
-                    format!("#{}", search_match.block_index + 1)
-                } else {
-                    search_match.preview
-                };
-
-                if ui.selectable_label(is_active, label).clicked() {
-                    self.select_search_match(index);
+                if self.search_matches.is_empty() {
+                    ui.label(tr(self.language, TranslationKey::MessageSearchNoResults));
+                    return;
                 }
-            }
-        });
+
+                let items: Vec<(usize, SearchMatch)> =
+                    self.search_matches.iter().cloned().enumerate().collect();
+
+                for (index, search_match) in items {
+                    let is_active = self.active_search_index == Some(index);
+                    let label = if search_match.preview.is_empty() {
+                        format!("#{}", search_match.block_index + 1)
+                    } else {
+                        search_match.preview
+                    };
+
+                    if ui.selectable_label(is_active, label).clicked() {
+                        self.select_search_match(index);
+                    }
+                }
+            });
     }
 
     fn render_top_bar(&mut self, ctx: &egui::Context) {
@@ -626,7 +662,10 @@ impl OxideMdApp {
 
         TopBottomPanel::top("top_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                if ui.button(tr(self.language, TranslationKey::ActionOpen)).clicked() {
+                if ui
+                    .button(tr(self.language, TranslationKey::ActionOpen))
+                    .clicked()
+                {
                     self.open_markdown_file();
                 }
 
@@ -730,33 +769,36 @@ impl OxideMdApp {
                 ScrollArea::vertical()
                     .id_salt("heading_navigation_scroll")
                     .show(ui, |ui| {
-                    for item in &headings {
-                        let highlighted_heading = self.selected_heading.or(self.active_heading);
-                        let is_active = highlighted_heading == Some(item.block_index);
-                        let indent = match item.level {
-                            pulldown_cmark::HeadingLevel::H1 => 0.0,
-                            pulldown_cmark::HeadingLevel::H2 => 10.0,
-                            pulldown_cmark::HeadingLevel::H3 => 20.0,
-                            pulldown_cmark::HeadingLevel::H4 => 30.0,
-                            pulldown_cmark::HeadingLevel::H5 => 40.0,
-                            pulldown_cmark::HeadingLevel::H6 => 50.0,
-                        };
+                        for item in &headings {
+                            let highlighted_heading = self.selected_heading.or(self.active_heading);
+                            let is_active = highlighted_heading == Some(item.block_index);
+                            let indent = match item.level {
+                                pulldown_cmark::HeadingLevel::H1 => 0.0,
+                                pulldown_cmark::HeadingLevel::H2 => 10.0,
+                                pulldown_cmark::HeadingLevel::H3 => 20.0,
+                                pulldown_cmark::HeadingLevel::H4 => 30.0,
+                                pulldown_cmark::HeadingLevel::H5 => 40.0,
+                                pulldown_cmark::HeadingLevel::H6 => 50.0,
+                            };
 
-                        ui.horizontal(|ui| {
-                            ui.add_space(indent);
+                            ui.horizontal(|ui| {
+                                ui.add_space(indent);
 
-                            if ui
-                                .selectable_label(is_active, &item.title)
-                                .on_hover_text(tr(self.language, TranslationKey::NavJumpToHeading))
-                                .clicked()
-                            {
-                                self.selected_heading = Some(item.block_index);
-                                self.active_heading = Some(item.block_index);
-                                self.pending_block_scroll = Some(item.block_index);
-                            }
-                        });
-                    }
-                });
+                                if ui
+                                    .selectable_label(is_active, &item.title)
+                                    .on_hover_text(tr(
+                                        self.language,
+                                        TranslationKey::NavJumpToHeading,
+                                    ))
+                                    .clicked()
+                                {
+                                    self.selected_heading = Some(item.block_index);
+                                    self.active_heading = Some(item.block_index);
+                                    self.pending_block_scroll = Some(item.block_index);
+                                }
+                            });
+                        }
+                    });
             });
     }
 

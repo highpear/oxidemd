@@ -47,7 +47,14 @@ pub fn render_markdown_document(
                 }
             }
             Block::Paragraph(text) => {
-                render_inline(ui, text, InlineStyle::Body, theme, zoom_factor, search_query);
+                render_inline(
+                    ui,
+                    text,
+                    InlineStyle::Body,
+                    theme,
+                    zoom_factor,
+                    search_query,
+                );
                 ui.add_space(scale_spacing(BLOCK_SPACING_PARAGRAPH, zoom_factor));
 
                 if scroll_to_block == Some(block_index) {
@@ -198,7 +205,14 @@ fn render_list_item(
         );
 
         ui.vertical(|ui| {
-            render_inline(ui, item, InlineStyle::Body, theme, zoom_factor, search_query);
+            render_inline(
+                ui,
+                item,
+                InlineStyle::Body,
+                theme,
+                zoom_factor,
+                search_query,
+            );
         });
     });
 }
@@ -219,7 +233,14 @@ fn render_blockquote(
         ))
         .show(ui, |ui| {
             for line in lines {
-                render_inline(ui, line, InlineStyle::Quote, theme, zoom_factor, search_query);
+                render_inline(
+                    ui,
+                    line,
+                    InlineStyle::Quote,
+                    theme,
+                    zoom_factor,
+                    search_query,
+                );
                 ui.add_space(scale_spacing(6.0, zoom_factor));
             }
         });
@@ -279,26 +300,42 @@ fn render_inline_span(
     search_query: Option<&str>,
 ) {
     match span {
-        InlineSpan::Text(text) => {
-            render_text_label(ui, text, style, SpanKind::Plain, theme, zoom_factor, search_query)
-        }
-        InlineSpan::Strong(text) => {
-            render_text_label(ui, text, style, SpanKind::Strong, theme, zoom_factor, search_query)
-        }
-        InlineSpan::Emphasis(text) => {
-            render_text_label(
-                ui,
-                text,
-                style,
-                SpanKind::Emphasis,
-                theme,
-                zoom_factor,
-                search_query,
-            )
-        }
-        InlineSpan::Code(text) => {
-            render_text_label(ui, text, style, SpanKind::Code, theme, zoom_factor, search_query)
-        }
+        InlineSpan::Text(text) => render_text_label(
+            ui,
+            text,
+            style,
+            SpanKind::Plain,
+            theme,
+            zoom_factor,
+            search_query,
+        ),
+        InlineSpan::Strong(text) => render_text_label(
+            ui,
+            text,
+            style,
+            SpanKind::Strong,
+            theme,
+            zoom_factor,
+            search_query,
+        ),
+        InlineSpan::Emphasis(text) => render_text_label(
+            ui,
+            text,
+            style,
+            SpanKind::Emphasis,
+            theme,
+            zoom_factor,
+            search_query,
+        ),
+        InlineSpan::Code(text) => render_text_label(
+            ui,
+            text,
+            style,
+            SpanKind::Code,
+            theme,
+            zoom_factor,
+            search_query,
+        ),
         InlineSpan::Link { text, destination } => {
             let rich_text = styled_text(text, style, SpanKind::Link, theme, zoom_factor)
                 .background_color(search_highlight_for_text(text, theme, search_query));
@@ -471,5 +508,7 @@ fn search_highlight_for_text(
 }
 
 fn search_highlight_color(theme: &Theme) -> egui::Color32 {
-    theme.status_loading_background.gamma_multiply(if theme.is_dark { 0.65 } else { 0.9 })
+    theme
+        .status_loading_background
+        .gamma_multiply(if theme.is_dark { 0.65 } else { 0.9 })
 }

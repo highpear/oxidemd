@@ -4,12 +4,18 @@ use std::thread;
 
 use eframe::egui;
 
-use crate::document_loader::load_markdown_document;
+use crate::document_loader::{
+    DocumentFingerprint, ReloadDocumentOutcome, reload_markdown_document,
+};
 use crate::metrics::DocumentTiming;
 use crate::parser::MarkdownDocument;
 
 enum ReloadRequest {
-    Reload { id: u64, path: PathBuf },
+    Reload {
+        id: u64,
+        path: PathBuf,
+        previous_fingerprint: Option<DocumentFingerprint>,
+    },
 }
 
 pub enum ReloadResponse {
@@ -18,6 +24,13 @@ pub enum ReloadResponse {
         path: PathBuf,
         document: MarkdownDocument,
         timing: DocumentTiming,
+        fingerprint: DocumentFingerprint,
+    },
+    Unchanged {
+        id: u64,
+        path: PathBuf,
+        timing: DocumentTiming,
+        fingerprint: DocumentFingerprint,
     },
     Error {
         id: u64,
@@ -39,13 +52,27 @@ pub fn spawn_reload_worker(ctx: egui::Context) -> ReloadWorkerHandle {
     let worker_thread = thread::spawn(move || {
         while let Ok(request) = request_receiver.recv() {
             match request {
-                ReloadRequest::Reload { id, path } => {
-                    let response = match load_markdown_document(&path) {
-                        Ok((document, timing)) => ReloadResponse::Reloaded {
+                ReloadRequest::Reload {
+                    id,
+                    path,
+                    previous_fingerprint,
+                } => {
+                    let response = match reload_markdown_document(&path, previous_fingerprint) {
+                        Ok(ReloadDocumentOutcome::Reloaded(loaded)) => ReloadResponse::Reloaded {
                             id,
                             path,
-                            document,
+                            document: loaded.document,
+                            timing: loaded.timing,
+                            fingerprint: loaded.fingerprint,
+                        },
+                        Ok(ReloadDocumentOutcome::Unchanged {
+                            fingerprint,
                             timing,
+                        }) => ReloadResponse::Unchanged {
+                            id,
+                            path,
+                            timing,
+                            fingerprint,
                         },
                         Err(error) => ReloadResponse::Error {
                             id,
@@ -72,9 +99,18 @@ pub fn spawn_reload_worker(ctx: egui::Context) -> ReloadWorkerHandle {
 }
 
 impl ReloadWorkerHandle {
-    pub fn request_reload(&self, id: u64, path: PathBuf) -> Result<(), String> {
+    pub fn request_reload(
+        &self,
+        id: u64,
+        path: PathBuf,
+        previous_fingerprint: Option<DocumentFingerprint>,
+    ) -> Result<(), String> {
         self.sender
-            .send(ReloadRequest::Reload { id, path })
+            .send(ReloadRequest::Reload {
+                id,
+                path,
+                previous_fingerprint,
+            })
             .map_err(|error| error.to_string())
     }
 }
