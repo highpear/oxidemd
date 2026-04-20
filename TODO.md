@@ -200,7 +200,7 @@ Goal: improve usability for larger Markdown documents.
 * [x] Support heading-based navigation
 * [x] Add in-document search
 * [x] Highlight search matches
-* [ ] Add jump-to-section behavior
+* [x] Add jump-to-section behavior
 
 Exit criteria:
 
@@ -259,10 +259,10 @@ Exit criteria:
 
 ## Current Priority
 
-1. Add jump-to-section behavior
-2. Measure performance on large documents
-3. Reduce memory copies where useful
-4. Improve incremental reload behavior if needed
-5. Evaluate whether the static i18n table should stay or move to external resources later
+1. Measure performance on large documents
+2. Reduce memory copies where useful
+3. Improve incremental reload behavior if needed
+4. Evaluate whether the static i18n table should stay or move to external resources later
+5. Drag and drop file open
 
 ---

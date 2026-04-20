@@ -24,6 +24,7 @@ pub fn render_markdown_document(
 ) -> RenderOutcome {
     let mut did_scroll = false;
     let mut active_heading = None;
+    let mut clicked_anchor = None;
     let viewport_top = ui.clip_rect().top();
 
     for (block_index, block) in document.blocks.iter().enumerate() {
@@ -39,6 +40,7 @@ pub fn render_markdown_document(
                     block_index,
                     viewport_top,
                     search_query,
+                    &mut clicked_anchor,
                 );
                 did_scroll |= heading_state.did_scroll;
 
@@ -54,6 +56,7 @@ pub fn render_markdown_document(
                     theme,
                     zoom_factor,
                     search_query,
+                    &mut clicked_anchor,
                 );
                 ui.add_space(scale_spacing(BLOCK_SPACING_PARAGRAPH, zoom_factor));
 
@@ -71,6 +74,7 @@ pub fn render_markdown_document(
                         theme,
                         zoom_factor,
                         search_query,
+                        &mut clicked_anchor,
                     );
                     ui.add_space(scale_spacing(LIST_ITEM_SPACING, zoom_factor));
                 }
@@ -91,6 +95,7 @@ pub fn render_markdown_document(
                         theme,
                         zoom_factor,
                         search_query,
+                        &mut clicked_anchor,
                     );
                     ui.add_space(scale_spacing(LIST_ITEM_SPACING, zoom_factor));
                 }
@@ -102,7 +107,14 @@ pub fn render_markdown_document(
                 }
             }
             Block::BlockQuote(lines) => {
-                render_blockquote(ui, lines, theme, zoom_factor, search_query);
+                render_blockquote(
+                    ui,
+                    lines,
+                    theme,
+                    zoom_factor,
+                    search_query,
+                    &mut clicked_anchor,
+                );
                 if scroll_to_block == Some(block_index) {
                     ui.scroll_to_cursor(Some(Align::TOP));
                     did_scroll = true;
@@ -130,12 +142,14 @@ pub fn render_markdown_document(
     RenderOutcome {
         did_scroll,
         active_heading,
+        clicked_anchor,
     }
 }
 
 pub struct RenderOutcome {
     pub did_scroll: bool,
     pub active_heading: Option<usize>,
+    pub clicked_anchor: Option<String>,
 }
 
 struct HeadingRenderState {
@@ -153,6 +167,7 @@ fn render_heading(
     block_index: usize,
     viewport_top: f32,
     search_query: Option<&str>,
+    clicked_anchor: &mut Option<String>,
 ) -> HeadingRenderState {
     let size = match level {
         HeadingLevel::H1 => 31.0,
@@ -177,6 +192,7 @@ fn render_heading(
             theme,
             zoom_factor,
             search_query,
+            clicked_anchor,
         );
         ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
     });
@@ -197,6 +213,7 @@ fn render_list_item(
     theme: &Theme,
     zoom_factor: f32,
     search_query: Option<&str>,
+    clicked_anchor: &mut Option<String>,
 ) {
     ui.horizontal_top(|ui| {
         ui.add_sized(
@@ -212,6 +229,7 @@ fn render_list_item(
                 theme,
                 zoom_factor,
                 search_query,
+                clicked_anchor,
             );
         });
     });
@@ -223,6 +241,7 @@ fn render_blockquote(
     theme: &Theme,
     zoom_factor: f32,
     search_query: Option<&str>,
+    clicked_anchor: &mut Option<String>,
 ) {
     Frame::new()
         .fill(theme.quote_background)
@@ -240,6 +259,7 @@ fn render_blockquote(
                     theme,
                     zoom_factor,
                     search_query,
+                    clicked_anchor,
                 );
                 ui.add_space(scale_spacing(6.0, zoom_factor));
             }
@@ -262,6 +282,7 @@ fn render_inline(
     theme: &Theme,
     zoom_factor: f32,
     search_query: Option<&str>,
+    clicked_anchor: &mut Option<String>,
 ) {
     let mut lines: Vec<Vec<&InlineSpan>> = vec![Vec::new()];
 
@@ -276,7 +297,15 @@ fn render_inline(
     for line in lines {
         ui.horizontal_wrapped(|ui| {
             for span in line {
-                render_inline_span(ui, span, style, theme, zoom_factor, search_query);
+                render_inline_span(
+                    ui,
+                    span,
+                    style,
+                    theme,
+                    zoom_factor,
+                    search_query,
+                    clicked_anchor,
+                );
             }
         });
     }
@@ -298,6 +327,7 @@ fn render_inline_span(
     theme: &Theme,
     zoom_factor: f32,
     search_query: Option<&str>,
+    clicked_anchor: &mut Option<String>,
 ) {
     match span {
         InlineSpan::Text(text) => render_text_label(
@@ -339,10 +369,23 @@ fn render_inline_span(
         InlineSpan::Link { text, destination } => {
             let rich_text = styled_text(text, style, SpanKind::Link, theme, zoom_factor)
                 .background_color(search_highlight_for_text(text, theme, search_query));
-            ui.hyperlink_to(rich_text, destination);
+            if let Some(anchor) = internal_anchor(destination) {
+                if ui.link(rich_text).clicked() {
+                    *clicked_anchor = Some(anchor.to_owned());
+                }
+            } else {
+                ui.hyperlink_to(rich_text, destination);
+            }
         }
         InlineSpan::LineBreak => {}
     }
+}
+
+fn internal_anchor(destination: &str) -> Option<&str> {
+    let trimmed = destination.trim();
+    trimmed
+        .strip_prefix('#')
+        .filter(|anchor| !anchor.trim().is_empty())
 }
 
 fn render_text_label(
