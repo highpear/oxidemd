@@ -140,7 +140,7 @@ Goal: prepare the app for large files and frequent updates.
 * [x] Measure startup time
 * [x] Measure reload time
 * [x] Measure parse time
-* [ ] Cache parsed output
+* [x] Cache parsed output
 * [x] Avoid unnecessary re-parsing
 * [ ] Avoid unnecessary allocations in hot paths
 * [ ] Keep rendering work predictable
@@ -259,10 +259,10 @@ Exit criteria:
 
 ## Current Priority
 
-1. Cache parsed output
-2. Add jump-to-section behavior
-3. Measure performance on large documents
-4. Reduce memory copies where useful
-5. Improve incremental reload behavior if needed
+1. Add jump-to-section behavior
+2. Measure performance on large documents
+3. Reduce memory copies where useful
+4. Improve incremental reload behavior if needed
+5. Evaluate whether the static i18n table should stay or move to external resources later
 
 ---

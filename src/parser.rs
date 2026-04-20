@@ -1,5 +1,6 @@
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, LinkType, Options, Parser, Tag, TagEnd};
 
+#[derive(Clone)]
 pub struct MarkdownDocument {
     pub blocks: Vec<Block>,
     headings: Vec<HeadingNavItem>,
@@ -33,6 +34,7 @@ pub enum InlineSpan {
     LineBreak,
 }
 
+#[derive(Clone)]
 pub enum Block {
     Heading {
         level: HeadingLevel,
