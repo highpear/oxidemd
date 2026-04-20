@@ -9,6 +9,7 @@ use rfd::FileDialog;
 
 use crate::document_loader::{DocumentFingerprint, load_markdown_document};
 use crate::i18n::{Language, TranslationKey, tr};
+use crate::image_cache::ImageCache;
 use crate::metrics;
 use crate::parser::{HeadingNavItem, MarkdownDocument, SearchMatch};
 use crate::reload_worker::{ReloadResponse, ReloadWorkerHandle, spawn_reload_worker};
@@ -37,6 +38,7 @@ pub struct OxideMdApp {
     current_file: Option<PathBuf>,
     document: Option<MarkdownDocument>,
     document_fingerprint: Option<DocumentFingerprint>,
+    image_cache: ImageCache,
     status_message: String,
     reload_status: ReloadStatus,
     reload_worker: ReloadWorkerHandle,
@@ -68,6 +70,7 @@ impl OxideMdApp {
             current_file: None,
             document: None,
             document_fingerprint: None,
+            image_cache: ImageCache::new(),
             status_message: tr(language, TranslationKey::StatusNoFile).to_owned(),
             reload_status: ReloadStatus::Idle,
             watcher: None,
@@ -193,6 +196,7 @@ impl OxideMdApp {
                 self.current_file = Some(path.clone());
                 self.document = Some(document);
                 self.document_fingerprint = Some(loaded.fingerprint);
+                self.image_cache.clear();
                 self.pending_reload_at = None;
                 self.in_flight_reload_id = None;
                 self.reload_status = ReloadStatus::Idle;
@@ -207,6 +211,7 @@ impl OxideMdApp {
             Err(error) => {
                 self.document = None;
                 self.document_fingerprint = None;
+                self.image_cache.clear();
                 self.current_file = None;
                 self.watcher = None;
                 self.pending_reload_at = None;
@@ -385,6 +390,7 @@ impl OxideMdApp {
         self.selected_heading = None;
         self.document = Some(document);
         self.document_fingerprint = Some(fingerprint);
+        self.image_cache.clear();
         self.refresh_search_matches();
         self.reload_status = ReloadStatus::Idle;
         metrics::log_reload(&path, &timing);
@@ -846,6 +852,8 @@ impl OxideMdApp {
             };
 
             ScrollArea::vertical().show(ui, |ui| {
+                let document_base_dir = self.current_file.as_ref().and_then(|path| path.parent());
+
                 ui.add_space(18.0);
                 ui.vertical_centered(|ui| {
                     ui.set_max_width(840.0);
@@ -868,6 +876,8 @@ impl OxideMdApp {
                                 self.language,
                                 &theme,
                                 self.zoom_factor,
+                                document_base_dir,
+                                &mut self.image_cache,
                                 self.pending_block_scroll,
                                 Some(self.search_query.as_str()),
                             );

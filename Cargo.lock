@@ -1637,6 +1637,8 @@ dependencies = [
  "num-traits",
  "png",
  "tiff",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]
@@ -2416,6 +2418,7 @@ name = "oxidemd"
 version = "0.1.0"
 dependencies = [
  "eframe",
+ "image",
  "notify",
  "pulldown-cmark",
  "rfd",

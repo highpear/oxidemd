@@ -36,6 +36,7 @@ pub enum InlineSpan {
     Emphasis(String),
     Code(String),
     Link { text: String, destination: String },
+    Image { alt: String, destination: String },
     LineBreak,
 }
 
@@ -332,6 +333,13 @@ where
                 spans.push(link);
             }
         }
+        Event::Start(Tag::Image { dest_url, .. }) => {
+            let alt = collect_text_until(parser, TagEnd::Image);
+            spans.push(InlineSpan::Image {
+                alt,
+                destination: dest_url.to_string(),
+            });
+        }
         _ => {}
     }
 }
@@ -419,6 +427,9 @@ impl InlineContent {
             | InlineSpan::Emphasis(text)
             | InlineSpan::Code(text) => text.is_empty(),
             InlineSpan::Link { text, .. } => text.is_empty(),
+            InlineSpan::Image {
+                alt, destination, ..
+            } => alt.is_empty() && destination.is_empty(),
             InlineSpan::LineBreak => false,
         })
     }
@@ -433,6 +444,7 @@ impl InlineContent {
                 | InlineSpan::Emphasis(value)
                 | InlineSpan::Code(value) => text.push_str(value),
                 InlineSpan::Link { text: value, .. } => text.push_str(value),
+                InlineSpan::Image { alt, .. } => text.push_str(alt),
                 InlineSpan::LineBreak => text.push(' '),
             }
         }

@@ -26,6 +26,7 @@ Current capabilities:
 - Render core Markdown blocks
 - Render basic inline Markdown styling
 - Open links from rendered content
+- Render local PNG and JPEG images
 - Live reload when the opened file changes
 - English and Japanese UI strings
 - Theme switching, document zoom, and heading navigation
@@ -42,6 +43,7 @@ Currently supported Markdown elements:
 - Emphasis
 - Inline code
 - Links
+- Images (local PNG/JPEG)
 
 ---
 
