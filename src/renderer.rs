@@ -1,4 +1,4 @@
-use eframe::egui::{self, Align, FontFamily, FontId, Frame, RichText, Stroke, Ui};
+use eframe::egui::{self, Align, FontFamily, FontId, Frame, RichText, Stroke, Ui, WidgetText};
 use pulldown_cmark::{Alignment, HeadingLevel};
 
 use crate::code_block::render_code_block;
@@ -294,7 +294,7 @@ fn render_blockquote(
 fn render_table(
     ui: &mut Ui,
     block_index: usize,
-    _alignments: &[Alignment],
+    alignments: &[Alignment],
     headers: &[InlineContent],
     rows: &[Vec<InlineContent>],
     theme: &Theme,
@@ -324,6 +324,7 @@ fn render_table(
                                 ui,
                                 headers,
                                 column_count,
+                                alignments,
                                 InlineStyle::TableHeader,
                                 theme,
                                 zoom_factor,
@@ -336,6 +337,7 @@ fn render_table(
                                     ui,
                                     row,
                                     column_count,
+                                    alignments,
                                     InlineStyle::TableCell,
                                     theme,
                                     zoom_factor,
@@ -354,6 +356,7 @@ fn render_table_row(
     ui: &mut Ui,
     cells: &[InlineContent],
     column_count: usize,
+    alignments: &[Alignment],
     style: InlineStyle,
     theme: &Theme,
     zoom_factor: f32,
@@ -362,25 +365,215 @@ fn render_table_row(
 ) {
     for column_index in 0..column_count {
         let cell = cells.get(column_index);
+        let alignment = alignments
+            .get(column_index)
+            .copied()
+            .unwrap_or(Alignment::None);
         let width = scale_spacing(TABLE_CELL_MIN_WIDTH, zoom_factor);
 
-        ui.vertical(|ui| {
+        let cell_frame = match style {
+            InlineStyle::TableHeader => Frame::new()
+                .fill(theme.widget_inactive_background)
+                .inner_margin(egui::Margin::symmetric(8, 6)),
+            InlineStyle::TableCell => Frame::new().inner_margin(egui::Margin::symmetric(8, 4)),
+            _ => Frame::new(),
+        };
+
+        cell_frame.show(ui, |ui| {
             ui.set_min_width(width);
-            if let Some(cell) = cell {
-                render_inline(
-                    ui,
-                    cell,
-                    style,
-                    theme,
-                    zoom_factor,
-                    search_query,
-                    clicked_anchor,
-                );
-            }
+            render_aligned_cell(
+                ui,
+                cell,
+                alignment,
+                style,
+                theme,
+                zoom_factor,
+                search_query,
+                clicked_anchor,
+            );
         });
     }
 
     ui.end_row();
+}
+
+fn render_aligned_cell(
+    ui: &mut Ui,
+    cell: Option<&InlineContent>,
+    alignment: Alignment,
+    style: InlineStyle,
+    theme: &Theme,
+    zoom_factor: f32,
+    search_query: Option<&str>,
+    clicked_anchor: &mut Option<String>,
+) {
+    let Some(cell) = cell else {
+        ui.label("");
+        return;
+    };
+
+    match alignment {
+        Alignment::Center | Alignment::Right => render_inline_aligned(
+            ui,
+            cell,
+            alignment,
+            style,
+            theme,
+            zoom_factor,
+            search_query,
+            clicked_anchor,
+        ),
+        Alignment::None | Alignment::Left => {
+            render_inline(
+                ui,
+                cell,
+                style,
+                theme,
+                zoom_factor,
+                search_query,
+                clicked_anchor,
+            );
+        }
+    }
+}
+
+fn render_inline_aligned(
+    ui: &mut Ui,
+    content: &InlineContent,
+    alignment: Alignment,
+    style: InlineStyle,
+    theme: &Theme,
+    zoom_factor: f32,
+    search_query: Option<&str>,
+    clicked_anchor: &mut Option<String>,
+) {
+    let available_width = ui.available_width();
+    let line_width = inline_content_width(ui, content, style, theme, zoom_factor, search_query);
+    let leading_space = match alignment {
+        Alignment::Center => ((available_width - line_width) / 2.0).max(0.0),
+        Alignment::Right => (available_width - line_width).max(0.0),
+        Alignment::None | Alignment::Left => 0.0,
+    };
+
+    ui.horizontal(|ui| {
+        ui.add_space(leading_space);
+        for span in &content.spans {
+            if matches!(span, InlineSpan::LineBreak) {
+                continue;
+            }
+
+            render_inline_span(
+                ui,
+                span,
+                style,
+                theme,
+                zoom_factor,
+                search_query,
+                clicked_anchor,
+            );
+        }
+    });
+}
+
+fn inline_content_width(
+    ui: &mut Ui,
+    content: &InlineContent,
+    style: InlineStyle,
+    theme: &Theme,
+    zoom_factor: f32,
+    search_query: Option<&str>,
+) -> f32 {
+    let mut width = 0.0;
+
+    for span in &content.spans {
+        if matches!(span, InlineSpan::LineBreak) {
+            continue;
+        }
+
+        width += inline_span_width(ui, span, style, theme, zoom_factor, search_query);
+        width += ui.spacing().item_spacing.x;
+    }
+
+    width
+}
+
+fn inline_span_width(
+    ui: &mut Ui,
+    span: &InlineSpan,
+    style: InlineStyle,
+    theme: &Theme,
+    zoom_factor: f32,
+    search_query: Option<&str>,
+) -> f32 {
+    match span {
+        InlineSpan::Text(text) => text_width(ui, text, style, SpanKind::Plain, theme, zoom_factor),
+        InlineSpan::Strong(text) => {
+            text_width(ui, text, style, SpanKind::Strong, theme, zoom_factor)
+        }
+        InlineSpan::Emphasis(text) => {
+            text_width(ui, text, style, SpanKind::Emphasis, theme, zoom_factor)
+        }
+        InlineSpan::Code(text) => text_width(ui, text, style, SpanKind::Code, theme, zoom_factor),
+        InlineSpan::Link { text, .. } => {
+            text_width(ui, text, style, SpanKind::Link, theme, zoom_factor)
+        }
+        InlineSpan::LineBreak => 0.0,
+    }
+    .max(highlighted_text_width(
+        ui,
+        span,
+        style,
+        theme,
+        zoom_factor,
+        search_query,
+    ))
+}
+
+fn highlighted_text_width(
+    ui: &mut Ui,
+    span: &InlineSpan,
+    style: InlineStyle,
+    theme: &Theme,
+    zoom_factor: f32,
+    search_query: Option<&str>,
+) -> f32 {
+    let text = match span {
+        InlineSpan::Text(text)
+        | InlineSpan::Strong(text)
+        | InlineSpan::Emphasis(text)
+        | InlineSpan::Code(text) => text.as_str(),
+        InlineSpan::Link { text, .. } => text.as_str(),
+        InlineSpan::LineBreak => return 0.0,
+    };
+
+    split_highlighted_segments(text, search_query)
+        .iter()
+        .map(|segment| text_width(ui, segment.text, style, SpanKind::Plain, theme, zoom_factor))
+        .sum()
+}
+
+fn text_width(
+    ui: &mut Ui,
+    text: &str,
+    style: InlineStyle,
+    kind: SpanKind,
+    theme: &Theme,
+    zoom_factor: f32,
+) -> f32 {
+    if text.is_empty() {
+        return 0.0;
+    }
+
+    let rich_text = styled_text(text, style, kind, theme, zoom_factor);
+    WidgetText::from(rich_text)
+        .into_galley(
+            ui,
+            None,
+            f32::INFINITY,
+            FontId::proportional(BODY_TEXT_SIZE),
+        )
+        .size()
+        .x
 }
 
 fn table_column_count(headers: &[InlineContent], rows: &[Vec<InlineContent>]) -> usize {
