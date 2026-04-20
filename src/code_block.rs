@@ -14,6 +14,8 @@ const CODE_LANGUAGE_TEXT_SIZE: f32 = 11.0;
 const COPY_FEEDBACK_DURATION_SECONDS: f64 = 1.2;
 const COPY_FEEDBACK_SLOT_WIDTH: f32 = 88.0;
 const BLOCK_SPACING_SECTION: f32 = 24.0;
+const CODE_BLOCK_HORIZONTAL_PADDING: f32 = 32.0;
+const CODE_BLOCK_STROKE_WIDTH: f32 = 1.0;
 
 #[derive(Clone, Copy)]
 struct CopyFeedbackState {
@@ -37,26 +39,28 @@ pub fn render_code_block(
         INLINE_CODE_TEXT_SIZE * zoom_factor,
     );
     let available_width = ui.available_width();
+    let content_width = (available_width
+        - scale_spacing(CODE_BLOCK_HORIZONTAL_PADDING, zoom_factor)
+        - CODE_BLOCK_STROKE_WIDTH * 2.0)
+        .max(120.0);
 
     let response = ui
         .allocate_ui_with_layout(
             egui::vec2(available_width, 0.0),
             Layout::top_down(Align::Min),
             |ui| {
-                ui.set_min_width(available_width);
                 ui.set_max_width(available_width);
                 Frame::new()
                     .fill(theme.code_background)
-                    .stroke(Stroke::new(1.0, theme.content_border))
+                    .stroke(Stroke::new(CODE_BLOCK_STROKE_WIDTH, theme.content_border))
                     .corner_radius(egui::CornerRadius::same(scale_margin(8, zoom_factor) as u8))
                     .inner_margin(egui::Margin::symmetric(
                         scale_margin(16, zoom_factor),
                         scale_margin(10, zoom_factor),
                     ))
                     .show(ui, |ui| {
-                        let frame_width = ui.available_width();
-                        ui.set_min_width(frame_width);
-                        ui.set_max_width(frame_width);
+                        ui.set_min_width(content_width);
+                        ui.set_max_width(content_width);
                         ui.with_layout(Layout::top_down(Align::Min), |ui| {
                             render_code_block_header(
                                 ui,
@@ -66,6 +70,7 @@ pub fn render_code_block(
                                 code,
                                 theme,
                                 zoom_factor,
+                                content_width,
                             );
                             ui.add_space(scale_spacing(6.0, zoom_factor));
 
@@ -113,6 +118,7 @@ fn render_code_block_header(
     code: &str,
     theme: &Theme,
     zoom_factor: f32,
+    header_width: f32,
 ) {
     let feedback_id = ui.make_persistent_id("code_block_copy_feedback");
     let copied = ui
@@ -129,48 +135,52 @@ fn render_code_block_header(
             .request_repaint_after(Duration::from_secs_f64(COPY_FEEDBACK_DURATION_SECONDS));
     }
 
-    ui.horizontal(|ui| {
-        if let Some(language) = language.filter(|language| !language.trim().is_empty()) {
-            render_code_language_label(ui, language, theme, zoom_factor);
-        }
-
-        ui.add_space(ui.available_width());
-
-        ui.allocate_ui_with_layout(
-            egui::vec2(COPY_FEEDBACK_SLOT_WIDTH * zoom_factor, 0.0),
-            Layout::right_to_left(Align::Center),
-            |ui| {
-                if show_copied {
-                    ui.label(
-                        RichText::new(tr(ui_language, TranslationKey::MessageCopied))
-                            .size(CODE_LANGUAGE_TEXT_SIZE * zoom_factor)
-                            .color(theme.text_secondary),
+    ui.allocate_ui_with_layout(
+        egui::vec2(header_width, 0.0),
+        Layout::right_to_left(Align::Center),
+        |ui| {
+            if ui
+                .button(tr(ui_language, TranslationKey::ActionCopy))
+                .clicked()
+            {
+                let copied_at = ui.ctx().input(|input| input.time);
+                ui.ctx().copy_text(code.to_owned());
+                ui.ctx().data_mut(|data| {
+                    data.insert_temp(
+                        feedback_id,
+                        CopyFeedbackState {
+                            block_index,
+                            copied_at,
+                        },
                     );
+                });
+                ui.ctx()
+                    .request_repaint_after(Duration::from_secs_f64(COPY_FEEDBACK_DURATION_SECONDS));
+            }
+
+            ui.add_space(scale_spacing(8.0, zoom_factor));
+
+            ui.allocate_ui_with_layout(
+                egui::vec2(COPY_FEEDBACK_SLOT_WIDTH * zoom_factor, 0.0),
+                Layout::right_to_left(Align::Center),
+                |ui| {
+                    if show_copied {
+                        ui.label(
+                            RichText::new(tr(ui_language, TranslationKey::MessageCopied))
+                                .size(CODE_LANGUAGE_TEXT_SIZE * zoom_factor)
+                                .color(theme.text_secondary),
+                        );
+                    }
+                },
+            );
+
+            ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+                if let Some(language) = language.filter(|language| !language.trim().is_empty()) {
+                    render_code_language_label(ui, language, theme, zoom_factor);
                 }
-            },
-        );
-
-        ui.add_space(scale_spacing(8.0, zoom_factor));
-
-        if ui
-            .button(tr(ui_language, TranslationKey::ActionCopy))
-            .clicked()
-        {
-            let copied_at = ui.ctx().input(|input| input.time);
-            ui.ctx().copy_text(code.to_owned());
-            ui.ctx().data_mut(|data| {
-                data.insert_temp(
-                    feedback_id,
-                    CopyFeedbackState {
-                        block_index,
-                        copied_at,
-                    },
-                );
             });
-            ui.ctx()
-                .request_repaint_after(Duration::from_secs_f64(COPY_FEEDBACK_DURATION_SECONDS));
-        }
-    });
+        },
+    );
 }
 
 fn render_code_language_label(ui: &mut Ui, language: &str, theme: &Theme, zoom_factor: f32) {

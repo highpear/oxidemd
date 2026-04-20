@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 
 use eframe::egui::{
     self, Align, Align2, CentralPanel, Frame, Key, KeyboardShortcut, Layout, Margin, Modifiers,
-    RichText, ScrollArea, SidePanel, Slider, TextEdit, TopBottomPanel, Vec2,
+    RichText, ScrollArea, SidePanel, Slider, TextEdit, TopBottomPanel, UiBuilder, Vec2,
 };
 use rfd::FileDialog;
 
@@ -29,6 +29,11 @@ const MIN_ZOOM_FACTOR: f32 = 0.8;
 const MAX_ZOOM_FACTOR: f32 = 1.8;
 const ZOOM_STEP: f32 = 0.1;
 const SEARCH_INPUT_ID: &str = "document_search_input";
+const DOCUMENT_FRAME_MAX_WIDTH: f32 = 840.0;
+const DOCUMENT_BODY_MAX_WIDTH: f32 = 760.0;
+const DOCUMENT_HORIZONTAL_PADDING: f32 = 64.0;
+const DOCUMENT_VERTICAL_PADDING: f32 = 56.0;
+const DOCUMENT_FRAME_STROKE_WIDTH: f32 = 1.0;
 
 pub struct OxideMdApp {
     ui_context: egui::Context,
@@ -855,52 +860,97 @@ impl OxideMdApp {
                 let document_base_dir = self.current_file.as_ref().and_then(|path| path.parent());
 
                 ui.add_space(18.0);
-                ui.vertical_centered(|ui| {
-                    ui.set_max_width(840.0);
-                    Frame::new()
-                        .fill(theme.content_background)
-                        .stroke(egui::Stroke::new(1.0, theme.content_border))
-                        .shadow(egui::epaint::Shadow {
-                            offset: [0, 8],
-                            blur: 28,
-                            spread: 0,
-                            color: theme.content_shadow,
-                        })
-                        .corner_radius(egui::CornerRadius::same(12))
-                        .inner_margin(Margin::symmetric(32, 28))
-                        .show(ui, |ui| {
-                            ui.set_max_width(760.0);
-                            let render_outcome = render_markdown_document(
-                                ui,
-                                document,
-                                self.language,
-                                &theme,
-                                self.zoom_factor,
-                                document_base_dir,
-                                &mut self.image_cache,
-                                self.pending_block_scroll,
-                                Some(self.search_query.as_str()),
-                            );
+                let content_rect = ui.max_rect();
+                let frame_width = content_rect.width().min(DOCUMENT_FRAME_MAX_WIDTH);
+                let frame_left = content_rect.center().x - frame_width * 0.5;
+                let frame_rect = egui::Rect::from_min_size(
+                    egui::pos2(frame_left, ui.cursor().top()),
+                    Vec2::new(frame_width, 0.0),
+                );
 
-                            if let Some(active_heading) = render_outcome.active_heading {
-                                self.active_heading = Some(active_heading);
-                            }
+                let document_frame = Frame::new()
+                    .fill(theme.content_background)
+                    .stroke(egui::Stroke::new(
+                        DOCUMENT_FRAME_STROKE_WIDTH,
+                        theme.content_border,
+                    ))
+                    .shadow(egui::epaint::Shadow {
+                        offset: [0, 8],
+                        blur: 28,
+                        spread: 0,
+                        color: theme.content_shadow,
+                    })
+                    .corner_radius(egui::CornerRadius::same(12))
+                    .inner_margin(Margin::symmetric(32, 28));
+                let background_shape = ui.painter().add(egui::Shape::Noop);
+                let content_width =
+                    (frame_width - DOCUMENT_HORIZONTAL_PADDING - DOCUMENT_FRAME_STROKE_WIDTH * 2.0)
+                        .max(0.0)
+                        .min(DOCUMENT_BODY_MAX_WIDTH);
+                let content_min = egui::pos2(
+                    frame_rect.left()
+                        + DOCUMENT_HORIZONTAL_PADDING * 0.5
+                        + DOCUMENT_FRAME_STROKE_WIDTH,
+                    frame_rect.top()
+                        + DOCUMENT_VERTICAL_PADDING * 0.5
+                        + DOCUMENT_FRAME_STROKE_WIDTH,
+                );
+                let content_max_rect = egui::Rect::from_min_max(
+                    content_min,
+                    egui::pos2(content_min.x + content_width, content_rect.bottom()),
+                );
 
-                            if let Some(block_index) = render_outcome
-                                .clicked_anchor
-                                .and_then(|anchor| document.heading_block_for_anchor(&anchor))
-                            {
-                                self.selected_heading = Some(block_index);
-                                self.active_heading = Some(block_index);
-                                self.pending_block_scroll = Some(block_index);
-                                ctx.request_repaint();
-                            }
+                let mut document_ui = ui.new_child(
+                    UiBuilder::new()
+                        .max_rect(content_max_rect)
+                        .layout(Layout::top_down(Align::Min)),
+                );
+                let mut document_clip_rect = document_ui.clip_rect();
+                document_clip_rect.min.x = content_max_rect.left();
+                document_clip_rect.max.x = content_max_rect.right();
+                document_ui.set_clip_rect(document_clip_rect);
+                document_ui.set_min_width(content_width);
+                document_ui.set_max_width(content_width);
 
-                            if render_outcome.did_scroll {
-                                self.pending_block_scroll = None;
-                            }
-                        });
-                });
+                let render_outcome = render_markdown_document(
+                    &mut document_ui,
+                    document,
+                    self.language,
+                    &theme,
+                    self.zoom_factor,
+                    document_base_dir,
+                    &mut self.image_cache,
+                    self.pending_block_scroll,
+                    Some(self.search_query.as_str()),
+                );
+
+                if let Some(active_heading) = render_outcome.active_heading {
+                    self.active_heading = Some(active_heading);
+                }
+
+                if let Some(block_index) = render_outcome
+                    .clicked_anchor
+                    .and_then(|anchor| document.heading_block_for_anchor(&anchor))
+                {
+                    self.selected_heading = Some(block_index);
+                    self.active_heading = Some(block_index);
+                    self.pending_block_scroll = Some(block_index);
+                    ctx.request_repaint();
+                }
+
+                if render_outcome.did_scroll {
+                    self.pending_block_scroll = None;
+                }
+
+                let used_content_rect = document_ui.min_rect();
+                let fixed_content_rect = egui::Rect::from_min_size(
+                    content_min,
+                    Vec2::new(content_width, used_content_rect.height()),
+                );
+                let actual_frame_rect = document_frame.outer_rect(fixed_content_rect);
+                ui.painter()
+                    .set(background_shape, document_frame.paint(fixed_content_rect));
+                ui.allocate_rect(actual_frame_rect, egui::Sense::hover());
                 ui.add_space(24.0);
             });
         });
