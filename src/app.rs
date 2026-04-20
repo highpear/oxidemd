@@ -2,8 +2,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use eframe::egui::{
-    self, Align, CentralPanel, Frame, Key, KeyboardShortcut, Layout, Margin, Modifiers, RichText,
-    ScrollArea, SidePanel, Slider, TextEdit, TopBottomPanel,
+    self, Align, Align2, CentralPanel, Frame, Key, KeyboardShortcut, Layout, Margin, Modifiers,
+    RichText, ScrollArea, SidePanel, Slider, TextEdit, TopBottomPanel, Vec2,
 };
 use rfd::FileDialog;
 
@@ -139,6 +139,33 @@ impl OxideMdApp {
 
         if let Some(path) = selected_file {
             self.load_selected_file(path);
+        }
+    }
+
+    fn handle_file_drops(&mut self, ctx: &egui::Context) {
+        let dropped_paths: Vec<PathBuf> = ctx.input(|input| {
+            input
+                .raw
+                .dropped_files
+                .iter()
+                .filter_map(|file| file.path.clone())
+                .collect()
+        });
+
+        if dropped_paths.is_empty() {
+            return;
+        }
+
+        if let Some(path) = dropped_paths.iter().find(|path| is_markdown_path(path)) {
+            self.load_selected_file(path.clone());
+            return;
+        }
+
+        if let Some(path) = dropped_paths.first() {
+            self.set_reload_error(
+                TranslationKey::StatusUnsupportedFile,
+                path.display().to_string(),
+            );
         }
     }
 
@@ -868,6 +895,32 @@ impl OxideMdApp {
             });
         });
     }
+
+    fn render_drop_overlay(&self, ctx: &egui::Context) {
+        let is_dragging_file = ctx.input(|input| !input.raw.hovered_files.is_empty());
+        if !is_dragging_file {
+            return;
+        }
+
+        let theme = theme(self.theme_id);
+        egui::Area::new(egui::Id::new("drop_markdown_overlay"))
+            .order(egui::Order::Foreground)
+            .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
+            .show(ctx, |ui| {
+                Frame::new()
+                    .fill(theme.status_loading_background)
+                    .stroke(egui::Stroke::new(1.0, theme.content_border))
+                    .corner_radius(egui::CornerRadius::same(8))
+                    .inner_margin(Margin::symmetric(18, 12))
+                    .show(ui, |ui| {
+                        ui.label(
+                            RichText::new(tr(self.language, TranslationKey::MessageDropMarkdown))
+                                .color(theme.status_loading_text)
+                                .strong(),
+                        );
+                    });
+            });
+    }
 }
 
 impl eframe::App for OxideMdApp {
@@ -877,6 +930,7 @@ impl eframe::App for OxideMdApp {
         }
 
         self.handle_keyboard_shortcuts(ctx);
+        self.handle_file_drops(ctx);
         self.clear_selected_heading_on_manual_scroll(ctx);
         self.process_watch_events();
         self.process_reload_results();
@@ -888,5 +942,15 @@ impl eframe::App for OxideMdApp {
         self.render_bottom_bar(ctx);
         self.render_heading_panel(ctx);
         self.render_document_panel(ctx);
+        self.render_drop_overlay(ctx);
     }
+}
+
+fn is_markdown_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| {
+            extension.eq_ignore_ascii_case("md") || extension.eq_ignore_ascii_case("markdown")
+        })
+        .unwrap_or(false)
 }
