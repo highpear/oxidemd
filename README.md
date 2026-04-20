@@ -23,13 +23,18 @@ The project is in early `v0.1` development.
 Current capabilities:
 
 - Open a single Markdown file with a native file dialog
+- Open a Markdown file with drag and drop
 - Render core Markdown blocks
 - Render basic inline Markdown styling
 - Open links from rendered content
 - Render local PNG and JPEG images
 - Live reload when the opened file changes
 - English and Japanese UI strings
-- Theme switching, document zoom, and heading navigation
+- Theme switching and document zoom
+- Table of contents and heading navigation
+- In-document search with match highlighting
+- Syntax highlighting for fenced code blocks
+- Copy fenced code block contents
 
 Currently supported Markdown elements:
 
@@ -39,6 +44,7 @@ Currently supported Markdown elements:
 - Ordered lists
 - Blockquotes
 - Fenced code blocks
+- Tables
 - Strong text
 - Emphasis
 - Inline code
@@ -55,7 +61,7 @@ The current target is intentionally small:
 - Single-file Markdown viewing
 - Reliable readability over feature breadth
 
-Items such as tabs, TOC, search, syntax highlighting, math, and Mermaid are planned for later phases.
+Items such as tabs, command-line file open, large file improvements, math, and Mermaid are planned for later phases.
 
 ---
 
@@ -70,16 +76,15 @@ Items such as tabs, TOC, search, syntax highlighting, math, and Mermaid are plan
 ### Usability Features
 
 - Familiar UI for non-technical users
-- Theme expansion and theme switching
-- Better spacing and typography
+- Further theme expansion
+- Further spacing and typography improvements
 - Keyboard shortcuts
 
 ### Advanced Features
 
-- Syntax highlighting
-- Table of contents
-- Search
+- Command-line file open
 - Large file improvements
+- External link opening options
 
 ---
 
