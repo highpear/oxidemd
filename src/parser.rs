@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, LinkType, Options, Parser, Tag, TagEnd};
 
 #[derive(Clone)]
@@ -17,6 +19,7 @@ pub struct HeadingNavItem {
     pub block_index: usize,
     pub level: HeadingLevel,
     pub title: String,
+    pub anchor: String,
 }
 
 #[derive(Clone)]
@@ -272,6 +275,8 @@ fn push_text_span(spans: &mut Vec<InlineSpan>, text: &str) {
 }
 
 fn collect_heading_nav_items(blocks: &[Block]) -> Vec<HeadingNavItem> {
+    let mut used_anchors = HashMap::new();
+
     blocks
         .iter()
         .enumerate()
@@ -282,16 +287,58 @@ fn collect_heading_nav_items(blocks: &[Block]) -> Vec<HeadingNavItem> {
                 if title.is_empty() {
                     None
                 } else {
+                    let anchor = unique_anchor(&title, &mut used_anchors);
                     Some(HeadingNavItem {
                         block_index,
                         level: *level,
                         title,
+                        anchor,
                     })
                 }
             }
             _ => None,
         })
         .collect()
+}
+
+fn unique_anchor(title: &str, used_anchors: &mut HashMap<String, usize>) -> String {
+    let base = anchor_slug(title);
+    let count = used_anchors.entry(base.clone()).or_insert(0);
+    let anchor = if *count == 0 {
+        base
+    } else {
+        format!("{}-{}", base, count)
+    };
+
+    *count += 1;
+    anchor
+}
+
+fn anchor_slug(title: &str) -> String {
+    let mut slug = String::new();
+    let mut previous_was_separator = false;
+
+    for character in title.trim().chars().flat_map(char::to_lowercase) {
+        if character.is_alphanumeric() {
+            slug.push(character);
+            previous_was_separator = false;
+        } else if character.is_whitespace() || character == '-' {
+            if !slug.is_empty() && !previous_was_separator {
+                slug.push('-');
+                previous_was_separator = true;
+            }
+        }
+    }
+
+    while slug.ends_with('-') {
+        slug.pop();
+    }
+
+    if slug.is_empty() {
+        "section".to_owned()
+    } else {
+        slug
+    }
 }
 
 impl InlineContent {
@@ -341,6 +388,15 @@ impl MarkdownDocument {
         &self.headings
     }
 
+    pub fn heading_block_for_anchor(&self, anchor: &str) -> Option<usize> {
+        let normalized_anchor = normalize_anchor(anchor);
+
+        self.headings
+            .iter()
+            .find(|heading| heading.anchor == normalized_anchor)
+            .map(|heading| heading.block_index)
+    }
+
     pub fn search_matches(&self, query: &str) -> Vec<SearchMatch> {
         let normalized_query = query.trim().to_lowercase();
         if normalized_query.is_empty() {
@@ -365,6 +421,16 @@ impl MarkdownDocument {
             })
             .collect()
     }
+}
+
+fn normalize_anchor(anchor: &str) -> String {
+    anchor
+        .trim()
+        .trim_start_matches('#')
+        .trim()
+        .chars()
+        .flat_map(char::to_lowercase)
+        .collect()
 }
 
 fn join_inline_items(items: &[InlineContent]) -> String {

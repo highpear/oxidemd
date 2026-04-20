@@ -849,6 +849,16 @@ impl OxideMdApp {
                                 self.active_heading = Some(active_heading);
                             }
 
+                            if let Some(block_index) = render_outcome
+                                .clicked_anchor
+                                .and_then(|anchor| document.heading_block_for_anchor(&anchor))
+                            {
+                                self.selected_heading = Some(block_index);
+                                self.active_heading = Some(block_index);
+                                self.pending_block_scroll = Some(block_index);
+                                ctx.request_repaint();
+                            }
+
                             if render_outcome.did_scroll {
                                 self.pending_block_scroll = None;
                             }

@@ -14,6 +14,7 @@ When you open this file, try a few things:
 - Change the zoom level
 - Switch themes
 - Use heading navigation
+- Click an internal link such as [Japanese Notes](#japanese-notes)
 - Edit and save the file while live reload is active
 
 ### Why This Matters
