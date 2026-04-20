@@ -81,6 +81,7 @@ Goal: parse Markdown and render core elements in a structured way.
 * [x] Parse ordered lists
 * [x] Parse blockquotes
 * [x] Parse fenced code blocks
+* [x] Parse tables
 * [x] Define a simple intermediate representation for rendered content
 
 Exit criteria:
@@ -101,6 +102,7 @@ Goal: render parsed Markdown with a simple but readable UI.
 * [x] Render lists cleanly
 * [x] Render blockquotes distinctly
 * [x] Render code blocks in a monospaced style
+* [x] Render tables
 * [x] Add scrollable document view
 * [x] Render basic inline Markdown
 * [x] Make rendered links clickable
