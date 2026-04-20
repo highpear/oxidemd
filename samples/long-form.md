@@ -77,7 +77,7 @@ The goal is to give the renderer several transitions between block types.
 ### Table Example
 
 | Area | Status | Notes |
-| --- | --- | --- |
+| :--- | :---: | ---: |
 | File open | Ready | Dialog and drag-and-drop are supported. |
 | Navigation | Ready | TOC, search, and internal links can jump through the document. |
 | Tables | In progress | Basic table rendering should stay readable at different widths. |
