@@ -34,6 +34,12 @@ const DOCUMENT_BODY_MAX_WIDTH: f32 = 760.0;
 const DOCUMENT_HORIZONTAL_PADDING: f32 = 64.0;
 const DOCUMENT_VERTICAL_PADDING: f32 = 56.0;
 const DOCUMENT_FRAME_STROKE_WIDTH: f32 = 1.0;
+const HEADING_PANEL_DEFAULT_WIDTH: f32 = 220.0;
+const HEADING_PANEL_MIN_WIDTH: f32 = 180.0;
+const HEADING_PANEL_MAX_WIDTH: f32 = 320.0;
+const PREVIEW_WINDOW_SIDE_PADDING: f32 = 32.0;
+const PREVIEW_WINDOW_FALLBACK_HEIGHT: f32 = 720.0;
+const PREVIEW_WINDOW_MONITOR_MARGIN: f32 = 80.0;
 
 pub struct OxideMdApp {
     ui_context: egui::Context,
@@ -210,6 +216,7 @@ impl OxideMdApp {
                 self.selected_heading = None;
                 self.refresh_search_matches();
                 self.start_watching_file(&path);
+                self.request_window_expansion_for_preview();
                 metrics::log_initial_load(&path, &loaded.timing);
                 self.status_message = self.status_with_path(TranslationKey::StatusLoaded, &path);
             }
@@ -240,6 +247,47 @@ impl OxideMdApp {
                 self.watcher = None;
                 self.set_reload_error(TranslationKey::StatusWatchFailed, error);
             }
+        }
+    }
+
+    fn request_window_expansion_for_preview(&self) {
+        let (current_size, monitor_size, is_maximized, is_fullscreen) =
+            self.ui_context.input(|input| {
+                let viewport = input.viewport();
+                (
+                    viewport.inner_rect.map(|rect| rect.size()),
+                    viewport.monitor_size,
+                    viewport.maximized.unwrap_or(false),
+                    viewport.fullscreen.unwrap_or(false),
+                )
+            });
+
+        if is_maximized || is_fullscreen {
+            return;
+        }
+
+        let target_width =
+            HEADING_PANEL_MAX_WIDTH + DOCUMENT_FRAME_MAX_WIDTH + PREVIEW_WINDOW_SIDE_PADDING;
+        let current_height = current_size
+            .map(|size| size.y)
+            .unwrap_or(PREVIEW_WINDOW_FALLBACK_HEIGHT);
+        let target_size = Vec2::new(
+            capped_preview_window_width(target_width, monitor_size),
+            current_height,
+        );
+
+        let Some(current_size) = current_size else {
+            self.ui_context
+                .send_viewport_cmd(egui::ViewportCommand::InnerSize(target_size));
+            return;
+        };
+
+        if current_size.x + 1.0 < target_size.x {
+            self.ui_context
+                .send_viewport_cmd(egui::ViewportCommand::InnerSize(Vec2::new(
+                    target_size.x,
+                    current_size.y,
+                )));
         }
     }
 
@@ -789,8 +837,8 @@ impl OxideMdApp {
 
         SidePanel::left("heading_navigation")
             .resizable(true)
-            .default_width(220.0)
-            .width_range(180.0..=320.0)
+            .default_width(HEADING_PANEL_DEFAULT_WIDTH)
+            .width_range(HEADING_PANEL_MIN_WIDTH..=HEADING_PANEL_MAX_WIDTH)
             .show(ctx, |ui| {
                 self.render_search_controls(ui);
                 self.render_search_results(ui);
@@ -1013,4 +1061,11 @@ fn is_markdown_path(path: &Path) -> bool {
             extension.eq_ignore_ascii_case("md") || extension.eq_ignore_ascii_case("markdown")
         })
         .unwrap_or(false)
+}
+
+fn capped_preview_window_width(target_width: f32, monitor_size: Option<Vec2>) -> f32 {
+    monitor_size
+        .map(|size| (size.x - PREVIEW_WINDOW_MONITOR_MARGIN).max(DOCUMENT_FRAME_MAX_WIDTH))
+        .map(|max_width| target_width.min(max_width))
+        .unwrap_or(target_width)
 }
