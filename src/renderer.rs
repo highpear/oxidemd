@@ -1,5 +1,5 @@
 use eframe::egui::{self, Align, FontFamily, FontId, Frame, RichText, Stroke, Ui};
-use pulldown_cmark::HeadingLevel;
+use pulldown_cmark::{Alignment, HeadingLevel};
 
 use crate::code_block::render_code_block;
 use crate::i18n::Language;
@@ -12,6 +12,7 @@ const INLINE_CODE_TEXT_SIZE: f32 = 15.0;
 const BLOCK_SPACING_PARAGRAPH: f32 = 18.0;
 const BLOCK_SPACING_SECTION: f32 = 24.0;
 const LIST_ITEM_SPACING: f32 = 8.0;
+const TABLE_CELL_MIN_WIDTH: f32 = 120.0;
 
 pub fn render_markdown_document(
     ui: &mut Ui,
@@ -129,6 +130,28 @@ pub fn render_markdown_document(
                     code,
                     theme,
                     zoom_factor,
+                );
+
+                if scroll_to_block == Some(block_index) {
+                    ui.scroll_to_cursor(Some(Align::TOP));
+                    did_scroll = true;
+                }
+            }
+            Block::Table {
+                alignments,
+                headers,
+                rows,
+            } => {
+                render_table(
+                    ui,
+                    block_index,
+                    alignments,
+                    headers,
+                    rows,
+                    theme,
+                    zoom_factor,
+                    search_query,
+                    &mut clicked_anchor,
                 );
 
                 if scroll_to_block == Some(block_index) {
@@ -268,11 +291,113 @@ fn render_blockquote(
     ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
 }
 
+fn render_table(
+    ui: &mut Ui,
+    block_index: usize,
+    _alignments: &[Alignment],
+    headers: &[InlineContent],
+    rows: &[Vec<InlineContent>],
+    theme: &Theme,
+    zoom_factor: f32,
+    search_query: Option<&str>,
+    clicked_anchor: &mut Option<String>,
+) {
+    let column_count = table_column_count(headers, rows);
+    if column_count == 0 {
+        return;
+    }
+
+    Frame::new()
+        .stroke(Stroke::new(1.0, theme.content_border))
+        .corner_radius(egui::CornerRadius::same(6))
+        .inner_margin(egui::Margin::symmetric(8, 8))
+        .show(ui, |ui| {
+            egui::ScrollArea::horizontal()
+                .id_salt(("table_scroll", block_index))
+                .show(ui, |ui| {
+                    egui::Grid::new(("markdown_table", block_index))
+                        .num_columns(column_count)
+                        .spacing(egui::vec2(16.0, 10.0))
+                        .striped(true)
+                        .show(ui, |ui| {
+                            render_table_row(
+                                ui,
+                                headers,
+                                column_count,
+                                InlineStyle::TableHeader,
+                                theme,
+                                zoom_factor,
+                                search_query,
+                                clicked_anchor,
+                            );
+
+                            for row in rows {
+                                render_table_row(
+                                    ui,
+                                    row,
+                                    column_count,
+                                    InlineStyle::TableCell,
+                                    theme,
+                                    zoom_factor,
+                                    search_query,
+                                    clicked_anchor,
+                                );
+                            }
+                        });
+                });
+        });
+
+    ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
+}
+
+fn render_table_row(
+    ui: &mut Ui,
+    cells: &[InlineContent],
+    column_count: usize,
+    style: InlineStyle,
+    theme: &Theme,
+    zoom_factor: f32,
+    search_query: Option<&str>,
+    clicked_anchor: &mut Option<String>,
+) {
+    for column_index in 0..column_count {
+        let cell = cells.get(column_index);
+        let width = scale_spacing(TABLE_CELL_MIN_WIDTH, zoom_factor);
+
+        ui.vertical(|ui| {
+            ui.set_min_width(width);
+            if let Some(cell) = cell {
+                render_inline(
+                    ui,
+                    cell,
+                    style,
+                    theme,
+                    zoom_factor,
+                    search_query,
+                    clicked_anchor,
+                );
+            }
+        });
+    }
+
+    ui.end_row();
+}
+
+fn table_column_count(headers: &[InlineContent], rows: &[Vec<InlineContent>]) -> usize {
+    rows.iter()
+        .map(Vec::len)
+        .chain(std::iter::once(headers.len()))
+        .max()
+        .unwrap_or(0)
+}
+
 #[derive(Clone, Copy)]
 enum InlineStyle {
     Body,
     Quote,
     Heading(f32),
+    TableHeader,
+    TableCell,
 }
 
 fn render_inline(
@@ -438,6 +563,13 @@ fn styled_text(
             .size(size)
             .color(theme.text_primary)
             .strong(),
+        InlineStyle::TableHeader => RichText::new(text)
+            .size(BODY_TEXT_SIZE * zoom_factor)
+            .color(theme.text_primary)
+            .strong(),
+        InlineStyle::TableCell => RichText::new(text)
+            .size(BODY_TEXT_SIZE * zoom_factor)
+            .color(theme.text_primary),
     };
 
     match kind {

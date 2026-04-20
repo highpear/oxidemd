@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, LinkType, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{
+    Alignment, CodeBlockKind, Event, HeadingLevel, LinkType, Options, Parser, Tag, TagEnd,
+};
 
 #[derive(Clone)]
 pub struct MarkdownDocument {
@@ -54,10 +56,18 @@ pub enum Block {
         language: Option<String>,
         code: String,
     },
+    Table {
+        alignments: Vec<Alignment>,
+        headers: Vec<InlineContent>,
+        rows: Vec<Vec<InlineContent>>,
+    },
 }
 
 pub fn parse_markdown(input: &str) -> MarkdownDocument {
-    let mut parser = Parser::new_ext(input, Options::empty()).peekable();
+    let mut options = Options::empty();
+    options.insert(Options::ENABLE_TABLES);
+
+    let mut parser = Parser::new_ext(input, options).peekable();
     let mut blocks = Vec::new();
 
     while let Some(event) = parser.next() {
@@ -108,6 +118,16 @@ pub fn parse_markdown(input: &str) -> MarkdownDocument {
 
                 let code = collect_text_until(&mut parser, TagEnd::CodeBlock);
                 blocks.push(Block::CodeBlock { language, code });
+            }
+            Event::Start(Tag::Table(alignments)) => {
+                let (headers, rows) = collect_table(&mut parser);
+                if !headers.is_empty() || !rows.is_empty() {
+                    blocks.push(Block::Table {
+                        alignments,
+                        headers,
+                        rows,
+                    });
+                }
             }
             _ => {}
         }
@@ -214,6 +234,56 @@ where
     }
 
     lines
+}
+
+fn collect_table<'a, I>(
+    parser: &mut std::iter::Peekable<I>,
+) -> (Vec<InlineContent>, Vec<Vec<InlineContent>>)
+where
+    I: Iterator<Item = Event<'a>>,
+{
+    let mut headers = Vec::new();
+    let mut rows = Vec::new();
+
+    while let Some(event) = parser.next() {
+        match event {
+            Event::Start(Tag::TableHead) => {
+                headers = collect_table_cells(parser, TagEnd::TableHead);
+            }
+            Event::Start(Tag::TableRow) => {
+                let row = collect_table_cells(parser, TagEnd::TableRow);
+                if !row.is_empty() {
+                    rows.push(row);
+                }
+            }
+            Event::End(TagEnd::Table) => break,
+            _ => {}
+        }
+    }
+
+    (headers, rows)
+}
+
+fn collect_table_cells<'a, I>(
+    parser: &mut std::iter::Peekable<I>,
+    row_end: TagEnd,
+) -> Vec<InlineContent>
+where
+    I: Iterator<Item = Event<'a>>,
+{
+    let mut cells = Vec::new();
+
+    while let Some(event) = parser.next() {
+        match event {
+            Event::Start(Tag::TableCell) => {
+                cells.push(collect_inline_content(parser, TagEnd::TableCell));
+            }
+            Event::End(tag) if tag == row_end => break,
+            _ => {}
+        }
+    }
+
+    cells
 }
 
 fn collect_link_span<'a, I>(
@@ -379,6 +449,11 @@ impl Block {
             Block::OrderedList { items, .. } => join_inline_items(items),
             Block::BlockQuote(lines) => join_inline_items(lines),
             Block::CodeBlock { code, .. } => code.split_whitespace().collect::<Vec<_>>().join(" "),
+            Block::Table { headers, rows, .. } => {
+                let mut items = headers.to_vec();
+                items.extend(rows.iter().flatten().cloned());
+                join_inline_items(&items)
+            }
         }
     }
 }
