@@ -16,14 +16,20 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use app::OxideMdApp;
-use eframe::egui::{self, FontData, FontDefinitions, FontFamily};
+use eframe::egui::{self, FontData, FontDefinitions, FontFamily, Vec2};
 use theme::{DEFAULT_THEME_ID, apply_theme, theme};
 
 const MEIRYO_FONT_NAME: &str = "meiryo";
+const INITIAL_WINDOW_WIDTH: f32 = 1180.0;
+const INITIAL_WINDOW_HEIGHT: f32 = 760.0;
 
 fn main() -> eframe::Result<()> {
     let startup_started = Instant::now();
-    let options = eframe::NativeOptions::default();
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size(Vec2::new(INITIAL_WINDOW_WIDTH, INITIAL_WINDOW_HEIGHT)),
+        ..Default::default()
+    };
 
     eframe::run_native(
         "OxideMD",
