@@ -27,3 +27,11 @@ pub fn log_reload(path: &Path, timing: &DocumentTiming) {
         path.display()
     );
 }
+
+pub fn log_reload_skipped(path: &Path, timing: &DocumentTiming) {
+    eprintln!(
+        "[perf] reload_skipped: {} ms total, unchanged content ({})",
+        timing.total.as_millis(),
+        path.display()
+    );
+}

@@ -123,7 +123,7 @@ Goal: update the view automatically when the source file changes.
 * [x] Update the UI safely after reload
 * [x] Avoid duplicate or excessive reload events
 * [x] Add reload status feedback
-* [ ] Re-parse content in the background
+* [x] Re-parse content in the background
 
 Exit criteria:
 
@@ -141,7 +141,7 @@ Goal: prepare the app for large files and frequent updates.
 * [x] Measure reload time
 * [x] Measure parse time
 * [ ] Cache parsed output
-* [ ] Avoid unnecessary re-parsing
+* [x] Avoid unnecessary re-parsing
 * [ ] Avoid unnecessary allocations in hot paths
 * [ ] Keep rendering work predictable
 
@@ -259,10 +259,10 @@ Exit criteria:
 
 ## Current Priority
 
-1. Cache highlighted results if needed
+1. Cache parsed output
 2. Add jump-to-section behavior
-3. Cache parsed output
-4. Avoid unnecessary re-parsing
-5. Re-parse content in the background
+3. Measure performance on large documents
+4. Reduce memory copies where useful
+5. Improve incremental reload behavior if needed
 
 ---
