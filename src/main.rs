@@ -2,6 +2,7 @@ mod app;
 mod code_block;
 mod document_loader;
 mod i18n;
+mod image_cache;
 mod metrics;
 mod parser;
 mod reload_worker;

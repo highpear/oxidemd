@@ -22,6 +22,8 @@ pub enum TranslationKey {
     MessageCopied,
     MessageDropMarkdown,
     MessageEmpty,
+    MessageImageLoadFailed,
+    MessageImageUnsupported,
     MessageOpenPrompt,
     MessageSearchNoResults,
     NavJumpToHeading,
@@ -69,6 +71,8 @@ fn en(key: TranslationKey) -> &'static str {
         TranslationKey::MessageCopied => "Copied",
         TranslationKey::MessageDropMarkdown => "Drop Markdown file to open",
         TranslationKey::MessageEmpty => "No markdown file is open",
+        TranslationKey::MessageImageLoadFailed => "Failed to load image:",
+        TranslationKey::MessageImageUnsupported => "Only local image paths are supported:",
         TranslationKey::MessageOpenPrompt => "Choose or drop a Markdown file to start reading.",
         TranslationKey::MessageSearchNoResults => "No matches found",
         TranslationKey::NavJumpToHeading => "Jump to this section",
@@ -110,6 +114,8 @@ fn ja(key: TranslationKey) -> &'static str {
         TranslationKey::MessageCopied => "コピーしました",
         TranslationKey::MessageDropMarkdown => "Markdownファイルをドロップして開く",
         TranslationKey::MessageEmpty => "Markdownファイルはまだ開かれていません",
+        TranslationKey::MessageImageLoadFailed => "画像の読み込みに失敗しました:",
+        TranslationKey::MessageImageUnsupported => "ローカル画像パスのみ対応しています:",
         TranslationKey::MessageOpenPrompt => {
             "Markdownファイルを選択またはドロップして読み込みます。"
         }

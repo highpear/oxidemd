@@ -232,7 +232,7 @@ Exit criteria:
 
 Goal: consider future extensions without committing too early.
 
-* [ ] Image rendering
+* [x] Image rendering (local PNG/JPEG)
 * [x] Link clicking
 * [ ] External link opening behavior options
 * [x] Drag and drop file open

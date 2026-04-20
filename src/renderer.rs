@@ -1,8 +1,11 @@
+use std::path::{Path, PathBuf};
+
 use eframe::egui::{self, Align, FontFamily, FontId, Frame, RichText, Stroke, Ui, WidgetText};
 use pulldown_cmark::{Alignment, HeadingLevel};
 
 use crate::code_block::render_code_block;
-use crate::i18n::Language;
+use crate::i18n::{Language, TranslationKey, tr};
+use crate::image_cache::{ImageCache, ImageLoadState};
 use crate::parser::{Block, InlineContent, InlineSpan, MarkdownDocument};
 use crate::theme::Theme;
 
@@ -20,6 +23,8 @@ pub fn render_markdown_document(
     ui_language: Language,
     theme: &Theme,
     zoom_factor: f32,
+    document_base_dir: Option<&Path>,
+    image_cache: &mut ImageCache,
     scroll_to_block: Option<usize>,
     search_query: Option<&str>,
 ) -> RenderOutcome {
@@ -27,6 +32,11 @@ pub fn render_markdown_document(
     let mut active_heading = None;
     let mut clicked_anchor = None;
     let viewport_top = ui.clip_rect().top();
+    let mut image_resources = ImageRenderResources {
+        ui_language,
+        document_base_dir,
+        image_cache,
+    };
 
     for (block_index, block) in document.blocks.iter().enumerate() {
         match block {
@@ -42,6 +52,7 @@ pub fn render_markdown_document(
                     viewport_top,
                     search_query,
                     &mut clicked_anchor,
+                    &mut image_resources,
                 );
                 did_scroll |= heading_state.did_scroll;
 
@@ -58,6 +69,7 @@ pub fn render_markdown_document(
                     zoom_factor,
                     search_query,
                     &mut clicked_anchor,
+                    &mut image_resources,
                 );
                 ui.add_space(scale_spacing(BLOCK_SPACING_PARAGRAPH, zoom_factor));
 
@@ -76,6 +88,7 @@ pub fn render_markdown_document(
                         zoom_factor,
                         search_query,
                         &mut clicked_anchor,
+                        &mut image_resources,
                     );
                     ui.add_space(scale_spacing(LIST_ITEM_SPACING, zoom_factor));
                 }
@@ -97,6 +110,7 @@ pub fn render_markdown_document(
                         zoom_factor,
                         search_query,
                         &mut clicked_anchor,
+                        &mut image_resources,
                     );
                     ui.add_space(scale_spacing(LIST_ITEM_SPACING, zoom_factor));
                 }
@@ -115,6 +129,7 @@ pub fn render_markdown_document(
                     zoom_factor,
                     search_query,
                     &mut clicked_anchor,
+                    &mut image_resources,
                 );
                 if scroll_to_block == Some(block_index) {
                     ui.scroll_to_cursor(Some(Align::TOP));
@@ -152,6 +167,7 @@ pub fn render_markdown_document(
                     zoom_factor,
                     search_query,
                     &mut clicked_anchor,
+                    &mut image_resources,
                 );
 
                 if scroll_to_block == Some(block_index) {
@@ -175,6 +191,12 @@ pub struct RenderOutcome {
     pub clicked_anchor: Option<String>,
 }
 
+struct ImageRenderResources<'a> {
+    ui_language: Language,
+    document_base_dir: Option<&'a Path>,
+    image_cache: &'a mut ImageCache,
+}
+
 struct HeadingRenderState {
     did_scroll: bool,
     is_active: bool,
@@ -191,6 +213,7 @@ fn render_heading(
     viewport_top: f32,
     search_query: Option<&str>,
     clicked_anchor: &mut Option<String>,
+    image_resources: &mut ImageRenderResources<'_>,
 ) -> HeadingRenderState {
     let size = match level {
         HeadingLevel::H1 => 31.0,
@@ -216,6 +239,7 @@ fn render_heading(
             zoom_factor,
             search_query,
             clicked_anchor,
+            image_resources,
         );
         ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
     });
@@ -237,6 +261,7 @@ fn render_list_item(
     zoom_factor: f32,
     search_query: Option<&str>,
     clicked_anchor: &mut Option<String>,
+    image_resources: &mut ImageRenderResources<'_>,
 ) {
     ui.horizontal_top(|ui| {
         ui.add_sized(
@@ -253,6 +278,7 @@ fn render_list_item(
                 zoom_factor,
                 search_query,
                 clicked_anchor,
+                image_resources,
             );
         });
     });
@@ -265,6 +291,7 @@ fn render_blockquote(
     zoom_factor: f32,
     search_query: Option<&str>,
     clicked_anchor: &mut Option<String>,
+    image_resources: &mut ImageRenderResources<'_>,
 ) {
     Frame::new()
         .fill(theme.quote_background)
@@ -283,6 +310,7 @@ fn render_blockquote(
                     zoom_factor,
                     search_query,
                     clicked_anchor,
+                    image_resources,
                 );
                 ui.add_space(scale_spacing(6.0, zoom_factor));
             }
@@ -301,6 +329,7 @@ fn render_table(
     zoom_factor: f32,
     search_query: Option<&str>,
     clicked_anchor: &mut Option<String>,
+    image_resources: &mut ImageRenderResources<'_>,
 ) {
     let column_count = table_column_count(headers, rows);
     if column_count == 0 {
@@ -330,6 +359,7 @@ fn render_table(
                                 zoom_factor,
                                 search_query,
                                 clicked_anchor,
+                                image_resources,
                             );
 
                             for row in rows {
@@ -343,6 +373,7 @@ fn render_table(
                                     zoom_factor,
                                     search_query,
                                     clicked_anchor,
+                                    image_resources,
                                 );
                             }
                         });
@@ -362,6 +393,7 @@ fn render_table_row(
     zoom_factor: f32,
     search_query: Option<&str>,
     clicked_anchor: &mut Option<String>,
+    image_resources: &mut ImageRenderResources<'_>,
 ) {
     for column_index in 0..column_count {
         let cell = cells.get(column_index);
@@ -390,6 +422,7 @@ fn render_table_row(
                 zoom_factor,
                 search_query,
                 clicked_anchor,
+                image_resources,
             );
         });
     }
@@ -406,6 +439,7 @@ fn render_aligned_cell(
     zoom_factor: f32,
     search_query: Option<&str>,
     clicked_anchor: &mut Option<String>,
+    image_resources: &mut ImageRenderResources<'_>,
 ) {
     let Some(cell) = cell else {
         ui.label("");
@@ -422,6 +456,7 @@ fn render_aligned_cell(
             zoom_factor,
             search_query,
             clicked_anchor,
+            image_resources,
         ),
         Alignment::None | Alignment::Left => {
             render_inline(
@@ -432,6 +467,7 @@ fn render_aligned_cell(
                 zoom_factor,
                 search_query,
                 clicked_anchor,
+                image_resources,
             );
         }
     }
@@ -446,6 +482,7 @@ fn render_inline_aligned(
     zoom_factor: f32,
     search_query: Option<&str>,
     clicked_anchor: &mut Option<String>,
+    image_resources: &mut ImageRenderResources<'_>,
 ) {
     let available_width = ui.available_width();
     let line_width = inline_content_width(ui, content, style, theme, zoom_factor, search_query);
@@ -470,6 +507,7 @@ fn render_inline_aligned(
                 zoom_factor,
                 search_query,
                 clicked_anchor,
+                image_resources,
             );
         }
     });
@@ -517,6 +555,7 @@ fn inline_span_width(
         InlineSpan::Link { text, .. } => {
             text_width(ui, text, style, SpanKind::Link, theme, zoom_factor)
         }
+        InlineSpan::Image { .. } => 0.0,
         InlineSpan::LineBreak => 0.0,
     }
     .max(highlighted_text_width(
@@ -543,6 +582,7 @@ fn highlighted_text_width(
         | InlineSpan::Emphasis(text)
         | InlineSpan::Code(text) => text.as_str(),
         InlineSpan::Link { text, .. } => text.as_str(),
+        InlineSpan::Image { alt, .. } => alt.as_str(),
         InlineSpan::LineBreak => return 0.0,
     };
 
@@ -601,6 +641,7 @@ fn render_inline(
     zoom_factor: f32,
     search_query: Option<&str>,
     clicked_anchor: &mut Option<String>,
+    image_resources: &mut ImageRenderResources<'_>,
 ) {
     let mut lines: Vec<Vec<&InlineSpan>> = vec![Vec::new()];
 
@@ -623,6 +664,7 @@ fn render_inline(
                     zoom_factor,
                     search_query,
                     clicked_anchor,
+                    image_resources,
                 );
             }
         });
@@ -646,6 +688,7 @@ fn render_inline_span(
     zoom_factor: f32,
     search_query: Option<&str>,
     clicked_anchor: &mut Option<String>,
+    image_resources: &mut ImageRenderResources<'_>,
 ) {
     match span {
         InlineSpan::Text(text) => render_text_label(
@@ -695,8 +738,106 @@ fn render_inline_span(
                 ui.hyperlink_to(rich_text, destination);
             }
         }
+        InlineSpan::Image { alt, destination } => {
+            render_image_span(ui, alt, destination, theme, zoom_factor, image_resources)
+        }
         InlineSpan::LineBreak => {}
     }
+}
+
+fn render_image_span(
+    ui: &mut Ui,
+    alt: &str,
+    destination: &str,
+    theme: &Theme,
+    zoom_factor: f32,
+    image_resources: &mut ImageRenderResources<'_>,
+) {
+    let Some(path) = resolve_local_image_path(image_resources.document_base_dir, destination)
+    else {
+        render_image_message(
+            ui,
+            tr(
+                image_resources.ui_language,
+                TranslationKey::MessageImageUnsupported,
+            ),
+            destination,
+            theme,
+            zoom_factor,
+        );
+        return;
+    };
+
+    match image_resources.image_cache.load(ui.ctx(), &path) {
+        ImageLoadState::Loaded(texture) => {
+            let max_width = ui.available_width().max(120.0);
+            ui.add(
+                egui::Image::from_texture(texture)
+                    .max_width(max_width)
+                    .fit_to_original_size(zoom_factor)
+                    .alt_text(alt),
+            );
+        }
+        ImageLoadState::Failed(error) => {
+            let detail = if alt.trim().is_empty() {
+                error
+            } else {
+                alt.trim()
+            };
+            render_image_message(
+                ui,
+                tr(
+                    image_resources.ui_language,
+                    TranslationKey::MessageImageLoadFailed,
+                ),
+                detail,
+                theme,
+                zoom_factor,
+            );
+        }
+    }
+}
+
+fn resolve_local_image_path(base_dir: Option<&Path>, destination: &str) -> Option<PathBuf> {
+    let cleaned = destination.trim();
+    if cleaned.is_empty() || is_remote_or_data_uri(cleaned) {
+        return None;
+    }
+
+    let without_fragment = cleaned.split('#').next().unwrap_or(cleaned);
+    let without_query = without_fragment
+        .split('?')
+        .next()
+        .unwrap_or(without_fragment);
+    let path = Path::new(without_query);
+
+    if path.is_absolute() {
+        Some(path.to_path_buf())
+    } else {
+        base_dir.map(|base_dir| base_dir.join(path))
+    }
+}
+
+fn is_remote_or_data_uri(destination: &str) -> bool {
+    let normalized = destination.trim().to_ascii_lowercase();
+    normalized.starts_with("http://")
+        || normalized.starts_with("https://")
+        || normalized.starts_with("data:")
+}
+
+fn render_image_message(ui: &mut Ui, prefix: &str, detail: &str, theme: &Theme, zoom_factor: f32) {
+    Frame::new()
+        .fill(theme.widget_inactive_background)
+        .stroke(Stroke::new(1.0, theme.content_border))
+        .corner_radius(egui::CornerRadius::same(6))
+        .inner_margin(egui::Margin::symmetric(10, 8))
+        .show(ui, |ui| {
+            ui.label(
+                RichText::new(format!("{} {}", prefix, detail))
+                    .size(QUOTE_TEXT_SIZE * zoom_factor)
+                    .color(theme.text_secondary),
+            );
+        });
 }
 
 fn internal_anchor(destination: &str) -> Option<&str> {
