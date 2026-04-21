@@ -56,6 +56,7 @@ const DOCUMENT_FRAME_STROKE_WIDTH: f32 = 1.0;
 const HEADING_PANEL_DEFAULT_WIDTH: f32 = 300.0;
 const HEADING_PANEL_MIN_WIDTH: f32 = HEADING_PANEL_DEFAULT_WIDTH;
 const HEADING_PANEL_MAX_WIDTH: f32 = 320.0;
+const HEADING_NAV_ITEM_INDENT: f32 = 10.0;
 const PREVIEW_WINDOW_SIDE_PADDING: f32 = 32.0;
 const PREVIEW_WINDOW_FALLBACK_HEIGHT: f32 = 720.0;
 const PREVIEW_WINDOW_MONITOR_MARGIN: f32 = 80.0;
@@ -906,37 +907,44 @@ impl OxideMdApp {
 
                 ScrollArea::vertical()
                     .id_salt("heading_navigation_scroll")
-                    .show(ui, |ui| {
-                        for item in &headings {
-                            let highlighted_heading = self.selected_heading.or(self.active_heading);
-                            let is_active = highlighted_heading == Some(item.block_index);
-                            let indent = match item.level {
-                                pulldown_cmark::HeadingLevel::H1 => 0.0,
-                                pulldown_cmark::HeadingLevel::H2 => 10.0,
-                                pulldown_cmark::HeadingLevel::H3 => 20.0,
-                                pulldown_cmark::HeadingLevel::H4 => 30.0,
-                                pulldown_cmark::HeadingLevel::H5 => 40.0,
-                                pulldown_cmark::HeadingLevel::H6 => 50.0,
-                            };
+                    .show_rows(
+                        ui,
+                        ui.spacing().interact_size.y,
+                        headings.len(),
+                        |ui, row_range| {
+                            for row_index in row_range {
+                                let item = &headings[row_index];
+                                let highlighted_heading =
+                                    self.selected_heading.or(self.active_heading);
+                                let is_active = highlighted_heading == Some(item.block_index);
+                                let indent = heading_nav_indent(item.level);
 
-                            ui.horizontal(|ui| {
-                                ui.add_space(indent);
+                                ui.horizontal(|ui| {
+                                    ui.add_space(indent);
 
-                                if ui
-                                    .selectable_label(is_active, &item.title)
-                                    .on_hover_text(tr(
-                                        self.language,
-                                        TranslationKey::NavJumpToHeading,
-                                    ))
-                                    .clicked()
-                                {
-                                    self.selected_heading = Some(item.block_index);
-                                    self.active_heading = Some(item.block_index);
-                                    self.pending_block_scroll = Some(item.block_index);
-                                }
-                            });
-                        }
-                    });
+                                    let available_width = (ui.available_width() - indent)
+                                        .max(HEADING_NAV_ITEM_INDENT);
+                                    let response = ui.add_sized(
+                                        [available_width, ui.spacing().interact_size.y],
+                                        egui::Button::selectable(is_active, &item.title).truncate(),
+                                    );
+
+                                    if response
+                                        .on_hover_text(format!(
+                                            "{}\n{}",
+                                            tr(self.language, TranslationKey::NavJumpToHeading),
+                                            item.title
+                                        ))
+                                        .clicked()
+                                    {
+                                        self.selected_heading = Some(item.block_index);
+                                        self.active_heading = Some(item.block_index);
+                                        self.pending_block_scroll = Some(item.block_index);
+                                    }
+                                });
+                            }
+                        },
+                    );
             });
     }
 
@@ -1135,6 +1143,17 @@ fn active_search_query(search_query: &str) -> Option<&str> {
         None
     } else {
         Some(trimmed)
+    }
+}
+
+fn heading_nav_indent(level: pulldown_cmark::HeadingLevel) -> f32 {
+    match level {
+        pulldown_cmark::HeadingLevel::H1 => 0.0,
+        pulldown_cmark::HeadingLevel::H2 => HEADING_NAV_ITEM_INDENT,
+        pulldown_cmark::HeadingLevel::H3 => HEADING_NAV_ITEM_INDENT * 2.0,
+        pulldown_cmark::HeadingLevel::H4 => HEADING_NAV_ITEM_INDENT * 3.0,
+        pulldown_cmark::HeadingLevel::H5 => HEADING_NAV_ITEM_INDENT * 4.0,
+        pulldown_cmark::HeadingLevel::H6 => HEADING_NAV_ITEM_INDENT * 5.0,
     }
 }
 

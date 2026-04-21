@@ -150,3 +150,22 @@ Result:
 Conclusion:
 
 - This removes avoidable work, but first render is still dominated by rendering a very large number of blocks.
+
+### 2026-04-21: Virtualize TOC Rendering
+
+Change:
+
+- Render the heading navigation with `ScrollArea::show_rows`.
+- Only visible TOC rows are built each frame.
+- Keep full heading titles available through hover text while truncating long rows.
+
+Result:
+
+- 1 MiB first render after load: 147 ms -> 154 ms
+- 1 MiB first render after reload: 112 ms -> 111 ms
+- 5 MiB first render after load: 785 ms -> 768 ms
+- 5 MiB first render after reload: 620 ms -> 604 ms
+
+Conclusion:
+
+- TOC virtualization helps a little on the 5 MiB benchmark, but the main remaining cost is still document body rendering.
