@@ -12,6 +12,29 @@ release build because debug builds include extra overhead.
 cargo build --release
 ```
 
+## Automated Baseline Run
+
+Use the helper script to generate temporary 1 MiB and 5 MiB Markdown files,
+start OxideMD, capture perf logs, trigger one content reload, trigger one
+unchanged reload, and print the collected log lines:
+
+```powershell
+.\tools\run-performance-baseline.ps1
+```
+
+Generated files and logs are written under:
+
+```powershell
+$env:TEMP\oxidemd-performance
+```
+
+The generated Markdown files are deleted by default. Keep them for inspection
+with:
+
+```powershell
+.\tools\run-performance-baseline.ps1 -KeepGeneratedFiles
+```
+
 ## Measure a Large Markdown File
 
 Use an existing large document when possible. If you need a temporary test file,
@@ -68,3 +91,37 @@ Example log shape:
 
 Record the file size, build profile, and observed log lines when comparing
 changes.
+
+## Baseline Results
+
+Record representative measurements here before optimizing large file behavior.
+
+### 1 MiB Markdown
+
+- Date:
+- Build:
+- Command:
+- Size:
+- Startup:
+- Initial load:
+- Reload after edit:
+- Skipped reload:
+- Notes:
+
+### 5 MiB Markdown
+
+- Date:
+- Build:
+- Command:
+- Size:
+- Startup:
+- Initial load:
+- Reload after edit:
+- Skipped reload:
+- Notes:
+
+### First Measured Bottleneck
+
+- Area:
+- Evidence:
+- Next action:
