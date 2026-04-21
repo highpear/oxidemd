@@ -102,6 +102,11 @@ src/
 * Avoid unnecessary re-parsing
 * Minimize UI redraw cost
 * Optimize only proven bottlenecks
+* For performance-sensitive changes, use `docs/performance.md` as the source of truth for benchmark steps
+* Prefer release builds for benchmark measurements
+* Use `tools/run-performance-baseline.ps1` for Windows baseline measurements
+* Record meaningful baseline or comparison results in `docs/performance.md`
+* Do not commit generated large benchmark Markdown files; generate them outside the repository
 
 ---
 
