@@ -37,6 +37,7 @@ Current capabilities:
 - In-document search with match highlighting
 - Syntax highlighting for fenced code blocks
 - Copy fenced code block contents
+- Restore the last session settings and file
 
 Currently supported Markdown elements:
 
