@@ -2,7 +2,7 @@ use std::fs;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use crate::metrics::DocumentTiming;
 use crate::parser::{MarkdownDocument, parse_markdown};
@@ -15,6 +15,12 @@ pub struct DocumentFingerprint {
     hash: u64,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct FileSnapshot {
+    byte_len: usize,
+    modified: SystemTime,
+}
+
 #[derive(Clone)]
 struct ParsedDocumentCacheEntry {
     fingerprint: DocumentFingerprint,
@@ -25,18 +31,21 @@ pub struct LoadedMarkdownDocument {
     pub document: Arc<MarkdownDocument>,
     pub timing: DocumentTiming,
     pub fingerprint: DocumentFingerprint,
+    pub file_snapshot: Option<FileSnapshot>,
 }
 
 pub enum ReloadDocumentOutcome {
     Reloaded(LoadedMarkdownDocument),
     Unchanged {
         fingerprint: DocumentFingerprint,
+        file_snapshot: Option<FileSnapshot>,
         timing: DocumentTiming,
     },
 }
 
 pub fn load_markdown_document(path: &Path) -> Result<LoadedMarkdownDocument, String> {
     let load_started = Instant::now();
+    let file_snapshot = file_snapshot(path);
     let content = fs::read_to_string(path).map_err(|error| error.to_string())?;
     let fingerprint = fingerprint_content(&content);
 
@@ -49,6 +58,7 @@ pub fn load_markdown_document(path: &Path) -> Result<LoadedMarkdownDocument, Str
                 byte_len: content.len(),
             },
             fingerprint,
+            file_snapshot,
         });
     }
 
@@ -65,20 +75,41 @@ pub fn load_markdown_document(path: &Path) -> Result<LoadedMarkdownDocument, Str
         document,
         timing,
         fingerprint,
+        file_snapshot,
     })
 }
 
 pub fn reload_markdown_document(
     path: &Path,
     previous_fingerprint: Option<DocumentFingerprint>,
+    previous_file_snapshot: Option<FileSnapshot>,
 ) -> Result<ReloadDocumentOutcome, String> {
     let load_started = Instant::now();
+    let file_snapshot = file_snapshot(path);
+
+    if let (Some(current_snapshot), Some(previous_snapshot), Some(fingerprint)) =
+        (file_snapshot, previous_file_snapshot, previous_fingerprint)
+    {
+        if current_snapshot == previous_snapshot {
+            return Ok(ReloadDocumentOutcome::Unchanged {
+                fingerprint,
+                file_snapshot,
+                timing: DocumentTiming {
+                    total: load_started.elapsed(),
+                    parse: Duration::ZERO,
+                    byte_len: current_snapshot.byte_len,
+                },
+            });
+        }
+    }
+
     let content = fs::read_to_string(path).map_err(|error| error.to_string())?;
     let fingerprint = fingerprint_content(&content);
 
     if Some(fingerprint) == previous_fingerprint {
         return Ok(ReloadDocumentOutcome::Unchanged {
             fingerprint,
+            file_snapshot,
             timing: DocumentTiming {
                 total: load_started.elapsed(),
                 parse: Duration::ZERO,
@@ -96,6 +127,7 @@ pub fn reload_markdown_document(
                 byte_len: content.len(),
             },
             fingerprint,
+            file_snapshot,
         }));
     }
 
@@ -112,7 +144,16 @@ pub fn reload_markdown_document(
         document,
         timing,
         fingerprint,
+        file_snapshot,
     }))
+}
+
+fn file_snapshot(path: &Path) -> Option<FileSnapshot> {
+    let metadata = fs::metadata(path).ok()?;
+    let byte_len = usize::try_from(metadata.len()).ok()?;
+    let modified = metadata.modified().ok()?;
+
+    Some(FileSnapshot { byte_len, modified })
 }
 
 fn fingerprint_content(content: &str) -> DocumentFingerprint {

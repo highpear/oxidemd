@@ -8,7 +8,7 @@ use eframe::egui::{
 };
 use rfd::FileDialog;
 
-use crate::document_loader::{DocumentFingerprint, load_markdown_document};
+use crate::document_loader::{DocumentFingerprint, FileSnapshot, load_markdown_document};
 use crate::i18n::{Language, TranslationKey, tr};
 use crate::image_cache::ImageCache;
 use crate::metrics;
@@ -70,6 +70,7 @@ pub struct OxideMdApp {
     current_file: Option<PathBuf>,
     document: Option<Arc<MarkdownDocument>>,
     document_fingerprint: Option<DocumentFingerprint>,
+    document_file_snapshot: Option<FileSnapshot>,
     image_cache: ImageCache,
     status_message: String,
     reload_status: ReloadStatus,
@@ -107,6 +108,7 @@ impl OxideMdApp {
             current_file: None,
             document: None,
             document_fingerprint: None,
+            document_file_snapshot: None,
             image_cache: ImageCache::new(),
             status_message: tr(language, TranslationKey::StatusNoFile).to_owned(),
             reload_status: ReloadStatus::Idle,
@@ -245,6 +247,7 @@ impl OxideMdApp {
                 self.current_file = Some(path.clone());
                 self.document = Some(document);
                 self.document_fingerprint = Some(loaded.fingerprint);
+                self.document_file_snapshot = loaded.file_snapshot;
                 self.image_cache.clear();
                 self.pending_reload_at = None;
                 self.in_flight_reload_id = None;
@@ -265,6 +268,7 @@ impl OxideMdApp {
             Err(error) => {
                 self.document = None;
                 self.document_fingerprint = None;
+                self.document_file_snapshot = None;
                 self.image_cache.clear();
                 self.current_file = None;
                 self.watcher = None;
@@ -414,10 +418,12 @@ impl OxideMdApp {
         self.queued_reload_id += 1;
         let reload_id = self.queued_reload_id;
 
-        match self
-            .reload_worker
-            .request_reload(reload_id, path.clone(), self.document_fingerprint)
-        {
+        match self.reload_worker.request_reload(
+            reload_id,
+            path.clone(),
+            self.document_fingerprint,
+            self.document_file_snapshot,
+        ) {
             Ok(()) => {
                 self.in_flight_reload_id = Some(reload_id);
                 self.set_reload_in_progress(TranslationKey::StatusReloadStarted, Some(&path));
@@ -437,24 +443,26 @@ impl OxideMdApp {
                     document,
                     timing,
                     fingerprint,
+                    file_snapshot,
                 } => {
                     if self.in_flight_reload_id != Some(id) {
                         continue;
                     }
 
-                    self.finish_reload_success(path, document, timing, fingerprint);
+                    self.finish_reload_success(path, document, timing, fingerprint, file_snapshot);
                 }
                 ReloadResponse::Unchanged {
                     id,
                     path,
                     timing,
                     fingerprint,
+                    file_snapshot,
                 } => {
                     if self.in_flight_reload_id != Some(id) {
                         continue;
                     }
 
-                    self.finish_reload_unchanged(path, timing, fingerprint);
+                    self.finish_reload_unchanged(path, timing, fingerprint, file_snapshot);
                 }
                 ReloadResponse::Error { id, path, error } => {
                     if self.in_flight_reload_id != Some(id) {
@@ -478,6 +486,7 @@ impl OxideMdApp {
         document: Arc<MarkdownDocument>,
         timing: metrics::DocumentTiming,
         fingerprint: DocumentFingerprint,
+        file_snapshot: Option<FileSnapshot>,
     ) {
         let active_heading = document.headings().first().map(|item| item.block_index);
         self.in_flight_reload_id = None;
@@ -486,6 +495,7 @@ impl OxideMdApp {
         self.selected_heading = None;
         self.document = Some(document);
         self.document_fingerprint = Some(fingerprint);
+        self.document_file_snapshot = file_snapshot;
         self.image_cache.clear();
         self.refresh_search_matches();
         self.pending_render_measurement = Some(PendingRenderMeasurement {
@@ -502,9 +512,11 @@ impl OxideMdApp {
         path: PathBuf,
         timing: metrics::DocumentTiming,
         fingerprint: DocumentFingerprint,
+        file_snapshot: Option<FileSnapshot>,
     ) {
         self.in_flight_reload_id = None;
         self.document_fingerprint = Some(fingerprint);
+        self.document_file_snapshot = file_snapshot;
         self.reload_status = ReloadStatus::Idle;
         metrics::log_reload_skipped(&path, &timing);
         self.status_message = self.status_with_path(TranslationKey::StatusReloadSkipped, &path);

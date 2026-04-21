@@ -227,7 +227,7 @@ Goal: keep the app usable with larger Markdown files.
 * [x] Measure first render after TOC virtualization
 * [x] Design viewport-based document rendering
 * [x] Reduce memory copies where useful
-* [ ] Improve incremental reload behavior if needed
+* [x] Improve incremental reload behavior if needed
 
 Exit criteria:
 

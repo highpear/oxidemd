@@ -6,7 +6,7 @@ use std::thread;
 use eframe::egui;
 
 use crate::document_loader::{
-    DocumentFingerprint, ReloadDocumentOutcome, reload_markdown_document,
+    DocumentFingerprint, FileSnapshot, ReloadDocumentOutcome, reload_markdown_document,
 };
 use crate::metrics::DocumentTiming;
 use crate::parser::MarkdownDocument;
@@ -16,6 +16,7 @@ enum ReloadRequest {
         id: u64,
         path: PathBuf,
         previous_fingerprint: Option<DocumentFingerprint>,
+        previous_file_snapshot: Option<FileSnapshot>,
     },
 }
 
@@ -26,12 +27,14 @@ pub enum ReloadResponse {
         document: Arc<MarkdownDocument>,
         timing: DocumentTiming,
         fingerprint: DocumentFingerprint,
+        file_snapshot: Option<FileSnapshot>,
     },
     Unchanged {
         id: u64,
         path: PathBuf,
         timing: DocumentTiming,
         fingerprint: DocumentFingerprint,
+        file_snapshot: Option<FileSnapshot>,
     },
     Error {
         id: u64,
@@ -57,23 +60,31 @@ pub fn spawn_reload_worker(ctx: egui::Context) -> ReloadWorkerHandle {
                     id,
                     path,
                     previous_fingerprint,
+                    previous_file_snapshot,
                 } => {
-                    let response = match reload_markdown_document(&path, previous_fingerprint) {
+                    let response = match reload_markdown_document(
+                        &path,
+                        previous_fingerprint,
+                        previous_file_snapshot,
+                    ) {
                         Ok(ReloadDocumentOutcome::Reloaded(loaded)) => ReloadResponse::Reloaded {
                             id,
                             path,
                             document: loaded.document,
                             timing: loaded.timing,
                             fingerprint: loaded.fingerprint,
+                            file_snapshot: loaded.file_snapshot,
                         },
                         Ok(ReloadDocumentOutcome::Unchanged {
                             fingerprint,
+                            file_snapshot,
                             timing,
                         }) => ReloadResponse::Unchanged {
                             id,
                             path,
                             timing,
                             fingerprint,
+                            file_snapshot,
                         },
                         Err(error) => ReloadResponse::Error {
                             id,
@@ -105,12 +116,14 @@ impl ReloadWorkerHandle {
         id: u64,
         path: PathBuf,
         previous_fingerprint: Option<DocumentFingerprint>,
+        previous_file_snapshot: Option<FileSnapshot>,
     ) -> Result<(), String> {
         self.sender
             .send(ReloadRequest::Reload {
                 id,
                 path,
                 previous_fingerprint,
+                previous_file_snapshot,
             })
             .map_err(|error| error.to_string())
     }

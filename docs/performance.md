@@ -210,3 +210,25 @@ Result:
 Conclusion:
 
 - The visible render timings remain stable while avoiding full `MarkdownDocument` and heading-list copies on large files. This is mainly a memory and allocation pressure improvement rather than a new rendering-time optimization.
+
+### 2026-04-21: Add Reload Metadata Fast Path
+
+Change:
+
+- Track the loaded file size and modified timestamp alongside the content fingerprint.
+- Before reading a reload candidate, compare the current metadata with the previous metadata.
+- If both match exactly, skip the file read and content hash and report the document as unchanged.
+- Keep the existing content fingerprint check for cases where metadata changed but content did not.
+
+Result:
+
+- 1 MiB initial load: 17 ms -> 17 ms
+- 1 MiB reload after edit: 17 ms -> 19 ms
+- 1 MiB skipped reload: 0 ms -> 0 ms
+- 5 MiB initial load: 87 ms -> 89 ms
+- 5 MiB reload after edit: 88 ms -> 87 ms
+- 5 MiB skipped reload: 1 ms -> 1 ms
+
+Conclusion:
+
+- Normal reload and benchmark timings remain stable. The benefit is targeted at duplicate watcher events where file metadata is unchanged, allowing OxideMD to avoid rereading and rehashing large files.
