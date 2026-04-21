@@ -222,6 +222,7 @@ Goal: keep the app usable with larger Markdown files.
 * [x] Record baseline performance results for 1 MiB and 5 MiB Markdown files
 * [x] Identify the first measured bottleneck
 * [x] Add lightweight render timing after load and reload
+* [x] Avoid empty search highlight work during document rendering
 * [ ] Reduce memory copies where useful
 * [ ] Improve incremental reload behavior if needed
 

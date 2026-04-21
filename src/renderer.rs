@@ -576,6 +576,10 @@ fn highlighted_text_width(
     zoom_factor: f32,
     search_query: Option<&str>,
 ) -> f32 {
+    if search_query.is_none() {
+        return 0.0;
+    }
+
     let text = match span {
         InlineSpan::Text(text)
         | InlineSpan::Strong(text)
@@ -643,6 +647,28 @@ fn render_inline(
     clicked_anchor: &mut Option<String>,
     image_resources: &mut ImageRenderResources<'_>,
 ) {
+    if !content
+        .spans
+        .iter()
+        .any(|span| matches!(span, InlineSpan::LineBreak))
+    {
+        ui.horizontal_wrapped(|ui| {
+            for span in &content.spans {
+                render_inline_span(
+                    ui,
+                    span,
+                    style,
+                    theme,
+                    zoom_factor,
+                    search_query,
+                    clicked_anchor,
+                    image_resources,
+                );
+            }
+        });
+        return;
+    }
+
     let mut lines: Vec<Vec<&InlineSpan>> = vec![Vec::new()];
 
     for span in &content.spans {
@@ -857,6 +883,11 @@ fn render_text_label(
     search_query: Option<&str>,
 ) {
     if text.is_empty() {
+        return;
+    }
+
+    if search_query.is_none() {
+        ui.label(styled_text(text, style, kind, theme, zoom_factor));
         return;
     }
 

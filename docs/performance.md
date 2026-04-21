@@ -129,3 +129,24 @@ Record representative measurements here before optimizing large file behavior.
 - Area: First render after load and reload.
 - Evidence: On the 5 MiB baseline, parse takes about 90 ms while first render takes 641-818 ms.
 - Next action: Reduce first-render cost for large documents before changing the parser or adding large-file dependencies.
+
+## Optimization Notes
+
+### 2026-04-21: Avoid Empty Search Highlight Work
+
+Change:
+
+- Pass no search query to the renderer when the search input is empty.
+- Avoid highlight segment allocation when no search query is active.
+- Avoid inline line-splitting allocation when inline content has no line breaks.
+
+Result:
+
+- 1 MiB first render after load: 154 ms -> 147 ms
+- 1 MiB first render after reload: 112 ms -> 112 ms
+- 5 MiB first render after load: 818 ms -> 785 ms
+- 5 MiB first render after reload: 641 ms -> 620 ms
+
+Conclusion:
+
+- This removes avoidable work, but first render is still dominated by rendering a very large number of blocks.

@@ -1025,7 +1025,7 @@ impl OxideMdApp {
                     document_base_dir,
                     &mut self.image_cache,
                     self.pending_block_scroll,
-                    Some(self.search_query.as_str()),
+                    active_search_query(&self.search_query),
                 );
 
                 if let (Some(measurement), Some(started)) = (render_measurement, render_started) {
@@ -1127,6 +1127,15 @@ fn is_markdown_path(path: &Path) -> bool {
             extension.eq_ignore_ascii_case("md") || extension.eq_ignore_ascii_case("markdown")
         })
         .unwrap_or(false)
+}
+
+fn active_search_query(search_query: &str) -> Option<&str> {
+    let trimmed = search_query.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
+    }
 }
 
 fn capped_preview_window_width(target_width: f32, monitor_size: Option<Vec2>) -> f32 {
