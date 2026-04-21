@@ -203,6 +203,7 @@ Goal: improve usability for larger Markdown documents.
 * [x] Add in-document search
 * [x] Highlight search matches
 * [x] Add jump-to-section behavior
+* [x] Stabilize jumps to newly measured virtualized blocks
 
 Exit criteria:
 
@@ -229,6 +230,7 @@ Goal: keep the app usable with larger Markdown files.
 * [x] Reduce memory copies where useful
 * [x] Improve incremental reload behavior if needed
 * [x] Cache measured block heights for virtualized rendering
+* [x] Add follow-up scroll stabilization after first block measurement
 
 Exit criteria:
 
@@ -270,7 +272,7 @@ Exit criteria:
 
 ## Current Priority
 
-1. Validate scroll accuracy with large virtualized documents
+1. Manually validate TOC and search jumps across large documents
 2. Continue viewer polish and reliability improvements
 3. Address remaining hot-path allocations when measurements justify it
 ---

@@ -35,6 +35,7 @@ pub fn render_markdown_document(
     active_search_block: Option<usize>,
 ) -> RenderOutcome {
     let mut did_scroll = false;
+    let mut needs_scroll_stabilization = false;
     let mut active_heading = None;
     let mut clicked_anchor = None;
     let viewport_top = ui.clip_rect().top();
@@ -50,10 +51,9 @@ pub fn render_markdown_document(
             query: search_query,
             is_active_block: active_search_block == Some(block_index),
         };
-        let block_height = block_heights
-            .get(block_index)
-            .and_then(|height| *height)
-            .unwrap_or_else(|| estimate_block_height(block, zoom_factor));
+        let measured_block_height = block_heights.get(block_index).and_then(|height| *height);
+        let block_height =
+            measured_block_height.unwrap_or_else(|| estimate_block_height(block, zoom_factor));
         let block_top = ui.cursor().top();
         let block_bottom = block_top + block_height;
 
@@ -82,6 +82,7 @@ pub fn render_markdown_document(
             let anchor = ui.allocate_response(egui::vec2(0.0, 0.0), egui::Sense::hover());
             ui.scroll_to_rect(anchor.rect, Some(Align::TOP));
             did_scroll = true;
+            needs_scroll_stabilization = measured_block_height.is_none();
         }
 
         match block {
@@ -201,6 +202,7 @@ pub fn render_markdown_document(
 
     RenderOutcome {
         did_scroll,
+        needs_scroll_stabilization,
         active_heading,
         clicked_anchor,
     }
@@ -308,6 +310,7 @@ fn estimate_inline_line_count(content: &InlineContent) -> usize {
 
 pub struct RenderOutcome {
     pub did_scroll: bool,
+    pub needs_scroll_stabilization: bool,
     pub active_heading: Option<usize>,
     pub clicked_anchor: Option<String>,
 }
