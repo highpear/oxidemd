@@ -1,4 +1,5 @@
 mod app;
+mod cli;
 mod code_block;
 mod document_loader;
 mod export;
@@ -16,9 +17,11 @@ mod watcher;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
+use std::process::ExitCode;
 use std::time::Instant;
 
 use app::OxideMdApp;
+use cli::{parse_args, run_cli_action};
 use eframe::egui::{self, FontData, FontDefinitions, FontFamily, Vec2};
 use theme::{DEFAULT_THEME_ID, apply_theme, theme};
 
@@ -26,9 +29,31 @@ const MEIRYO_FONT_NAME: &str = "meiryo";
 const INITIAL_WINDOW_WIDTH: f32 = 1180.0;
 const INITIAL_WINDOW_HEIGHT: f32 = 760.0;
 
-fn main() -> eframe::Result<()> {
+fn main() -> ExitCode {
+    let action = match parse_args(env::args_os().skip(1)) {
+        Ok(action) => action,
+        Err(error) => {
+            eprintln!("{}", error);
+            return ExitCode::from(1);
+        }
+    };
+
+    let initial_file = match run_cli_action(action) {
+        Ok(initial_file) => initial_file,
+        Err(code) => return ExitCode::from(code as u8),
+    };
+
+    match run_gui(initial_file) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("Failed to start OxideMD: {}", error);
+            ExitCode::from(1)
+        }
+    }
+}
+
+fn run_gui(initial_file: Option<PathBuf>) -> eframe::Result<()> {
     let startup_started = Instant::now();
-    let initial_file = env::args_os().nth(1).map(PathBuf::from);
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_app_id("oxidemd")
