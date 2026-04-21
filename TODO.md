@@ -223,6 +223,9 @@ Goal: keep the app usable with larger Markdown files.
 * [x] Identify the first measured bottleneck
 * [x] Add lightweight render timing after load and reload
 * [x] Avoid empty search highlight work during document rendering
+* [x] Virtualize TOC rendering for large documents
+* [x] Measure first render after TOC virtualization
+* [ ] Design viewport-based document rendering
 * [ ] Reduce memory copies where useful
 * [ ] Improve incremental reload behavior if needed
 
