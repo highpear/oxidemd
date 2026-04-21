@@ -9,6 +9,7 @@ pub struct SearchMatch {
 pub struct HighlightSegment<'a> {
     pub text: &'a str,
     pub is_match: bool,
+    pub is_active_match: bool,
 }
 
 pub fn normalized_query(query: &str) -> Option<String> {
@@ -45,12 +46,13 @@ pub fn preview_text(text: &str) -> String {
 pub fn split_highlighted_segments<'a>(
     text: &'a str,
     search_query: Option<&str>,
+    is_active_match: bool,
 ) -> Vec<HighlightSegment<'a>> {
     let Some(query) = search_query.and_then(normalized_query) else {
         return unmatched_segment(text);
     };
 
-    split_segments_with_normalized_query(text, &query)
+    split_segments_with_normalized_query(text, &query, is_active_match)
 }
 
 pub fn text_matches_query(text: &str, search_query: Option<&str>) -> bool {
@@ -64,6 +66,7 @@ pub fn text_matches_query(text: &str, search_query: Option<&str>) -> bool {
 fn split_segments_with_normalized_query<'a>(
     text: &'a str,
     normalized_query: &str,
+    is_active_match: bool,
 ) -> Vec<HighlightSegment<'a>> {
     if normalized_query.is_empty() {
         return unmatched_segment(text);
@@ -87,12 +90,14 @@ fn split_segments_with_normalized_query<'a>(
             segments.push(HighlightSegment {
                 text: &text[current_start..match_start],
                 is_match: false,
+                is_active_match: false,
             });
         }
 
         segments.push(HighlightSegment {
             text: &text[match_start..match_end],
             is_match: true,
+            is_active_match,
         });
 
         current_start = match_end;
@@ -103,6 +108,7 @@ fn split_segments_with_normalized_query<'a>(
         segments.push(HighlightSegment {
             text: &text[current_start..],
             is_match: false,
+            is_active_match: false,
         });
     }
 
@@ -163,6 +169,7 @@ fn unmatched_segment(text: &str) -> Vec<HighlightSegment<'_>> {
     vec![HighlightSegment {
         text,
         is_match: false,
+        is_active_match: false,
     }]
 }
 
@@ -179,26 +186,36 @@ mod tests {
 
     #[test]
     fn highlighted_segments_match_case_insensitively() {
-        let segments = split_highlighted_segments("Fast Rust viewer", Some("rust"));
+        let segments = split_highlighted_segments("Fast Rust viewer", Some("rust"), false);
 
         assert_eq!(segments.len(), 3);
         assert_eq!(segments[0].text, "Fast ");
         assert!(!segments[0].is_match);
         assert_eq!(segments[1].text, "Rust");
         assert!(segments[1].is_match);
+        assert!(!segments[1].is_active_match);
         assert_eq!(segments[2].text, " viewer");
         assert!(!segments[2].is_match);
     }
 
     #[test]
     fn highlighted_segments_keep_source_boundaries_for_expanded_lowercase() {
-        let segments = split_highlighted_segments("İstanbul", Some("i"));
+        let segments = split_highlighted_segments("İstanbul", Some("i"), false);
 
         assert_eq!(segments.len(), 2);
         assert_eq!(segments[0].text, "İ");
         assert!(segments[0].is_match);
         assert_eq!(segments[1].text, "stanbul");
         assert!(!segments[1].is_match);
+    }
+
+    #[test]
+    fn highlighted_segments_mark_active_matches() {
+        let segments = split_highlighted_segments("Rust", Some("rust"), true);
+
+        assert_eq!(segments.len(), 1);
+        assert!(segments[0].is_match);
+        assert!(segments[0].is_active_match);
     }
 
     #[test]
