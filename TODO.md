@@ -190,8 +190,8 @@ Goal: make the viewer pleasant for daily use.
 
 Exit criteria:
 
-* [ ] The app feels polished enough for regular use
-* [ ] Basic usability issues are addressed
+* [x] The app feels polished enough for regular use
+* [x] Basic usability issues are addressed
 
 ---
 
@@ -208,8 +208,8 @@ Goal: improve usability for larger Markdown documents.
 
 Exit criteria:
 
-* [ ] Large documents are easy to navigate
-* [ ] Search and TOC work reliably
+* [x] Large documents are easy to navigate
+* [x] Search and TOC work reliably
 
 ---
 
