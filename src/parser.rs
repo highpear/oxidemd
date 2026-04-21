@@ -4,16 +4,12 @@ use pulldown_cmark::{
     Alignment, CodeBlockKind, Event, HeadingLevel, LinkType, Options, Parser, Tag, TagEnd,
 };
 
+use crate::search::{SearchMatch, contains_normalized_query, normalized_query, preview_text};
+
 #[derive(Clone)]
 pub struct MarkdownDocument {
     pub blocks: Vec<Block>,
     headings: Vec<HeadingNavItem>,
-}
-
-#[derive(Clone)]
-pub struct SearchMatch {
-    pub block_index: usize,
-    pub preview: String,
 }
 
 #[derive(Clone)]
@@ -485,19 +481,17 @@ impl MarkdownDocument {
     }
 
     pub fn search_matches(&self, query: &str) -> Vec<SearchMatch> {
-        let normalized_query = query.trim().to_lowercase();
-        if normalized_query.is_empty() {
+        let Some(normalized_query) = normalized_query(query) else {
             return Vec::new();
-        }
+        };
 
         self.blocks
             .iter()
             .enumerate()
             .filter_map(|(block_index, block)| {
                 let plain_text = block.plain_text();
-                let normalized_block = plain_text.to_lowercase();
 
-                if normalized_block.contains(&normalized_query) {
+                if contains_normalized_query(&plain_text, &normalized_query) {
                     Some(SearchMatch {
                         block_index,
                         preview: preview_text(&plain_text),
@@ -527,24 +521,4 @@ fn join_inline_items(items: &[InlineContent]) -> String {
         .filter(|text| !text.is_empty())
         .collect::<Vec<_>>()
         .join(" ")
-}
-
-fn preview_text(text: &str) -> String {
-    const MAX_PREVIEW_CHARS: usize = 72;
-
-    let trimmed = text.trim();
-    if trimmed.is_empty() {
-        return String::new();
-    }
-
-    let mut preview = String::new();
-    for character in trimmed.chars().take(MAX_PREVIEW_CHARS) {
-        preview.push(character);
-    }
-
-    if trimmed.chars().count() > MAX_PREVIEW_CHARS {
-        preview.push_str("...");
-    }
-
-    preview
 }

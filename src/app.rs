@@ -12,9 +12,10 @@ use crate::document_loader::{DocumentFingerprint, FileSnapshot, load_markdown_do
 use crate::i18n::{Language, TranslationKey, tr};
 use crate::image_cache::ImageCache;
 use crate::metrics;
-use crate::parser::{MarkdownDocument, SearchMatch};
+use crate::parser::MarkdownDocument;
 use crate::reload_worker::{ReloadResponse, ReloadWorkerHandle, spawn_reload_worker};
 use crate::renderer::render_markdown_document;
+use crate::search::SearchMatch;
 use crate::theme::{DEFAULT_THEME_ID, ThemeId, apply_theme, available_themes, theme};
 use crate::watcher::{FileWatchEvent, FileWatcherHandle, watch_file};
 
