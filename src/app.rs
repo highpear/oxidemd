@@ -390,6 +390,17 @@ impl OxideMdApp {
         }
     }
 
+    fn copy_current_file_path(&mut self, ctx: &egui::Context) {
+        let Some(path) = self.current_file.clone() else {
+            self.set_status_message(tr(self.language, TranslationKey::StatusNoFile));
+            return;
+        };
+
+        ctx.copy_text(path.display().to_string());
+        self.reload_status = ReloadStatus::Idle;
+        self.set_status_with_path(TranslationKey::StatusPathCopied, &path);
+    }
+
     fn open_recent_file(&mut self, path: PathBuf) {
         if path.is_file() && is_markdown_path(&path) {
             self.load_selected_file(path);
@@ -1186,6 +1197,16 @@ impl OxideMdApp {
 
                 if let Some(path) = &self.current_file {
                     file_label_response.on_hover_text(path.display().to_string());
+                }
+
+                if ui
+                    .add_enabled(
+                        self.current_file.is_some(),
+                        egui::Button::new(tr(self.language, TranslationKey::ActionCopyPath)),
+                    )
+                    .clicked()
+                {
+                    self.copy_current_file_path(ctx);
                 }
 
                 ui.separator();
