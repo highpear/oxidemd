@@ -38,6 +38,7 @@ Current capabilities:
 - Keyboard shortcut help
 - Syntax highlighting for fenced code blocks
 - Copy fenced code block contents
+- Copy the current file path
 - Export the current Markdown file as HTML
 - Restore the last session settings and file
 - Reopen recently opened Markdown files

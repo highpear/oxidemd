@@ -9,6 +9,7 @@ pub enum TranslationKey {
     ActionCancel,
     ActionClose,
     ActionCopy,
+    ActionCopyPath,
     ActionExportHtml,
     ActionOpenExternalLink,
     ActionOpen,
@@ -46,6 +47,7 @@ pub enum TranslationKey {
     ReloadReloading,
     StatusLoadFailed,
     StatusLoaded,
+    StatusPathCopied,
     StatusExportFailed,
     StatusExported,
     StatusNoFile,
@@ -84,6 +86,7 @@ const TRANSLATIONS: &[TranslationEntry] = &[
     entry(TranslationKey::ActionCancel, "Cancel", "キャンセル"),
     entry(TranslationKey::ActionClose, "Close", "閉じる"),
     entry(TranslationKey::ActionCopy, "Copy", "コピー"),
+    entry(TranslationKey::ActionCopyPath, "Copy Path", "パスをコピー"),
     entry(TranslationKey::ActionExportHtml, "HTML...", "HTML..."),
     entry(
         TranslationKey::ActionOpenExternalLink,
@@ -193,6 +196,11 @@ const TRANSLATIONS: &[TranslationEntry] = &[
         "ファイルの読み込みに失敗しました:",
     ),
     entry(TranslationKey::StatusLoaded, "Loaded:", "読み込み完了:"),
+    entry(
+        TranslationKey::StatusPathCopied,
+        "Copied:",
+        "コピーしました:",
+    ),
     entry(
         TranslationKey::StatusExportFailed,
         "Failed to export:",
