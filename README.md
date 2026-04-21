@@ -28,6 +28,7 @@ Current capabilities:
 - Render core Markdown blocks
 - Render basic inline Markdown styling
 - Open links from rendered content
+- Choose whether external links open directly or ask first
 - Render local PNG and JPEG images
 - Live reload when the opened file changes
 - English and Japanese UI strings

@@ -37,7 +37,7 @@ pub fn render_markdown_document(
     let mut did_scroll = false;
     let mut needs_scroll_stabilization = false;
     let mut active_heading = None;
-    let mut clicked_anchor = None;
+    let mut link_actions = LinkActions::default();
     let viewport_top = ui.clip_rect().top();
     let viewport_bottom = ui.clip_rect().bottom();
     let mut image_resources = ImageRenderResources {
@@ -97,7 +97,7 @@ pub fn render_markdown_document(
                     block_index,
                     viewport_top,
                     search_highlight,
-                    &mut clicked_anchor,
+                    &mut link_actions,
                     &mut image_resources,
                 );
                 did_scroll |= heading_state.did_scroll;
@@ -114,7 +114,7 @@ pub fn render_markdown_document(
                     theme,
                     zoom_factor,
                     search_highlight,
-                    &mut clicked_anchor,
+                    &mut link_actions,
                     &mut image_resources,
                 );
                 ui.add_space(scale_spacing(BLOCK_SPACING_PARAGRAPH, zoom_factor));
@@ -128,7 +128,7 @@ pub fn render_markdown_document(
                         theme,
                         zoom_factor,
                         search_highlight,
-                        &mut clicked_anchor,
+                        &mut link_actions,
                         &mut image_resources,
                     );
                     ui.add_space(scale_spacing(LIST_ITEM_SPACING, zoom_factor));
@@ -145,7 +145,7 @@ pub fn render_markdown_document(
                         theme,
                         zoom_factor,
                         search_highlight,
-                        &mut clicked_anchor,
+                        &mut link_actions,
                         &mut image_resources,
                     );
                     ui.add_space(scale_spacing(LIST_ITEM_SPACING, zoom_factor));
@@ -159,7 +159,7 @@ pub fn render_markdown_document(
                     theme,
                     zoom_factor,
                     search_highlight,
-                    &mut clicked_anchor,
+                    &mut link_actions,
                     &mut image_resources,
                 );
             }
@@ -188,7 +188,7 @@ pub fn render_markdown_document(
                     theme,
                     zoom_factor,
                     search_highlight,
-                    &mut clicked_anchor,
+                    &mut link_actions,
                     &mut image_resources,
                 );
             }
@@ -204,7 +204,8 @@ pub fn render_markdown_document(
         did_scroll,
         needs_scroll_stabilization,
         active_heading,
-        clicked_anchor,
+        clicked_anchor: link_actions.clicked_anchor,
+        clicked_external_link: link_actions.clicked_external_link,
     }
 }
 
@@ -313,6 +314,7 @@ pub struct RenderOutcome {
     pub needs_scroll_stabilization: bool,
     pub active_heading: Option<usize>,
     pub clicked_anchor: Option<String>,
+    pub clicked_external_link: Option<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -325,6 +327,12 @@ struct ImageRenderResources<'a> {
     ui_language: Language,
     document_base_dir: Option<&'a Path>,
     image_cache: &'a mut ImageCache,
+}
+
+#[derive(Default)]
+struct LinkActions {
+    clicked_anchor: Option<String>,
+    clicked_external_link: Option<String>,
 }
 
 struct HeadingRenderState {
@@ -342,7 +350,7 @@ fn render_heading(
     block_index: usize,
     viewport_top: f32,
     search_highlight: SearchHighlight<'_>,
-    clicked_anchor: &mut Option<String>,
+    link_actions: &mut LinkActions,
     image_resources: &mut ImageRenderResources<'_>,
 ) -> HeadingRenderState {
     let size = match level {
@@ -368,7 +376,7 @@ fn render_heading(
             theme,
             zoom_factor,
             search_highlight,
-            clicked_anchor,
+            link_actions,
             image_resources,
         );
         ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
@@ -390,7 +398,7 @@ fn render_list_item(
     theme: &Theme,
     zoom_factor: f32,
     search_highlight: SearchHighlight<'_>,
-    clicked_anchor: &mut Option<String>,
+    link_actions: &mut LinkActions,
     image_resources: &mut ImageRenderResources<'_>,
 ) {
     ui.horizontal_top(|ui| {
@@ -407,7 +415,7 @@ fn render_list_item(
                 theme,
                 zoom_factor,
                 search_highlight,
-                clicked_anchor,
+                link_actions,
                 image_resources,
             );
         });
@@ -420,7 +428,7 @@ fn render_blockquote(
     theme: &Theme,
     zoom_factor: f32,
     search_highlight: SearchHighlight<'_>,
-    clicked_anchor: &mut Option<String>,
+    link_actions: &mut LinkActions,
     image_resources: &mut ImageRenderResources<'_>,
 ) {
     Frame::new()
@@ -439,7 +447,7 @@ fn render_blockquote(
                     theme,
                     zoom_factor,
                     search_highlight,
-                    clicked_anchor,
+                    link_actions,
                     image_resources,
                 );
                 ui.add_space(scale_spacing(6.0, zoom_factor));
@@ -458,7 +466,7 @@ fn render_table(
     theme: &Theme,
     zoom_factor: f32,
     search_highlight: SearchHighlight<'_>,
-    clicked_anchor: &mut Option<String>,
+    link_actions: &mut LinkActions,
     image_resources: &mut ImageRenderResources<'_>,
 ) {
     let column_count = table_column_count(headers, rows);
@@ -488,7 +496,7 @@ fn render_table(
                                 theme,
                                 zoom_factor,
                                 search_highlight,
-                                clicked_anchor,
+                                link_actions,
                                 image_resources,
                             );
 
@@ -502,7 +510,7 @@ fn render_table(
                                     theme,
                                     zoom_factor,
                                     search_highlight,
-                                    clicked_anchor,
+                                    link_actions,
                                     image_resources,
                                 );
                             }
@@ -522,7 +530,7 @@ fn render_table_row(
     theme: &Theme,
     zoom_factor: f32,
     search_highlight: SearchHighlight<'_>,
-    clicked_anchor: &mut Option<String>,
+    link_actions: &mut LinkActions,
     image_resources: &mut ImageRenderResources<'_>,
 ) {
     for column_index in 0..column_count {
@@ -551,7 +559,7 @@ fn render_table_row(
                 theme,
                 zoom_factor,
                 search_highlight,
-                clicked_anchor,
+                link_actions,
                 image_resources,
             );
         });
@@ -568,7 +576,7 @@ fn render_aligned_cell(
     theme: &Theme,
     zoom_factor: f32,
     search_highlight: SearchHighlight<'_>,
-    clicked_anchor: &mut Option<String>,
+    link_actions: &mut LinkActions,
     image_resources: &mut ImageRenderResources<'_>,
 ) {
     let Some(cell) = cell else {
@@ -585,7 +593,7 @@ fn render_aligned_cell(
             theme,
             zoom_factor,
             search_highlight,
-            clicked_anchor,
+            link_actions,
             image_resources,
         ),
         Alignment::None | Alignment::Left => {
@@ -596,7 +604,7 @@ fn render_aligned_cell(
                 theme,
                 zoom_factor,
                 search_highlight,
-                clicked_anchor,
+                link_actions,
                 image_resources,
             );
         }
@@ -611,7 +619,7 @@ fn render_inline_aligned(
     theme: &Theme,
     zoom_factor: f32,
     search_highlight: SearchHighlight<'_>,
-    clicked_anchor: &mut Option<String>,
+    link_actions: &mut LinkActions,
     image_resources: &mut ImageRenderResources<'_>,
 ) {
     let available_width = ui.available_width();
@@ -636,7 +644,7 @@ fn render_inline_aligned(
                 theme,
                 zoom_factor,
                 search_highlight,
-                clicked_anchor,
+                link_actions,
                 image_resources,
             );
         }
@@ -778,7 +786,7 @@ fn render_inline(
     theme: &Theme,
     zoom_factor: f32,
     search_highlight: SearchHighlight<'_>,
-    clicked_anchor: &mut Option<String>,
+    link_actions: &mut LinkActions,
     image_resources: &mut ImageRenderResources<'_>,
 ) {
     if !content
@@ -795,7 +803,7 @@ fn render_inline(
                     theme,
                     zoom_factor,
                     search_highlight,
-                    clicked_anchor,
+                    link_actions,
                     image_resources,
                 );
             }
@@ -823,7 +831,7 @@ fn render_inline(
                     theme,
                     zoom_factor,
                     search_highlight,
-                    clicked_anchor,
+                    link_actions,
                     image_resources,
                 );
             }
@@ -847,7 +855,7 @@ fn render_inline_span(
     theme: &Theme,
     zoom_factor: f32,
     search_highlight: SearchHighlight<'_>,
-    clicked_anchor: &mut Option<String>,
+    link_actions: &mut LinkActions,
     image_resources: &mut ImageRenderResources<'_>,
 ) {
     match span {
@@ -892,10 +900,10 @@ fn render_inline_span(
                 .background_color(search_highlight_for_text(text, theme, search_highlight));
             if let Some(anchor) = internal_anchor(destination) {
                 if ui.link(rich_text).clicked() {
-                    *clicked_anchor = Some(anchor.to_owned());
+                    link_actions.clicked_anchor = Some(anchor.to_owned());
                 }
-            } else {
-                ui.hyperlink_to(rich_text, destination);
+            } else if ui.link(rich_text).on_hover_text(destination).clicked() {
+                link_actions.clicked_external_link = Some(destination.to_owned());
             }
         }
         InlineSpan::Image { alt, destination } => {
