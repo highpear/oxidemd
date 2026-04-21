@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
@@ -22,7 +23,7 @@ pub enum ReloadResponse {
     Reloaded {
         id: u64,
         path: PathBuf,
-        document: MarkdownDocument,
+        document: Arc<MarkdownDocument>,
         timing: DocumentTiming,
         fingerprint: DocumentFingerprint,
     },

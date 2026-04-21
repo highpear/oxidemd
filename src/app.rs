@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use eframe::egui::{
@@ -11,7 +12,7 @@ use crate::document_loader::{DocumentFingerprint, load_markdown_document};
 use crate::i18n::{Language, TranslationKey, tr};
 use crate::image_cache::ImageCache;
 use crate::metrics;
-use crate::parser::{HeadingNavItem, MarkdownDocument, SearchMatch};
+use crate::parser::{MarkdownDocument, SearchMatch};
 use crate::reload_worker::{ReloadResponse, ReloadWorkerHandle, spawn_reload_worker};
 use crate::renderer::render_markdown_document;
 use crate::theme::{DEFAULT_THEME_ID, ThemeId, apply_theme, available_themes, theme};
@@ -67,7 +68,7 @@ pub struct OxideMdApp {
     theme_id: ThemeId,
     zoom_factor: f32,
     current_file: Option<PathBuf>,
-    document: Option<MarkdownDocument>,
+    document: Option<Arc<MarkdownDocument>>,
     document_fingerprint: Option<DocumentFingerprint>,
     image_cache: ImageCache,
     status_message: String,
@@ -234,13 +235,6 @@ impl OxideMdApp {
             .and_then(|name| name.to_str())
             .map(ToOwned::to_owned)
             .unwrap_or_else(|| tr(self.language, TranslationKey::LabelNoFile).to_owned())
-    }
-
-    fn heading_nav_items(&self) -> Vec<HeadingNavItem> {
-        self.document
-            .as_ref()
-            .map(|document| document.headings().to_vec())
-            .unwrap_or_default()
     }
 
     fn load_selected_file(&mut self, path: PathBuf) {
@@ -481,7 +475,7 @@ impl OxideMdApp {
     fn finish_reload_success(
         &mut self,
         path: PathBuf,
-        document: MarkdownDocument,
+        document: Arc<MarkdownDocument>,
         timing: metrics::DocumentTiming,
         fingerprint: DocumentFingerprint,
     ) {
@@ -768,6 +762,8 @@ impl OxideMdApp {
             return;
         }
 
+        let mut clicked_match = None;
+
         ui.add_space(8.0);
         ScrollArea::vertical()
             .id_salt("search_results_scroll")
@@ -778,22 +774,26 @@ impl OxideMdApp {
                     return;
                 }
 
-                let items: Vec<(usize, SearchMatch)> =
-                    self.search_matches.iter().cloned().enumerate().collect();
-
-                for (index, search_match) in items {
+                for (index, search_match) in self.search_matches.iter().enumerate() {
                     let is_active = self.active_search_index == Some(index);
-                    let label = if search_match.preview.is_empty() {
-                        format!("#{}", search_match.block_index + 1)
+
+                    let clicked = if search_match.preview.is_empty() {
+                        ui.selectable_label(is_active, format!("#{}", search_match.block_index + 1))
+                            .clicked()
                     } else {
-                        search_match.preview
+                        ui.selectable_label(is_active, search_match.preview.as_str())
+                            .clicked()
                     };
 
-                    if ui.selectable_label(is_active, label).clicked() {
-                        self.select_search_match(index);
+                    if clicked {
+                        clicked_match = Some(index);
                     }
                 }
             });
+
+        if let Some(index) = clicked_match {
+            self.select_search_match(index);
+        }
     }
 
     fn render_top_bar(&mut self, ctx: &egui::Context) {
@@ -886,7 +886,7 @@ impl OxideMdApp {
     }
 
     fn render_heading_panel(&mut self, ctx: &egui::Context) {
-        let headings = self.heading_nav_items();
+        let mut clicked_heading = None;
 
         SidePanel::left("heading_navigation")
             .resizable(true)
@@ -901,9 +901,16 @@ impl OxideMdApp {
                 ui.heading(tr(self.language, TranslationKey::NavSections));
                 ui.add_space(8.0);
 
+                let Some(document) = self.document.as_ref() else {
+                    return;
+                };
+
+                let headings = document.headings();
                 if headings.is_empty() {
                     return;
                 }
+
+                let highlighted_heading = self.selected_heading.or(self.active_heading);
 
                 ScrollArea::vertical()
                     .id_salt("heading_navigation_scroll")
@@ -914,8 +921,6 @@ impl OxideMdApp {
                         |ui, row_range| {
                             for row_index in row_range {
                                 let item = &headings[row_index];
-                                let highlighted_heading =
-                                    self.selected_heading.or(self.active_heading);
                                 let is_active = highlighted_heading == Some(item.block_index);
                                 let indent = heading_nav_indent(item.level);
 
@@ -937,15 +942,19 @@ impl OxideMdApp {
                                         ))
                                         .clicked()
                                     {
-                                        self.selected_heading = Some(item.block_index);
-                                        self.active_heading = Some(item.block_index);
-                                        self.pending_block_scroll = Some(item.block_index);
+                                        clicked_heading = Some(item.block_index);
                                     }
                                 });
                             }
                         },
                     );
             });
+
+        if let Some(block_index) = clicked_heading {
+            self.selected_heading = Some(block_index);
+            self.active_heading = Some(block_index);
+            self.pending_block_scroll = Some(block_index);
+        }
     }
 
     fn render_document_panel(&mut self, ctx: &egui::Context) {

@@ -188,3 +188,25 @@ Result:
 Conclusion:
 
 - First-render cost is no longer dominated by building UI for every block. The next large-file work should focus on validating scroll accuracy and reducing memory copies where useful.
+
+### 2026-04-21: Reduce Large Document Copies
+
+Change:
+
+- Store parsed documents in the cache as `Arc<MarkdownDocument>`.
+- Share loaded and reloaded documents by reference-counted pointer instead of cloning the full document tree.
+- Render heading navigation from the document heading slice instead of cloning all headings every frame.
+- Avoid cloning all search matches when rendering the search result panel.
+
+Result:
+
+- 1 MiB first render after load: 20 ms -> 20 ms
+- 1 MiB first render after reload: 1 ms -> 1 ms
+- 5 MiB initial load: 91 ms -> 87 ms
+- 5 MiB reload after edit: 93 ms -> 88 ms
+- 5 MiB first render after load: 23 ms -> 23 ms
+- 5 MiB first render after reload: 4 ms -> 4 ms
+
+Conclusion:
+
+- The visible render timings remain stable while avoiding full `MarkdownDocument` and heading-list copies on large files. This is mainly a memory and allocation pressure improvement rather than a new rendering-time optimization.
