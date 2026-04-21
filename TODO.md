@@ -217,6 +217,7 @@ Goal: keep the app usable with larger Markdown files.
 
 * [ ] Evaluate `ropey`
 * [ ] Evaluate `memmap2`
+* [x] Document large document performance measurement flow
 * [ ] Measure performance on large documents
 * [ ] Reduce memory copies where useful
 * [ ] Improve incremental reload behavior if needed

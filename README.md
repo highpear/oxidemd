@@ -106,3 +106,5 @@ Items such as tabs, large file improvements, math, and Mermaid are planned for l
 
 Shared manual test files live in `samples/`.
 Use `samples/long-form.md` to test longer reading flows such as heading navigation, zoom, theme changes, and live reload on a larger document.
+
+Performance measurement notes live in `docs/performance.md`.
