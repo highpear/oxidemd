@@ -98,30 +98,30 @@ Record representative measurements here before optimizing large file behavior.
 
 ### 1 MiB Markdown
 
-- Date:
-- Build:
-- Command:
-- Size:
-- Startup:
-- Initial load:
-- Reload after edit:
-- Skipped reload:
-- Notes:
+- Date: 2026-04-21
+- Build: release
+- Command: `.\tools\run-performance-baseline.ps1 -SkipBuild`
+- Size: 1.00 MiB / 1,048,771 bytes
+- Startup: not captured by the helper script
+- Initial load: 17 ms total, 17 ms parse
+- Reload after edit: 17 ms total, 17 ms parse
+- Skipped reload: 0 ms total
+- Notes: Parsing is comfortably fast at this size.
 
 ### 5 MiB Markdown
 
-- Date:
-- Build:
-- Command:
-- Size:
-- Startup:
-- Initial load:
-- Reload after edit:
-- Skipped reload:
-- Notes:
+- Date: 2026-04-21
+- Build: release
+- Command: `.\tools\run-performance-baseline.ps1 -SkipBuild`
+- Size: 5.00 MiB / 5,242,977 bytes
+- Startup: not captured by the helper script
+- Initial load: 87 ms total, 85 ms parse
+- Reload after edit: 94 ms total, 91 ms parse
+- Skipped reload: 2 ms total
+- Notes: Full parse remains under 100 ms, so immediate parser replacement is not justified by this baseline alone.
 
 ### First Measured Bottleneck
 
-- Area:
-- Evidence:
-- Next action:
+- Area: Rendering and interaction responsiveness are not measured yet.
+- Evidence: Load and reload logs only cover file read and parse timing; 5 MiB parsing stays below 100 ms in release.
+- Next action: Add lightweight render timing or manually check scrolling, TOC, and search responsiveness on the generated 5 MiB document.

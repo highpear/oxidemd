@@ -219,8 +219,8 @@ Goal: keep the app usable with larger Markdown files.
 * [ ] Evaluate `memmap2`
 * [x] Document large document performance measurement flow
 * [x] Add helper script for baseline performance measurement
-* [ ] Record baseline performance results for 1 MiB and 5 MiB Markdown files
-* [ ] Identify the first measured bottleneck
+* [x] Record baseline performance results for 1 MiB and 5 MiB Markdown files
+* [x] Identify the first measured bottleneck
 * [ ] Reduce memory copies where useful
 * [ ] Improve incremental reload behavior if needed
 
