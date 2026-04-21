@@ -7,6 +7,7 @@ pub enum Language {
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum TranslationKey {
     ActionCancel,
+    ActionClose,
     ActionCopy,
     ActionOpenExternalLink,
     ActionOpen,
@@ -22,6 +23,9 @@ pub enum TranslationKey {
     LabelRecentFiles,
     LabelSearch,
     LabelSearchResults,
+    LabelShortcut,
+    LabelShortcutAction,
+    LabelShortcuts,
     LabelZoom,
     MessageCopied,
     MessageDropMarkdown,
@@ -48,6 +52,17 @@ pub enum TranslationKey {
     StatusUnsupportedFile,
     StatusWatchFailed,
     StatusWorkerFailed,
+    ShortcutFocusSearch,
+    ShortcutOpenFile,
+    ShortcutReloadFile,
+    ShortcutResetZoom,
+    ShortcutSearchNext,
+    ShortcutSearchPrevious,
+    ShortcutShowHelp,
+    ShortcutSwitchLanguage,
+    ShortcutSwitchTheme,
+    ShortcutZoomIn,
+    ShortcutZoomOut,
     ThemeMist,
     ThemeNightOwl,
     ThemeWarmPaper,
@@ -63,6 +78,7 @@ struct TranslationEntry {
 
 const TRANSLATIONS: &[TranslationEntry] = &[
     entry(TranslationKey::ActionCancel, "Cancel", "キャンセル"),
+    entry(TranslationKey::ActionClose, "Close", "閉じる"),
     entry(TranslationKey::ActionCopy, "Copy", "コピー"),
     entry(
         TranslationKey::ActionOpenExternalLink,
@@ -102,6 +118,13 @@ const TRANSLATIONS: &[TranslationEntry] = &[
     ),
     entry(TranslationKey::LabelSearch, "Search:", "検索:"),
     entry(TranslationKey::LabelSearchResults, "Matches:", "一致:"),
+    entry(TranslationKey::LabelShortcut, "Shortcut", "ショートカット"),
+    entry(TranslationKey::LabelShortcutAction, "Action", "操作"),
+    entry(
+        TranslationKey::LabelShortcuts,
+        "Shortcuts",
+        "ショートカット",
+    ),
     entry(TranslationKey::LabelZoom, "Zoom:", "ズーム:"),
     entry(TranslationKey::MessageCopied, "Copied", "コピーしました"),
     entry(
@@ -204,6 +227,49 @@ const TRANSLATIONS: &[TranslationEntry] = &[
         "Failed to queue reload:",
         "再読み込み要求の送信に失敗しました:",
     ),
+    entry(
+        TranslationKey::ShortcutFocusSearch,
+        "Focus search",
+        "検索へ移動",
+    ),
+    entry(
+        TranslationKey::ShortcutOpenFile,
+        "Open Markdown",
+        "Markdownを開く",
+    ),
+    entry(
+        TranslationKey::ShortcutReloadFile,
+        "Reload file",
+        "再読み込み",
+    ),
+    entry(
+        TranslationKey::ShortcutResetZoom,
+        "Reset zoom",
+        "ズームをリセット",
+    ),
+    entry(TranslationKey::ShortcutSearchNext, "Next match", "次の一致"),
+    entry(
+        TranslationKey::ShortcutSearchPrevious,
+        "Previous match",
+        "前の一致",
+    ),
+    entry(
+        TranslationKey::ShortcutShowHelp,
+        "Show shortcuts",
+        "ショートカットを表示",
+    ),
+    entry(
+        TranslationKey::ShortcutSwitchLanguage,
+        "Switch language",
+        "言語を切り替え",
+    ),
+    entry(
+        TranslationKey::ShortcutSwitchTheme,
+        "Switch theme",
+        "テーマを切り替え",
+    ),
+    entry(TranslationKey::ShortcutZoomIn, "Zoom in", "ズームイン"),
+    entry(TranslationKey::ShortcutZoomOut, "Zoom out", "ズームアウト"),
     entry(TranslationKey::ThemeMist, "Mist", "ミスト"),
     entry(TranslationKey::ThemeNightOwl, "Night Owl", "ナイトアウル"),
     entry(
