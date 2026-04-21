@@ -232,3 +232,30 @@ Result:
 Conclusion:
 
 - Normal reload and benchmark timings remain stable. The benefit is targeted at duplicate watcher events where file metadata is unchanged, allowing OxideMD to avoid rereading and rehashing large files.
+
+### 2026-04-22: Cache Measured Block Heights
+
+Change:
+
+- Cache measured document block heights after visible blocks are rendered.
+- Reuse measured heights when virtualized blocks are skipped.
+- Reset the height cache when the document fingerprint, zoom factor, or document body width changes.
+- Keep estimated heights as the fallback for blocks that have not been rendered yet.
+
+Result:
+
+- 1 MiB initial load: 18 ms total, 17 ms parse
+- 1 MiB first render after load: 22 ms
+- 1 MiB reload after edit: 18 ms total, 17 ms parse
+- 1 MiB first render after reload: 1 ms
+- 1 MiB skipped reload: 0 ms total
+- 5 MiB initial load: 88 ms total, 86 ms parse
+- 5 MiB first render after load: 23 ms
+- 5 MiB reload after edit: 86 ms total, 84 ms parse
+- 5 MiB first render after reload: 4 ms
+- 5 MiB skipped reload: 1 ms total
+
+Conclusion:
+
+- The measured-height cache keeps first render timings in the same range while reducing scroll-position drift after blocks have been measured.
+- The remaining large-document validation should focus on manual TOC and search jumps near the start, middle, and end of long files.

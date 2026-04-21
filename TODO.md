@@ -163,7 +163,7 @@ Goal: improve readability of fenced code blocks.
 * [x] Highlight fenced code blocks
 * [x] Support common languages
 * [x] Add fallback behavior for unknown languages
-* [ ] Cache highlighted results if needed
+* [x] Cache highlighted results if needed
 
 Exit criteria:
 
@@ -228,6 +228,7 @@ Goal: keep the app usable with larger Markdown files.
 * [x] Design viewport-based document rendering
 * [x] Reduce memory copies where useful
 * [x] Improve incremental reload behavior if needed
+* [x] Cache measured block heights for virtualized rendering
 
 Exit criteria:
 
@@ -269,8 +270,7 @@ Exit criteria:
 
 ## Current Priority
 
-1. Reduce first-render cost for large documents
-2. Reduce memory copies where useful
-3. Improve incremental reload behavior if needed
-4. Continue viewer polish and reliability improvements
+1. Validate scroll accuracy with large virtualized documents
+2. Continue viewer polish and reliability improvements
+3. Address remaining hot-path allocations when measurements justify it
 ---

@@ -29,6 +29,7 @@ pub fn render_markdown_document(
     zoom_factor: f32,
     document_base_dir: Option<&Path>,
     image_cache: &mut ImageCache,
+    block_heights: &mut [Option<f32>],
     scroll_to_block: Option<usize>,
     search_query: Option<&str>,
     active_search_block: Option<usize>,
@@ -49,9 +50,12 @@ pub fn render_markdown_document(
             query: search_query,
             is_active_block: active_search_block == Some(block_index),
         };
-        let estimated_height = estimate_block_height(block, zoom_factor);
+        let block_height = block_heights
+            .get(block_index)
+            .and_then(|height| *height)
+            .unwrap_or_else(|| estimate_block_height(block, zoom_factor));
         let block_top = ui.cursor().top();
-        let block_bottom = block_top + estimated_height;
+        let block_bottom = block_top + block_height;
 
         if should_skip_block(
             document.blocks.len(),
@@ -68,9 +72,11 @@ pub fn render_markdown_document(
                 active_heading = Some(block_index);
             }
 
-            ui.add_space(estimated_height);
+            ui.add_space(block_height);
             continue;
         }
+
+        let measured_top = ui.cursor().top();
 
         if scroll_to_block == Some(block_index) {
             let anchor = ui.allocate_response(egui::vec2(0.0, 0.0), egui::Sense::hover());
@@ -185,6 +191,11 @@ pub fn render_markdown_document(
                     &mut image_resources,
                 );
             }
+        }
+
+        if let Some(height) = block_heights.get_mut(block_index) {
+            let measured_height = (ui.cursor().top() - measured_top).max(0.0);
+            *height = Some(measured_height);
         }
     }
 
