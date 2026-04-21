@@ -1,7 +1,7 @@
 use std::fs;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::Path;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use crate::metrics::DocumentTiming;
@@ -18,11 +18,11 @@ pub struct DocumentFingerprint {
 #[derive(Clone)]
 struct ParsedDocumentCacheEntry {
     fingerprint: DocumentFingerprint,
-    document: MarkdownDocument,
+    document: Arc<MarkdownDocument>,
 }
 
 pub struct LoadedMarkdownDocument {
-    pub document: MarkdownDocument,
+    pub document: Arc<MarkdownDocument>,
     pub timing: DocumentTiming,
     pub fingerprint: DocumentFingerprint,
 }
@@ -53,13 +53,13 @@ pub fn load_markdown_document(path: &Path) -> Result<LoadedMarkdownDocument, Str
     }
 
     let parse_started = Instant::now();
-    let document = parse_markdown(&content);
+    let document = Arc::new(parse_markdown(&content));
     let timing = DocumentTiming {
         total: load_started.elapsed(),
         parse: parse_started.elapsed(),
         byte_len: content.len(),
     };
-    store_parsed_document(fingerprint, document.clone());
+    store_parsed_document(fingerprint, Arc::clone(&document));
 
     Ok(LoadedMarkdownDocument {
         document,
@@ -100,13 +100,13 @@ pub fn reload_markdown_document(
     }
 
     let parse_started = Instant::now();
-    let document = parse_markdown(&content);
+    let document = Arc::new(parse_markdown(&content));
     let timing = DocumentTiming {
         total: load_started.elapsed(),
         parse: parse_started.elapsed(),
         byte_len: content.len(),
     };
-    store_parsed_document(fingerprint, document.clone());
+    store_parsed_document(fingerprint, Arc::clone(&document));
 
     Ok(ReloadDocumentOutcome::Reloaded(LoadedMarkdownDocument {
         document,
@@ -130,19 +130,19 @@ fn parsed_document_cache() -> &'static Mutex<Vec<ParsedDocumentCacheEntry>> {
     PARSED_DOCUMENT_CACHE.get_or_init(|| Mutex::new(Vec::new()))
 }
 
-fn cached_parsed_document(fingerprint: DocumentFingerprint) -> Option<MarkdownDocument> {
+fn cached_parsed_document(fingerprint: DocumentFingerprint) -> Option<Arc<MarkdownDocument>> {
     let mut cache = parsed_document_cache().lock().ok()?;
     let index = cache
         .iter()
         .position(|entry| entry.fingerprint == fingerprint)?;
     let entry = cache.remove(index);
-    let document = entry.document.clone();
+    let document = Arc::clone(&entry.document);
     cache.push(entry);
 
     Some(document)
 }
 
-fn store_parsed_document(fingerprint: DocumentFingerprint, document: MarkdownDocument) {
+fn store_parsed_document(fingerprint: DocumentFingerprint, document: Arc<MarkdownDocument>) {
     let Ok(mut cache) = parsed_document_cache().lock() else {
         return;
     };
