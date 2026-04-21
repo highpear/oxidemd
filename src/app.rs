@@ -68,11 +68,15 @@ pub struct OxideMdApp {
 }
 
 impl OxideMdApp {
-    pub fn new(ui_context: egui::Context, startup_started: Instant) -> Self {
+    pub fn new(
+        ui_context: egui::Context,
+        startup_started: Instant,
+        initial_file: Option<PathBuf>,
+    ) -> Self {
         let language = Language::En;
         debug_assert!(available_themes().contains(&DEFAULT_THEME_ID));
 
-        Self {
+        let mut app = Self {
             reload_worker: spawn_reload_worker(ui_context.clone()),
             ui_context,
             language,
@@ -96,7 +100,25 @@ impl OxideMdApp {
             active_search_index: None,
             focus_search_input: false,
             startup_started: Some(startup_started),
+        };
+
+        if let Some(path) = initial_file {
+            app.load_initial_file(path);
         }
+
+        app
+    }
+
+    fn load_initial_file(&mut self, path: PathBuf) {
+        if is_markdown_path(&path) {
+            self.load_selected_file(path);
+            return;
+        }
+
+        self.set_reload_error(
+            TranslationKey::StatusUnsupportedFile,
+            path.display().to_string(),
+        );
     }
 
     fn switch_language(&mut self) {

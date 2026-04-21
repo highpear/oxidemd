@@ -54,7 +54,7 @@ Goal: load a Markdown file and display its contents in the app.
 
 * [x] Define how the first file is selected
   * [x] File dialog
-  * [ ] Command-line argument
+  * [x] Command-line argument
   * [x] Drag and drop
 * [x] Read a `.md` file from disk
 * [x] Handle file read errors gracefully
@@ -265,6 +265,4 @@ Exit criteria:
 2. Reduce memory copies where useful
 3. Improve incremental reload behavior if needed
 4. Evaluate whether the static i18n table should stay or move to external resources later
-5. Command-line file open
-
 ---

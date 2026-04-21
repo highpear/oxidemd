@@ -11,6 +11,7 @@ mod syntax;
 mod theme;
 mod watcher;
 
+use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -25,6 +26,7 @@ const INITIAL_WINDOW_HEIGHT: f32 = 760.0;
 
 fn main() -> eframe::Result<()> {
     let startup_started = Instant::now();
+    let initial_file = env::args_os().nth(1).map(PathBuf::from);
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size(Vec2::new(INITIAL_WINDOW_WIDTH, INITIAL_WINDOW_HEIGHT)),
@@ -40,6 +42,7 @@ fn main() -> eframe::Result<()> {
             Ok(Box::new(OxideMdApp::new(
                 cc.egui_ctx.clone(),
                 startup_started,
+                initial_file,
             )))
         }),
     )
