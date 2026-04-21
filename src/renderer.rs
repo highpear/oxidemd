@@ -16,6 +16,9 @@ const BLOCK_SPACING_PARAGRAPH: f32 = 18.0;
 const BLOCK_SPACING_SECTION: f32 = 24.0;
 const LIST_ITEM_SPACING: f32 = 8.0;
 const TABLE_CELL_MIN_WIDTH: f32 = 120.0;
+const LARGE_DOCUMENT_BLOCK_THRESHOLD: usize = 2_000;
+const VIRTUAL_RENDER_OVERSCAN: f32 = 1_200.0;
+const ESTIMATED_CHARS_PER_LINE: usize = 90;
 
 pub fn render_markdown_document(
     ui: &mut Ui,
@@ -32,6 +35,7 @@ pub fn render_markdown_document(
     let mut active_heading = None;
     let mut clicked_anchor = None;
     let viewport_top = ui.clip_rect().top();
+    let viewport_bottom = ui.clip_rect().bottom();
     let mut image_resources = ImageRenderResources {
         ui_language,
         document_base_dir,
@@ -39,6 +43,29 @@ pub fn render_markdown_document(
     };
 
     for (block_index, block) in document.blocks.iter().enumerate() {
+        let estimated_height = estimate_block_height(block, zoom_factor);
+        let block_top = ui.cursor().top();
+        let block_bottom = block_top + estimated_height;
+
+        if should_skip_block(
+            document.blocks.len(),
+            scroll_to_block,
+            block_index,
+            block_top,
+            block_bottom,
+            viewport_top,
+            viewport_bottom,
+        ) {
+            if matches!(block, Block::Heading { .. })
+                && block_top <= viewport_top + scale_spacing(8.0, zoom_factor)
+            {
+                active_heading = Some(block_index);
+            }
+
+            ui.add_space(estimated_height);
+            continue;
+        }
+
         match block {
             Block::Heading { level, content } => {
                 let heading_state = render_heading(
@@ -183,6 +210,106 @@ pub fn render_markdown_document(
         active_heading,
         clicked_anchor,
     }
+}
+
+fn should_skip_block(
+    block_count: usize,
+    scroll_to_block: Option<usize>,
+    block_index: usize,
+    block_top: f32,
+    block_bottom: f32,
+    viewport_top: f32,
+    viewport_bottom: f32,
+) -> bool {
+    if block_count < LARGE_DOCUMENT_BLOCK_THRESHOLD || scroll_to_block == Some(block_index) {
+        return false;
+    }
+
+    block_bottom < viewport_top - VIRTUAL_RENDER_OVERSCAN
+        || block_top > viewport_bottom + VIRTUAL_RENDER_OVERSCAN
+}
+
+fn estimate_block_height(block: &Block, zoom_factor: f32) -> f32 {
+    match block {
+        Block::Heading { level, content } => {
+            let size = match level {
+                HeadingLevel::H1 => 31.0,
+                HeadingLevel::H2 => 26.0,
+                HeadingLevel::H3 => 22.0,
+                HeadingLevel::H4 => 19.0,
+                HeadingLevel::H5 => 17.0,
+                HeadingLevel::H6 => 16.0,
+            };
+            estimate_inline_height(content, size, zoom_factor)
+                + scale_spacing(BLOCK_SPACING_SECTION, zoom_factor)
+        }
+        Block::Paragraph(content) => {
+            estimate_inline_height(content, BODY_TEXT_SIZE, zoom_factor)
+                + scale_spacing(BLOCK_SPACING_PARAGRAPH, zoom_factor)
+        }
+        Block::UnorderedList(items) | Block::BlockQuote(items) => {
+            estimate_inline_items_height(items, BODY_TEXT_SIZE, zoom_factor)
+                + scale_spacing(BLOCK_SPACING_SECTION, zoom_factor)
+        }
+        Block::OrderedList { items, .. } => {
+            estimate_inline_items_height(items, BODY_TEXT_SIZE, zoom_factor)
+                + scale_spacing(BLOCK_SPACING_SECTION, zoom_factor)
+        }
+        Block::CodeBlock { code, .. } => {
+            let line_count = code.lines().count().max(1) as f32;
+            line_count * scale_spacing(20.0, zoom_factor) + scale_spacing(42.0, zoom_factor)
+        }
+        Block::Table { headers, rows, .. } => {
+            let row_count = rows.len() + usize::from(!headers.is_empty());
+            row_count.max(1) as f32 * scale_spacing(34.0, zoom_factor)
+                + scale_spacing(BLOCK_SPACING_SECTION + 18.0, zoom_factor)
+        }
+    }
+}
+
+fn estimate_inline_items_height(items: &[InlineContent], text_size: f32, zoom_factor: f32) -> f32 {
+    items
+        .iter()
+        .map(|item| {
+            estimate_inline_height(item, text_size, zoom_factor)
+                + scale_spacing(LIST_ITEM_SPACING, zoom_factor)
+        })
+        .sum()
+}
+
+fn estimate_inline_height(content: &InlineContent, text_size: f32, zoom_factor: f32) -> f32 {
+    let lines = estimate_inline_line_count(content) as f32;
+    lines * text_size * zoom_factor * 1.45
+}
+
+fn estimate_inline_line_count(content: &InlineContent) -> usize {
+    let mut line_count = 1usize;
+    let mut line_len = 0usize;
+
+    for span in &content.spans {
+        match span {
+            InlineSpan::Text(text)
+            | InlineSpan::Strong(text)
+            | InlineSpan::Emphasis(text)
+            | InlineSpan::Code(text) => {
+                line_len += text.len();
+            }
+            InlineSpan::Link { text, .. } | InlineSpan::Image { alt: text, .. } => {
+                line_len += text.len();
+            }
+            InlineSpan::LineBreak => {
+                line_count += 1;
+                line_len = 0;
+            }
+        }
+
+        if line_len >= ESTIMATED_CHARS_PER_LINE {
+            line_count += line_len / ESTIMATED_CHARS_PER_LINE;
+            line_len %= ESTIMATED_CHARS_PER_LINE;
+        }
+    }
+
+    line_count
 }
 
 pub struct RenderOutcome {
