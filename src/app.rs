@@ -24,6 +24,25 @@ enum ReloadStatus {
     Error,
 }
 
+enum RenderMeasurementReason {
+    Load,
+    Reload,
+}
+
+struct PendingRenderMeasurement {
+    reason: RenderMeasurementReason,
+    path: PathBuf,
+}
+
+impl RenderMeasurementReason {
+    fn as_log_label(&self) -> &'static str {
+        match self {
+            RenderMeasurementReason::Load => "load",
+            RenderMeasurementReason::Reload => "reload",
+        }
+    }
+}
+
 const DEFAULT_ZOOM_FACTOR: f32 = 1.0;
 const MIN_ZOOM_FACTOR: f32 = 0.8;
 const MAX_ZOOM_FACTOR: f32 = 1.8;
@@ -64,6 +83,7 @@ pub struct OxideMdApp {
     search_matches: Vec<SearchMatch>,
     active_search_index: Option<usize>,
     focus_search_input: bool,
+    pending_render_measurement: Option<PendingRenderMeasurement>,
     startup_started: Option<Instant>,
 }
 
@@ -99,6 +119,7 @@ impl OxideMdApp {
             search_matches: Vec::new(),
             active_search_index: None,
             focus_search_input: false,
+            pending_render_measurement: None,
             startup_started: Some(startup_started),
         };
 
@@ -238,6 +259,10 @@ impl OxideMdApp {
                 self.selected_heading = None;
                 self.refresh_search_matches();
                 self.start_watching_file(&path);
+                self.pending_render_measurement = Some(PendingRenderMeasurement {
+                    reason: RenderMeasurementReason::Load,
+                    path: path.clone(),
+                });
                 self.request_window_expansion_for_preview();
                 metrics::log_initial_load(&path, &loaded.timing);
                 self.status_message = self.status_with_path(TranslationKey::StatusLoaded, &path);
@@ -255,6 +280,7 @@ impl OxideMdApp {
                 self.selected_heading = None;
                 self.search_matches.clear();
                 self.active_search_index = None;
+                self.pending_render_measurement = None;
                 self.set_reload_error(TranslationKey::StatusLoadFailed, error);
             }
         }
@@ -467,6 +493,10 @@ impl OxideMdApp {
         self.document_fingerprint = Some(fingerprint);
         self.image_cache.clear();
         self.refresh_search_matches();
+        self.pending_render_measurement = Some(PendingRenderMeasurement {
+            reason: RenderMeasurementReason::Reload,
+            path: path.clone(),
+        });
         self.reload_status = ReloadStatus::Idle;
         metrics::log_reload(&path, &timing);
         self.status_message = self.status_with_path(TranslationKey::StatusReloaded, &path);
@@ -982,6 +1012,10 @@ impl OxideMdApp {
                 document_ui.set_min_width(content_width);
                 document_ui.set_max_width(content_width);
 
+                let render_measurement = self.pending_render_measurement.take();
+                let render_started = render_measurement.as_ref().map(|_| Instant::now());
+                let block_count = document.blocks.len();
+                let heading_count = document.headings().len();
                 let render_outcome = render_markdown_document(
                     &mut document_ui,
                     document,
@@ -993,6 +1027,16 @@ impl OxideMdApp {
                     self.pending_block_scroll,
                     Some(self.search_query.as_str()),
                 );
+
+                if let (Some(measurement), Some(started)) = (render_measurement, render_started) {
+                    metrics::log_document_render(
+                        measurement.reason.as_log_label(),
+                        &measurement.path,
+                        started.elapsed(),
+                        block_count,
+                        heading_count,
+                    );
+                }
 
                 if let Some(active_heading) = render_outcome.active_heading {
                     self.active_heading = Some(active_heading);

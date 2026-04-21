@@ -104,9 +104,11 @@ Record representative measurements here before optimizing large file behavior.
 - Size: 1.00 MiB / 1,048,771 bytes
 - Startup: not captured by the helper script
 - Initial load: 17 ms total, 17 ms parse
+- First render after load: 154 ms, 11945 blocks, 2389 headings
 - Reload after edit: 17 ms total, 17 ms parse
+- First render after reload: 112 ms, 11947 blocks, 2390 headings
 - Skipped reload: 0 ms total
-- Notes: Parsing is comfortably fast at this size.
+- Notes: Parsing is comfortably fast at this size. Rendering is already notably more expensive than parsing.
 
 ### 5 MiB Markdown
 
@@ -115,13 +117,15 @@ Record representative measurements here before optimizing large file behavior.
 - Command: `.\tools\run-performance-baseline.ps1 -SkipBuild`
 - Size: 5.00 MiB / 5,242,977 bytes
 - Startup: not captured by the helper script
-- Initial load: 87 ms total, 85 ms parse
-- Reload after edit: 94 ms total, 91 ms parse
-- Skipped reload: 2 ms total
+- Initial load: 91 ms total, 89 ms parse
+- First render after load: 818 ms, 59715 blocks, 11943 headings
+- Reload after edit: 92 ms total, 90 ms parse
+- First render after reload: 641 ms, 59717 blocks, 11944 headings
+- Skipped reload: 1 ms total
 - Notes: Full parse remains under 100 ms, so immediate parser replacement is not justified by this baseline alone.
 
 ### First Measured Bottleneck
 
-- Area: Rendering and interaction responsiveness are not measured yet.
-- Evidence: Load and reload logs only cover file read and parse timing; 5 MiB parsing stays below 100 ms in release.
-- Next action: Add lightweight render timing or manually check scrolling, TOC, and search responsiveness on the generated 5 MiB document.
+- Area: First render after load and reload.
+- Evidence: On the 5 MiB baseline, parse takes about 90 ms while first render takes 641-818 ms.
+- Next action: Reduce first-render cost for large documents before changing the parser or adding large-file dependencies.
