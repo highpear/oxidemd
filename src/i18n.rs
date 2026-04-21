@@ -6,7 +6,9 @@ pub enum Language {
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum TranslationKey {
+    ActionCancel,
     ActionCopy,
+    ActionOpenExternalLink,
     ActionOpen,
     ActionSearchNext,
     ActionSearchPrevious,
@@ -15,6 +17,7 @@ pub enum TranslationKey {
     ActionSwitchLanguage,
     ActionSwitchTheme,
     LabelCurrentFile,
+    LabelExternalLinks,
     LabelNoFile,
     LabelSearch,
     LabelSearchResults,
@@ -22,6 +25,7 @@ pub enum TranslationKey {
     MessageCopied,
     MessageDropMarkdown,
     MessageEmpty,
+    MessageExternalLinkPrompt,
     MessageImageLoadFailed,
     MessageImageUnsupported,
     MessageOpenPrompt,
@@ -45,6 +49,8 @@ pub enum TranslationKey {
     ThemeMist,
     ThemeNightOwl,
     ThemeWarmPaper,
+    ValueAskFirst,
+    ValueOpenDirectly,
 }
 
 struct TranslationEntry {
@@ -54,7 +60,13 @@ struct TranslationEntry {
 }
 
 const TRANSLATIONS: &[TranslationEntry] = &[
+    entry(TranslationKey::ActionCancel, "Cancel", "キャンセル"),
     entry(TranslationKey::ActionCopy, "Copy", "コピー"),
+    entry(
+        TranslationKey::ActionOpenExternalLink,
+        "Open link",
+        "リンクを開く",
+    ),
     entry(
         TranslationKey::ActionOpen,
         "Open Markdown",
@@ -75,6 +87,7 @@ const TRANSLATIONS: &[TranslationEntry] = &[
         "Current file:",
         "現在のファイル:",
     ),
+    entry(TranslationKey::LabelExternalLinks, "Links:", "リンク:"),
     entry(
         TranslationKey::LabelNoFile,
         "No file selected",
@@ -93,6 +106,11 @@ const TRANSLATIONS: &[TranslationEntry] = &[
         TranslationKey::MessageEmpty,
         "No markdown file is open",
         "Markdownファイルはまだ開かれていません",
+    ),
+    entry(
+        TranslationKey::MessageExternalLinkPrompt,
+        "Open this external link?",
+        "この外部リンクを開きますか？",
     ),
     entry(
         TranslationKey::MessageImageLoadFailed,
@@ -181,6 +199,8 @@ const TRANSLATIONS: &[TranslationEntry] = &[
         "Warm Paper",
         "ウォームペーパー",
     ),
+    entry(TranslationKey::ValueAskFirst, "Ask", "確認"),
+    entry(TranslationKey::ValueOpenDirectly, "Open", "直接開く"),
 ];
 
 const fn entry(key: TranslationKey, en: &'static str, ja: &'static str) -> TranslationEntry {

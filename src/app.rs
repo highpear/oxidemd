@@ -31,6 +31,12 @@ enum RenderMeasurementReason {
     Reload,
 }
 
+#[derive(Clone, Copy)]
+enum ExternalLinkBehavior {
+    AskFirst,
+    OpenDirectly,
+}
+
 struct PendingRenderMeasurement {
     reason: RenderMeasurementReason,
     path: PathBuf,
@@ -48,6 +54,22 @@ impl RenderMeasurementReason {
         match self {
             RenderMeasurementReason::Load => "load",
             RenderMeasurementReason::Reload => "reload",
+        }
+    }
+}
+
+impl ExternalLinkBehavior {
+    fn next(self) -> Self {
+        match self {
+            Self::AskFirst => Self::OpenDirectly,
+            Self::OpenDirectly => Self::AskFirst,
+        }
+    }
+
+    fn label(self, language: Language) -> &'static str {
+        match self {
+            Self::AskFirst => tr(language, TranslationKey::ValueAskFirst),
+            Self::OpenDirectly => tr(language, TranslationKey::ValueOpenDirectly),
         }
     }
 }
@@ -142,6 +164,8 @@ pub struct OxideMdApp {
     search_matches: Vec<SearchMatch>,
     active_search_index: Option<usize>,
     focus_search_input: bool,
+    external_link_behavior: ExternalLinkBehavior,
+    pending_external_link: Option<String>,
     pending_render_measurement: Option<PendingRenderMeasurement>,
     block_height_cache: BlockHeightCache,
     startup_started: Option<Instant>,
@@ -181,6 +205,8 @@ impl OxideMdApp {
             search_matches: Vec::new(),
             active_search_index: None,
             focus_search_input: false,
+            external_link_behavior: ExternalLinkBehavior::AskFirst,
+            pending_external_link: None,
             pending_render_measurement: None,
             block_height_cache: BlockHeightCache::new(),
             startup_started: Some(startup_started),
@@ -218,6 +244,10 @@ impl OxideMdApp {
 
     fn switch_theme(&mut self) {
         self.theme_id = self.theme_id.next();
+    }
+
+    fn switch_external_link_behavior(&mut self) {
+        self.external_link_behavior = self.external_link_behavior.next();
     }
 
     fn current_theme_label(&self) -> &'static str {
@@ -473,6 +503,57 @@ impl OxideMdApp {
 
         self.pending_reload_at = None;
         self.enqueue_reload(path);
+    }
+
+    fn handle_external_link_click(&mut self, ctx: &egui::Context, url: String) {
+        match self.external_link_behavior {
+            ExternalLinkBehavior::AskFirst => {
+                self.pending_external_link = Some(url);
+            }
+            ExternalLinkBehavior::OpenDirectly => {
+                open_external_link(ctx, url);
+            }
+        }
+    }
+
+    fn render_external_link_confirmation(&mut self, ctx: &egui::Context) {
+        let Some(url) = self.pending_external_link.clone() else {
+            return;
+        };
+
+        let mut open_link = false;
+        let mut cancel = false;
+
+        egui::Window::new(tr(self.language, TranslationKey::MessageExternalLinkPrompt))
+            .collapsible(false)
+            .resizable(false)
+            .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
+            .show(ctx, |ui| {
+                ui.label(url.as_str());
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    if ui
+                        .button(tr(self.language, TranslationKey::ActionOpenExternalLink))
+                        .clicked()
+                    {
+                        open_link = true;
+                    }
+
+                    if ui
+                        .button(tr(self.language, TranslationKey::ActionCancel))
+                        .clicked()
+                    {
+                        cancel = true;
+                    }
+                });
+            });
+
+        if open_link {
+            self.pending_external_link = None;
+            open_external_link(ctx, url);
+        } else if cancel {
+            self.pending_external_link = None;
+        }
     }
 
     fn enqueue_reload(&mut self, path: PathBuf) {
@@ -915,6 +996,17 @@ impl OxideMdApp {
                     self.switch_theme();
                 }
 
+                if ui
+                    .button(format!(
+                        "{} {}",
+                        tr(self.language, TranslationKey::LabelExternalLinks),
+                        self.external_link_behavior.label(self.language)
+                    ))
+                    .clicked()
+                {
+                    self.switch_external_link_behavior();
+                }
+
                 ui.separator();
                 let current_file_label = format!(
                     "{} {}",
@@ -1209,6 +1301,10 @@ impl OxideMdApp {
                     ctx.request_repaint();
                 }
 
+                if let Some(url) = render_outcome.clicked_external_link {
+                    self.handle_external_link_click(ctx, url);
+                }
+
                 if render_outcome.needs_scroll_stabilization {
                     ctx.request_repaint();
                 } else if render_outcome.did_scroll {
@@ -1294,6 +1390,7 @@ impl eframe::App for OxideMdApp {
         self.render_bottom_bar(ctx);
         self.render_heading_panel(ctx);
         self.render_document_panel(ctx);
+        self.render_external_link_confirmation(ctx);
         self.render_drop_overlay(ctx);
     }
 }
@@ -1321,6 +1418,10 @@ fn active_search_query(search_query: &str) -> Option<&str> {
     } else {
         Some(trimmed)
     }
+}
+
+fn open_external_link(ctx: &egui::Context, url: String) {
+    ctx.open_url(egui::OpenUrl::new_tab(url));
 }
 
 fn heading_nav_indent(level: pulldown_cmark::HeadingLevel) -> f32 {
