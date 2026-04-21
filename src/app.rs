@@ -61,6 +61,7 @@ const HEADING_NAV_ITEM_INDENT: f32 = 10.0;
 const PREVIEW_WINDOW_SIDE_PADDING: f32 = 32.0;
 const PREVIEW_WINDOW_FALLBACK_HEIGHT: f32 = 720.0;
 const PREVIEW_WINDOW_MONITOR_MARGIN: f32 = 80.0;
+const TOP_BAR_FILE_LABEL_MAX_WIDTH: f32 = 280.0;
 
 pub struct OxideMdApp {
     ui_context: egui::Context,
@@ -839,11 +840,19 @@ impl OxideMdApp {
                 }
 
                 ui.separator();
-                ui.label(format!(
+                let current_file_label = format!(
                     "{} {}",
                     tr(self.language, TranslationKey::LabelCurrentFile),
                     self.current_file_label()
-                ));
+                );
+                let file_label_response = ui.add_sized(
+                    [TOP_BAR_FILE_LABEL_MAX_WIDTH, ui.spacing().interact_size.y],
+                    egui::Label::new(current_file_label).truncate(),
+                );
+
+                if let Some(path) = &self.current_file {
+                    file_label_response.on_hover_text(path.display().to_string());
+                }
 
                 ui.separator();
                 let (status_bg, status_text) = match self.reload_status {
@@ -919,6 +928,10 @@ impl OxideMdApp {
 
                 let headings = document.headings();
                 if headings.is_empty() {
+                    ui.label(
+                        RichText::new(tr(self.language, TranslationKey::NavNoSections))
+                            .color(theme(self.theme_id).text_secondary),
+                    );
                     return;
                 }
 
@@ -981,6 +994,13 @@ impl OxideMdApp {
                     );
                     ui.add_space(12.0);
                     ui.label(tr(self.language, TranslationKey::MessageOpenPrompt));
+                    ui.add_space(16.0);
+                    if ui
+                        .button(tr(self.language, TranslationKey::ActionOpen))
+                        .clicked()
+                    {
+                        self.open_markdown_file();
+                    }
                 });
                 return;
             };
