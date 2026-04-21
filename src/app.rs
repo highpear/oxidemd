@@ -62,6 +62,7 @@ const PREVIEW_WINDOW_SIDE_PADDING: f32 = 32.0;
 const PREVIEW_WINDOW_FALLBACK_HEIGHT: f32 = 720.0;
 const PREVIEW_WINDOW_MONITOR_MARGIN: f32 = 80.0;
 const TOP_BAR_FILE_LABEL_MAX_WIDTH: f32 = 280.0;
+const ZOOM_STEP_BUTTON_WIDTH: f32 = 28.0;
 
 pub struct OxideMdApp {
     ui_context: egui::Context,
@@ -893,12 +894,32 @@ impl OxideMdApp {
                         self.reset_zoom();
                     }
 
+                    if ui
+                        .add_enabled(
+                            self.zoom_factor < MAX_ZOOM_FACTOR,
+                            egui::Button::new("+").min_size(Vec2::splat(ZOOM_STEP_BUTTON_WIDTH)),
+                        )
+                        .clicked()
+                    {
+                        self.zoom_in();
+                    }
+
                     let slider =
                         Slider::new(&mut self.zoom_factor, MIN_ZOOM_FACTOR..=MAX_ZOOM_FACTOR)
                             .show_value(false)
                             .step_by(ZOOM_STEP.into())
                             .smart_aim(false);
                     ui.add_sized([160.0, 0.0], slider);
+
+                    if ui
+                        .add_enabled(
+                            self.zoom_factor > MIN_ZOOM_FACTOR,
+                            egui::Button::new("-").min_size(Vec2::splat(ZOOM_STEP_BUTTON_WIDTH)),
+                        )
+                        .clicked()
+                    {
+                        self.zoom_out();
+                    }
 
                     ui.label(format!("{:.0}%", self.zoom_percent()));
                 });
