@@ -1,6 +1,7 @@
 mod app;
 mod code_block;
 mod document_loader;
+mod export;
 mod i18n;
 mod image_cache;
 mod metrics;

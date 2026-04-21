@@ -251,7 +251,7 @@ Goal: consider future extensions without committing too early.
 * [ ] Multiple tabs
 * [x] Session restore
 * [x] Recent files
-* [ ] Export options
+* [x] Export options
 * [ ] Optional CLI mode
 
 Exit criteria:

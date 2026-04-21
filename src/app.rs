@@ -9,6 +9,7 @@ use eframe::egui::{
 use rfd::FileDialog;
 
 use crate::document_loader::{DocumentFingerprint, FileSnapshot, load_markdown_document};
+use crate::export::write_html_export;
 use crate::i18n::{Language, TranslationKey, tr};
 use crate::image_cache::ImageCache;
 use crate::metrics;
@@ -360,6 +361,32 @@ impl OxideMdApp {
 
         if let Some(path) = selected_file {
             self.load_selected_file(path);
+        }
+    }
+
+    fn export_current_file_as_html(&mut self) {
+        let Some(source_path) = self.current_file.clone() else {
+            self.set_status_message(tr(self.language, TranslationKey::StatusNoFile));
+            return;
+        };
+
+        let default_name = export_file_name(&source_path);
+        let Some(output_path) = FileDialog::new()
+            .add_filter("HTML", &["html", "htm"])
+            .set_file_name(&default_name)
+            .save_file()
+        else {
+            return;
+        };
+
+        match write_html_export(&source_path, &output_path) {
+            Ok(()) => {
+                self.reload_status = ReloadStatus::Idle;
+                self.set_status_with_path(TranslationKey::StatusExported, &output_path);
+            }
+            Err(error) => {
+                self.set_reload_error(TranslationKey::StatusExportFailed, error);
+            }
         }
     }
 
@@ -1098,6 +1125,18 @@ impl OxideMdApp {
                     self.open_recent_file(path);
                 }
 
+                ui.add_enabled_ui(self.current_file.is_some(), |ui| {
+                    ui.menu_button(tr(self.language, TranslationKey::LabelExport), |ui| {
+                        if ui
+                            .button(tr(self.language, TranslationKey::ActionExportHtml))
+                            .clicked()
+                        {
+                            self.export_current_file_as_html();
+                            ui.close();
+                        }
+                    });
+                });
+
                 if ui
                     .button(tr(self.language, TranslationKey::ActionSwitchLanguage))
                     .clicked()
@@ -1615,6 +1654,16 @@ fn recent_file_label(path: &Path) -> String {
         .and_then(|name| name.to_str())
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| path.display().to_string())
+}
+
+fn export_file_name(path: &Path) -> String {
+    let stem = path
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .unwrap_or("export");
+
+    format!("{}.html", stem)
 }
 
 fn recent_files_from_storage_value(value: &str) -> Vec<PathBuf> {
