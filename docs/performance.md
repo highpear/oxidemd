@@ -169,3 +169,22 @@ Result:
 Conclusion:
 
 - TOC virtualization helps a little on the 5 MiB benchmark, but the main remaining cost is still document body rendering.
+
+### 2026-04-21: Virtualize Document Body Rendering
+
+Change:
+
+- Skip rendering document blocks far outside the visible viewport for large documents.
+- Add estimated vertical space for skipped blocks so scrolling still covers the full document.
+- Keep the selected scroll target rendered so heading and search navigation can still jump to a block.
+
+Result:
+
+- 1 MiB first render after load: 154 ms -> 20 ms
+- 1 MiB first render after reload: 111 ms -> 1 ms
+- 5 MiB first render after load: 768 ms -> 23 ms
+- 5 MiB first render after reload: 604 ms -> 4 ms
+
+Conclusion:
+
+- First-render cost is no longer dominated by building UI for every block. The next large-file work should focus on validating scroll accuracy and reducing memory copies where useful.
