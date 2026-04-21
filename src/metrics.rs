@@ -40,6 +40,23 @@ pub fn log_reload_skipped(path: &Path, timing: &DocumentTiming) {
     );
 }
 
+pub fn log_document_render(
+    reason: &str,
+    path: &Path,
+    duration: Duration,
+    block_count: usize,
+    heading_count: usize,
+) {
+    eprintln!(
+        "[perf] render_after_{}: {} ms, {} blocks, {} headings ({})",
+        reason,
+        duration.as_millis(),
+        block_count,
+        heading_count,
+        path.display()
+    );
+}
+
 fn format_byte_len(byte_len: usize) -> String {
     const KIB: f64 = 1024.0;
     const MIB: f64 = KIB * 1024.0;

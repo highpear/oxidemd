@@ -154,13 +154,24 @@ foreach ($sizeMiB in $SizesMiB) {
             -Pattern "\[perf\] initial_load:" `
             -PreviousCount 0 `
             -TimeoutSeconds $TimeoutSeconds
+        $renderAfterLoad = Wait-ForPerfLine `
+            -LogPath $stderrPath `
+            -Pattern "\[perf\] render_after_load:" `
+            -PreviousCount 0 `
+            -TimeoutSeconds $TimeoutSeconds
 
         $reloadCount = Count-PerfLines -LogPath $stderrPath -Pattern "\[perf\] reload:"
+        $renderAfterReloadCount = Count-PerfLines -LogPath $stderrPath -Pattern "\[perf\] render_after_reload:"
         Append-ReloadChange -Path $fixturePath
         $reload = Wait-ForPerfLine `
             -LogPath $stderrPath `
             -Pattern "\[perf\] reload:" `
             -PreviousCount $reloadCount `
+            -TimeoutSeconds $TimeoutSeconds
+        $renderAfterReload = Wait-ForPerfLine `
+            -LogPath $stderrPath `
+            -Pattern "\[perf\] render_after_reload:" `
+            -PreviousCount $renderAfterReloadCount `
             -TimeoutSeconds $TimeoutSeconds
 
         $skippedCount = Count-PerfLines -LogPath $stderrPath -Pattern "\[perf\] reload_skipped:"
@@ -172,7 +183,9 @@ foreach ($sizeMiB in $SizesMiB) {
             -TimeoutSeconds $TimeoutSeconds
 
         Write-Host $initialLoad
+        Write-Host $renderAfterLoad
         Write-Host $reload
+        Write-Host $renderAfterReload
         Write-Host $skippedReload
         Write-Host "Log: $stderrPath"
     }

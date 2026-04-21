@@ -221,6 +221,7 @@ Goal: keep the app usable with larger Markdown files.
 * [x] Add helper script for baseline performance measurement
 * [x] Record baseline performance results for 1 MiB and 5 MiB Markdown files
 * [x] Identify the first measured bottleneck
+* [x] Add lightweight render timing after load and reload
 * [ ] Reduce memory copies where useful
 * [ ] Improve incremental reload behavior if needed
 
@@ -264,7 +265,7 @@ Exit criteria:
 
 ## Current Priority
 
-1. Measure performance on large documents
+1. Reduce first-render cost for large documents
 2. Reduce memory copies where useful
 3. Improve incremental reload behavior if needed
 4. Evaluate whether the static i18n table should stay or move to external resources later
