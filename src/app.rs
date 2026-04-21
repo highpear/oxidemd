@@ -72,6 +72,21 @@ impl ExternalLinkBehavior {
             Self::OpenDirectly => tr(language, TranslationKey::ValueOpenDirectly),
         }
     }
+
+    fn storage_value(self) -> &'static str {
+        match self {
+            Self::AskFirst => "ask",
+            Self::OpenDirectly => "open",
+        }
+    }
+
+    fn from_storage_value(value: &str) -> Option<Self> {
+        match value {
+            "ask" => Some(Self::AskFirst),
+            "open" => Some(Self::OpenDirectly),
+            _ => None,
+        }
+    }
 }
 
 impl BlockHeightCache {
@@ -138,6 +153,11 @@ const PREVIEW_WINDOW_FALLBACK_HEIGHT: f32 = 720.0;
 const PREVIEW_WINDOW_MONITOR_MARGIN: f32 = 80.0;
 const TOP_BAR_FILE_LABEL_MAX_WIDTH: f32 = 280.0;
 const ZOOM_STEP_BUTTON_WIDTH: f32 = 28.0;
+const STORAGE_KEY_LANGUAGE: &str = "oxidemd.language";
+const STORAGE_KEY_THEME: &str = "oxidemd.theme";
+const STORAGE_KEY_ZOOM: &str = "oxidemd.zoom";
+const STORAGE_KEY_EXTERNAL_LINKS: &str = "oxidemd.external_links";
+const STORAGE_KEY_CURRENT_FILE: &str = "oxidemd.current_file";
 
 pub struct OxideMdApp {
     ui_context: egui::Context,
@@ -174,6 +194,7 @@ pub struct OxideMdApp {
 impl OxideMdApp {
     pub fn new(
         ui_context: egui::Context,
+        storage: Option<&dyn eframe::Storage>,
         startup_started: Instant,
         initial_file: Option<PathBuf>,
     ) -> Self {
@@ -212,11 +233,51 @@ impl OxideMdApp {
             startup_started: Some(startup_started),
         };
 
-        if let Some(path) = initial_file {
+        let restored_file = app.restore_session(storage);
+        apply_theme(&app.ui_context, &theme(app.theme_id));
+
+        if let Some(path) = initial_file.or(restored_file) {
             app.load_initial_file(path);
         }
 
         app
+    }
+
+    fn restore_session(&mut self, storage: Option<&dyn eframe::Storage>) -> Option<PathBuf> {
+        let storage = storage?;
+
+        if let Some(language) = storage
+            .get_string(STORAGE_KEY_LANGUAGE)
+            .and_then(|value| language_from_storage_value(&value))
+        {
+            self.language = language;
+        }
+
+        if let Some(theme_id) = storage
+            .get_string(STORAGE_KEY_THEME)
+            .and_then(|value| theme_id_from_storage_value(&value))
+        {
+            self.theme_id = theme_id;
+        }
+
+        if let Some(zoom_factor) = storage
+            .get_string(STORAGE_KEY_ZOOM)
+            .and_then(|value| value.parse::<f32>().ok())
+        {
+            self.zoom_factor = zoom_factor.clamp(MIN_ZOOM_FACTOR, MAX_ZOOM_FACTOR);
+        }
+
+        if let Some(external_link_behavior) = storage
+            .get_string(STORAGE_KEY_EXTERNAL_LINKS)
+            .and_then(|value| ExternalLinkBehavior::from_storage_value(&value))
+        {
+            self.external_link_behavior = external_link_behavior;
+        }
+
+        storage
+            .get_string(STORAGE_KEY_CURRENT_FILE)
+            .map(PathBuf::from)
+            .filter(|path| path.is_file() && is_markdown_path(path))
     }
 
     fn load_initial_file(&mut self, path: PathBuf) {
@@ -1372,6 +1433,28 @@ impl OxideMdApp {
 }
 
 impl eframe::App for OxideMdApp {
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        storage.set_string(
+            STORAGE_KEY_LANGUAGE,
+            language_storage_value(self.language).to_owned(),
+        );
+        storage.set_string(
+            STORAGE_KEY_THEME,
+            theme_id_storage_value(self.theme_id).to_owned(),
+        );
+        storage.set_string(STORAGE_KEY_ZOOM, self.zoom_factor.to_string());
+        storage.set_string(
+            STORAGE_KEY_EXTERNAL_LINKS,
+            self.external_link_behavior.storage_value().to_owned(),
+        );
+
+        if let Some(path) = &self.current_file {
+            storage.set_string(STORAGE_KEY_CURRENT_FILE, path.display().to_string());
+        } else {
+            storage.set_string(STORAGE_KEY_CURRENT_FILE, String::new());
+        }
+    }
+
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if let Some(startup_started) = self.startup_started.take() {
             metrics::log_startup(startup_started.elapsed());
@@ -1422,6 +1505,38 @@ fn active_search_query(search_query: &str) -> Option<&str> {
 
 fn open_external_link(ctx: &egui::Context, url: String) {
     ctx.open_url(egui::OpenUrl::new_tab(url));
+}
+
+fn language_storage_value(language: Language) -> &'static str {
+    match language {
+        Language::En => "en",
+        Language::Ja => "ja",
+    }
+}
+
+fn language_from_storage_value(value: &str) -> Option<Language> {
+    match value {
+        "en" => Some(Language::En),
+        "ja" => Some(Language::Ja),
+        _ => None,
+    }
+}
+
+fn theme_id_storage_value(theme_id: ThemeId) -> &'static str {
+    match theme_id {
+        ThemeId::WarmPaper => "warm_paper",
+        ThemeId::Mist => "mist",
+        ThemeId::NightOwl => "night_owl",
+    }
+}
+
+fn theme_id_from_storage_value(value: &str) -> Option<ThemeId> {
+    match value {
+        "warm_paper" => Some(ThemeId::WarmPaper),
+        "mist" => Some(ThemeId::Mist),
+        "night_owl" => Some(ThemeId::NightOwl),
+        _ => None,
+    }
 }
 
 fn heading_nav_indent(level: pulldown_cmark::HeadingLevel) -> f32 {

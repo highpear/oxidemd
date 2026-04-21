@@ -248,7 +248,7 @@ Goal: consider future extensions without committing too early.
 * [x] External link opening behavior options
 * [x] Drag and drop file open
 * [ ] Multiple tabs
-* [ ] Session restore
+* [x] Session restore
 * [ ] Export options
 * [ ] Optional CLI mode
 

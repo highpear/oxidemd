@@ -30,6 +30,7 @@ fn main() -> eframe::Result<()> {
     let initial_file = env::args_os().nth(1).map(PathBuf::from);
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
+            .with_app_id("oxidemd")
             .with_inner_size(Vec2::new(INITIAL_WINDOW_WIDTH, INITIAL_WINDOW_HEIGHT)),
         ..Default::default()
     };
@@ -42,6 +43,7 @@ fn main() -> eframe::Result<()> {
             apply_theme(&cc.egui_ctx, &theme(DEFAULT_THEME_ID));
             Ok(Box::new(OxideMdApp::new(
                 cc.egui_ctx.clone(),
+                cc.storage,
                 startup_started,
                 initial_file,
             )))
