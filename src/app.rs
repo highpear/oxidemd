@@ -1165,6 +1165,19 @@ impl OxideMdApp {
         }
 
         let theme = theme(self.theme_id);
+        let viewport_rect = ctx.content_rect();
+        let overlay_color = if theme.is_dark {
+            egui::Color32::from_rgba_unmultiplied(8, 12, 18, 150)
+        } else {
+            egui::Color32::from_rgba_unmultiplied(255, 255, 255, 150)
+        };
+
+        let painter = ctx.layer_painter(egui::LayerId::new(
+            egui::Order::Foreground,
+            egui::Id::new("drop_markdown_overlay_background"),
+        ));
+        painter.rect_filled(viewport_rect, 0.0, overlay_color);
+
         egui::Area::new(egui::Id::new("drop_markdown_overlay"))
             .order(egui::Order::Foreground)
             .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
