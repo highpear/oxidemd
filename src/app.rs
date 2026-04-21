@@ -582,6 +582,8 @@ impl OxideMdApp {
         let next_search = ctx.input_mut(|input| {
             input.consume_shortcut(&KeyboardShortcut::new(Modifiers::NONE, Key::F3))
         });
+        let next_search_from_enter = !self.search_matches.is_empty()
+            && ctx.input_mut(|input| input.consume_key(Modifiers::NONE, Key::Enter));
         let previous_search = ctx.input_mut(|input| {
             input.consume_shortcut(&KeyboardShortcut::new(Modifiers::SHIFT, Key::F3))
         });
@@ -618,7 +620,7 @@ impl OxideMdApp {
             self.select_previous_search_match();
         }
 
-        if next_search {
+        if next_search || next_search_from_enter {
             self.select_next_search_match();
         }
 
