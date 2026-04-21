@@ -40,6 +40,7 @@ Current capabilities:
 - Copy fenced code block contents
 - Copy the current file path
 - Export the current Markdown file as HTML
+- Export Markdown as HTML from the command line
 - Restore the last session settings and file
 - Reopen recently opened Markdown files
 
@@ -114,3 +115,17 @@ Shared manual test files live in `samples/`.
 Use `samples/long-form.md` to test longer reading flows such as heading navigation, zoom, theme changes, and live reload on a larger document.
 
 Performance measurement notes live in `docs/performance.md`.
+
+## Command Line
+
+Open a Markdown file in the viewer:
+
+```powershell
+oxidemd path\to\file.md
+```
+
+Export Markdown as a standalone HTML file without opening the GUI:
+
+```powershell
+oxidemd --export-html path\to\input.md path\to\output.html
+```

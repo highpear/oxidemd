@@ -253,7 +253,7 @@ Goal: consider future extensions without committing too early.
 * [x] Recent files
 * [x] Copy current file path
 * [x] Export options
-* [ ] Optional CLI mode
+* [x] Optional CLI mode
 
 Exit criteria:
 
