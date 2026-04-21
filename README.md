@@ -38,6 +38,7 @@ Current capabilities:
 - Syntax highlighting for fenced code blocks
 - Copy fenced code block contents
 - Restore the last session settings and file
+- Reopen recently opened Markdown files
 
 Currently supported Markdown elements:
 

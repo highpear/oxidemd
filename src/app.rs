@@ -153,11 +153,13 @@ const PREVIEW_WINDOW_FALLBACK_HEIGHT: f32 = 720.0;
 const PREVIEW_WINDOW_MONITOR_MARGIN: f32 = 80.0;
 const TOP_BAR_FILE_LABEL_MAX_WIDTH: f32 = 280.0;
 const ZOOM_STEP_BUTTON_WIDTH: f32 = 28.0;
+const MAX_RECENT_FILES: usize = 8;
 const STORAGE_KEY_LANGUAGE: &str = "oxidemd.language";
 const STORAGE_KEY_THEME: &str = "oxidemd.theme";
 const STORAGE_KEY_ZOOM: &str = "oxidemd.zoom";
 const STORAGE_KEY_EXTERNAL_LINKS: &str = "oxidemd.external_links";
 const STORAGE_KEY_CURRENT_FILE: &str = "oxidemd.current_file";
+const STORAGE_KEY_RECENT_FILES: &str = "oxidemd.recent_files";
 
 pub struct OxideMdApp {
     ui_context: egui::Context,
@@ -165,6 +167,7 @@ pub struct OxideMdApp {
     theme_id: ThemeId,
     zoom_factor: f32,
     current_file: Option<PathBuf>,
+    recent_files: Vec<PathBuf>,
     document: Option<Arc<MarkdownDocument>>,
     document_fingerprint: Option<DocumentFingerprint>,
     document_file_snapshot: Option<FileSnapshot>,
@@ -208,6 +211,7 @@ impl OxideMdApp {
             theme_id: DEFAULT_THEME_ID,
             zoom_factor: DEFAULT_ZOOM_FACTOR,
             current_file: None,
+            recent_files: Vec::new(),
             document: None,
             document_fingerprint: None,
             document_file_snapshot: None,
@@ -272,6 +276,10 @@ impl OxideMdApp {
             .and_then(|value| ExternalLinkBehavior::from_storage_value(&value))
         {
             self.external_link_behavior = external_link_behavior;
+        }
+
+        if let Some(recent_files) = storage.get_string(STORAGE_KEY_RECENT_FILES) {
+            self.recent_files = recent_files_from_storage_value(&recent_files);
         }
 
         storage
@@ -353,6 +361,19 @@ impl OxideMdApp {
         }
     }
 
+    fn open_recent_file(&mut self, path: PathBuf) {
+        if path.is_file() && is_markdown_path(&path) {
+            self.load_selected_file(path);
+            return;
+        }
+
+        self.recent_files.retain(|recent_path| recent_path != &path);
+        self.set_reload_error(
+            TranslationKey::MessageRecentFileUnavailable,
+            path.display().to_string(),
+        );
+    }
+
     fn handle_file_drops(&mut self, ctx: &egui::Context) {
         let dropped_paths: Vec<PathBuf> = ctx.input(|input| {
             input
@@ -395,6 +416,7 @@ impl OxideMdApp {
                 let document = loaded.document;
                 let active_heading = document.headings().first().map(|item| item.block_index);
                 self.current_file = Some(path.clone());
+                self.remember_recent_file(&path);
                 self.document = Some(document);
                 self.document_fingerprint = Some(loaded.fingerprint);
                 self.document_file_snapshot = loaded.file_snapshot;
@@ -435,6 +457,14 @@ impl OxideMdApp {
                 self.set_reload_error(TranslationKey::StatusLoadFailed, error);
             }
         }
+    }
+
+    fn remember_recent_file(&mut self, path: &Path) {
+        let path = path.to_path_buf();
+        self.recent_files
+            .retain(|recent_path| recent_path != &path && recent_path.is_file());
+        self.recent_files.insert(0, path);
+        self.recent_files.truncate(MAX_RECENT_FILES);
     }
 
     fn start_watching_file(&mut self, path: &Path) {
@@ -1039,6 +1069,27 @@ impl OxideMdApp {
                     self.open_markdown_file();
                 }
 
+                let mut selected_recent_file = None;
+                ui.add_enabled_ui(!self.recent_files.is_empty(), |ui| {
+                    ui.menu_button(tr(self.language, TranslationKey::LabelRecentFiles), |ui| {
+                        for path in self.recent_files.iter().cloned() {
+                            let label = recent_file_label(&path);
+                            if ui
+                                .button(label)
+                                .on_hover_text(path.display().to_string())
+                                .clicked()
+                            {
+                                selected_recent_file = Some(path);
+                                ui.close();
+                            }
+                        }
+                    });
+                });
+
+                if let Some(path) = selected_recent_file {
+                    self.open_recent_file(path);
+                }
+
                 if ui
                     .button(tr(self.language, TranslationKey::ActionSwitchLanguage))
                     .clicked()
@@ -1453,6 +1504,11 @@ impl eframe::App for OxideMdApp {
         } else {
             storage.set_string(STORAGE_KEY_CURRENT_FILE, String::new());
         }
+
+        storage.set_string(
+            STORAGE_KEY_RECENT_FILES,
+            recent_files_storage_value(&self.recent_files),
+        );
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
@@ -1492,6 +1548,38 @@ fn status_path_label(path: &Path) -> String {
         .and_then(|name| name.to_str())
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| path.display().to_string())
+}
+
+fn recent_file_label(path: &Path) -> String {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| path.display().to_string())
+}
+
+fn recent_files_from_storage_value(value: &str) -> Vec<PathBuf> {
+    let mut recent_files = Vec::new();
+
+    for path in value.lines().map(PathBuf::from) {
+        if recent_files.len() >= MAX_RECENT_FILES {
+            break;
+        }
+
+        if path.is_file() && is_markdown_path(&path) && !recent_files.contains(&path) {
+            recent_files.push(path);
+        }
+    }
+
+    recent_files
+}
+
+fn recent_files_storage_value(recent_files: &[PathBuf]) -> String {
+    recent_files
+        .iter()
+        .take(MAX_RECENT_FILES)
+        .map(|path| path.display().to_string())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn active_search_query(search_query: &str) -> Option<&str> {
