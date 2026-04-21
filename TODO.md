@@ -44,7 +44,7 @@ Exit criteria:
 - [x] Add i18n module
 - [x] Replace hardcoded UI strings
 - [x] Add language switch (basic)
-- [ ] Evaluate whether the static i18n table should stay or move to external resources later
+- [x] Evaluate whether the static i18n table should stay or move to external resources later
 
 ---
 
@@ -272,5 +272,5 @@ Exit criteria:
 1. Reduce first-render cost for large documents
 2. Reduce memory copies where useful
 3. Improve incremental reload behavior if needed
-4. Evaluate whether the static i18n table should stay or move to external resources later
+4. Continue viewer polish and reliability improvements
 ---
