@@ -7,6 +7,7 @@ use crate::code_block::render_code_block;
 use crate::i18n::{Language, TranslationKey, tr};
 use crate::image_cache::{ImageCache, ImageLoadState};
 use crate::parser::{Block, InlineContent, InlineSpan, MarkdownDocument};
+use crate::search::{split_highlighted_segments, text_matches_query};
 use crate::theme::Theme;
 
 const BODY_TEXT_SIZE: f32 = 17.0;
@@ -1099,78 +1100,15 @@ fn scale_margin(value: i8, zoom_factor: f32) -> i8 {
         .clamp(0.0, i8::MAX as f32) as i8
 }
 
-struct HighlightSegment<'a> {
-    text: &'a str,
-    is_match: bool,
-}
-
-fn split_highlighted_segments<'a>(
-    text: &'a str,
-    search_query: Option<&str>,
-) -> Vec<HighlightSegment<'a>> {
-    let Some(query) = normalized_search_query(search_query) else {
-        return vec![HighlightSegment {
-            text,
-            is_match: false,
-        }];
-    };
-
-    let normalized_text = text.to_lowercase();
-    let mut segments = Vec::new();
-    let mut current_start = 0usize;
-    let mut search_start = 0usize;
-
-    while let Some(relative_match_start) = normalized_text[search_start..].find(query) {
-        let match_start = search_start + relative_match_start;
-        let match_end = match_start + query.len();
-
-        if current_start < match_start {
-            segments.push(HighlightSegment {
-                text: &text[current_start..match_start],
-                is_match: false,
-            });
-        }
-
-        segments.push(HighlightSegment {
-            text: &text[match_start..match_end],
-            is_match: true,
-        });
-
-        current_start = match_end;
-        search_start = match_end;
-    }
-
-    if current_start < text.len() {
-        segments.push(HighlightSegment {
-            text: &text[current_start..],
-            is_match: false,
-        });
-    }
-
-    if segments.is_empty() {
-        vec![HighlightSegment {
-            text,
-            is_match: false,
-        }]
-    } else {
-        segments
-    }
-}
-
-fn normalized_search_query(search_query: Option<&str>) -> Option<&str> {
-    search_query
-        .map(str::trim)
-        .filter(|query| !query.is_empty())
-}
-
 fn search_highlight_for_text(
     text: &str,
     theme: &Theme,
     search_query: Option<&str>,
 ) -> egui::Color32 {
-    match normalized_search_query(search_query) {
-        Some(query) if text.to_lowercase().contains(query) => search_highlight_color(theme),
-        _ => egui::Color32::TRANSPARENT,
+    if text_matches_query(text, search_query) {
+        search_highlight_color(theme)
+    } else {
+        egui::Color32::TRANSPARENT
     }
 }
 
