@@ -75,6 +75,7 @@ pub struct OxideMdApp {
     document_file_snapshot: Option<FileSnapshot>,
     image_cache: ImageCache,
     status_message: String,
+    status_hover_message: Option<String>,
     reload_status: ReloadStatus,
     reload_worker: ReloadWorkerHandle,
     watcher: Option<FileWatcherHandle>,
@@ -113,6 +114,7 @@ impl OxideMdApp {
             document_file_snapshot: None,
             image_cache: ImageCache::new(),
             status_message: tr(language, TranslationKey::StatusNoFile).to_owned(),
+            status_hover_message: None,
             reload_status: ReloadStatus::Idle,
             watcher: None,
             pending_reload_at: None,
@@ -155,7 +157,7 @@ impl OxideMdApp {
         };
 
         if self.current_file.is_none() {
-            self.status_message = tr(self.language, TranslationKey::StatusNoFile).to_owned();
+            self.set_status_message(tr(self.language, TranslationKey::StatusNoFile));
         }
     }
 
@@ -265,7 +267,7 @@ impl OxideMdApp {
                 });
                 self.request_window_expansion_for_preview();
                 metrics::log_initial_load(&path, &loaded.timing);
-                self.status_message = self.status_with_path(TranslationKey::StatusLoaded, &path);
+                self.set_status_with_path(TranslationKey::StatusLoaded, &path);
             }
             Err(error) => {
                 self.document = None;
@@ -404,7 +406,7 @@ impl OxideMdApp {
 
     fn request_manual_reload(&mut self) {
         let Some(path) = self.current_file.clone() else {
-            self.status_message = tr(self.language, TranslationKey::StatusNoFile).to_owned();
+            self.set_status_message(tr(self.language, TranslationKey::StatusNoFile));
             return;
         };
 
@@ -506,7 +508,7 @@ impl OxideMdApp {
         });
         self.reload_status = ReloadStatus::Idle;
         metrics::log_reload(&path, &timing);
-        self.status_message = self.status_with_path(TranslationKey::StatusReloaded, &path);
+        self.set_status_with_path(TranslationKey::StatusReloaded, &path);
     }
 
     fn finish_reload_unchanged(
@@ -521,35 +523,48 @@ impl OxideMdApp {
         self.document_file_snapshot = file_snapshot;
         self.reload_status = ReloadStatus::Idle;
         metrics::log_reload_skipped(&path, &timing);
-        self.status_message = self.status_with_path(TranslationKey::StatusReloadSkipped, &path);
+        self.set_status_with_path(TranslationKey::StatusReloadSkipped, &path);
     }
 
     fn finish_reload_error(&mut self, path: PathBuf, error: String) {
         self.in_flight_reload_id = None;
         self.reload_status = ReloadStatus::Error;
+        let display_path = status_path_label(&path);
         self.status_message = format!(
+            "{} {} ({})",
+            tr(self.language, TranslationKey::StatusReloadFailed),
+            display_path,
+            error
+        );
+        self.status_hover_message = Some(format!(
             "{} {} ({})",
             tr(self.language, TranslationKey::StatusReloadFailed),
             path.display(),
             error
-        );
+        ));
     }
 
     fn set_reload_in_progress(&mut self, key: TranslationKey, path: Option<&Path>) {
         self.reload_status = ReloadStatus::Reloading;
-        self.status_message = match path {
-            Some(path) => self.status_with_path(key, path),
-            None => tr(self.language, key).to_owned(),
+        match path {
+            Some(path) => self.set_status_with_path(key, path),
+            None => self.set_status_message(tr(self.language, key)),
         };
     }
 
     fn set_reload_error(&mut self, key: TranslationKey, error: String) {
         self.reload_status = ReloadStatus::Error;
-        self.status_message = format!("{} {}", tr(self.language, key), error);
+        self.set_status_message(format!("{} {}", tr(self.language, key), error));
     }
 
-    fn status_with_path(&self, key: TranslationKey, path: &Path) -> String {
-        format!("{} {}", tr(self.language, key), path.display())
+    fn set_status_message(&mut self, message: impl Into<String>) {
+        self.status_message = message.into();
+        self.status_hover_message = None;
+    }
+
+    fn set_status_with_path(&mut self, key: TranslationKey, path: &Path) {
+        self.status_message = format!("{} {}", tr(self.language, key), status_path_label(path));
+        self.status_hover_message = Some(format!("{} {}", tr(self.language, key), path.display()));
     }
 
     fn handle_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
@@ -877,7 +892,10 @@ impl OxideMdApp {
                     });
             });
 
-            ui.label(&self.status_message);
+            let status_response = ui.add(egui::Label::new(self.status_message.as_str()).truncate());
+            if let Some(message) = &self.status_hover_message {
+                status_response.on_hover_text(message);
+            }
         });
     }
 
@@ -1197,6 +1215,13 @@ fn is_markdown_path(path: &Path) -> bool {
             extension.eq_ignore_ascii_case("md") || extension.eq_ignore_ascii_case("markdown")
         })
         .unwrap_or(false)
+}
+
+fn status_path_label(path: &Path) -> String {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| path.display().to_string())
 }
 
 fn active_search_query(search_query: &str) -> Option<&str> {
