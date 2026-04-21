@@ -36,12 +36,64 @@ struct PendingRenderMeasurement {
     path: PathBuf,
 }
 
+struct BlockHeightCache {
+    fingerprint: Option<DocumentFingerprint>,
+    zoom_factor_bits: u32,
+    content_width_bits: u32,
+    heights: Vec<Option<f32>>,
+}
+
 impl RenderMeasurementReason {
     fn as_log_label(&self) -> &'static str {
         match self {
             RenderMeasurementReason::Load => "load",
             RenderMeasurementReason::Reload => "reload",
         }
+    }
+}
+
+impl BlockHeightCache {
+    fn new() -> Self {
+        Self {
+            fingerprint: None,
+            zoom_factor_bits: 0,
+            content_width_bits: 0,
+            heights: Vec::new(),
+        }
+    }
+
+    fn clear(&mut self) {
+        self.fingerprint = None;
+        self.zoom_factor_bits = 0;
+        self.content_width_bits = 0;
+        self.heights.clear();
+    }
+
+    fn heights_for(
+        &mut self,
+        fingerprint: Option<DocumentFingerprint>,
+        zoom_factor: f32,
+        content_width: f32,
+        block_count: usize,
+    ) -> &mut [Option<f32>] {
+        let zoom_factor_bits = zoom_factor.to_bits();
+        let content_width_bits = content_width.round().to_bits();
+
+        if self.fingerprint != fingerprint
+            || self.zoom_factor_bits != zoom_factor_bits
+            || self.content_width_bits != content_width_bits
+        {
+            self.fingerprint = fingerprint;
+            self.zoom_factor_bits = zoom_factor_bits;
+            self.content_width_bits = content_width_bits;
+            self.heights.clear();
+        }
+
+        if self.heights.len() != block_count {
+            self.heights.resize(block_count, None);
+        }
+
+        &mut self.heights
     }
 }
 
@@ -91,6 +143,7 @@ pub struct OxideMdApp {
     active_search_index: Option<usize>,
     focus_search_input: bool,
     pending_render_measurement: Option<PendingRenderMeasurement>,
+    block_height_cache: BlockHeightCache,
     startup_started: Option<Instant>,
 }
 
@@ -129,6 +182,7 @@ impl OxideMdApp {
             active_search_index: None,
             focus_search_input: false,
             pending_render_measurement: None,
+            block_height_cache: BlockHeightCache::new(),
             startup_started: Some(startup_started),
         };
 
@@ -254,6 +308,7 @@ impl OxideMdApp {
                 self.document_fingerprint = Some(loaded.fingerprint);
                 self.document_file_snapshot = loaded.file_snapshot;
                 self.image_cache.clear();
+                self.block_height_cache.clear();
                 self.pending_reload_at = None;
                 self.in_flight_reload_id = None;
                 self.reload_status = ReloadStatus::Idle;
@@ -275,6 +330,7 @@ impl OxideMdApp {
                 self.document_fingerprint = None;
                 self.document_file_snapshot = None;
                 self.image_cache.clear();
+                self.block_height_cache.clear();
                 self.current_file = None;
                 self.watcher = None;
                 self.pending_reload_at = None;
@@ -502,6 +558,7 @@ impl OxideMdApp {
         self.document_fingerprint = Some(fingerprint);
         self.document_file_snapshot = file_snapshot;
         self.image_cache.clear();
+        self.block_height_cache.clear();
         self.refresh_search_matches();
         self.pending_render_measurement = Some(PendingRenderMeasurement {
             reason: RenderMeasurementReason::Reload,
@@ -1028,7 +1085,7 @@ impl OxideMdApp {
         let theme = theme(self.theme_id);
 
         CentralPanel::default().show(ctx, |ui| {
-            let Some(document) = self.document.as_ref() else {
+            let Some(document) = self.document.clone() else {
                 ui.vertical_centered(|ui| {
                     ui.add_space(48.0);
                     ui.label(
@@ -1108,14 +1165,21 @@ impl OxideMdApp {
                 let render_started = render_measurement.as_ref().map(|_| Instant::now());
                 let block_count = document.blocks.len();
                 let heading_count = document.headings().len();
+                let block_heights = self.block_height_cache.heights_for(
+                    self.document_fingerprint,
+                    self.zoom_factor,
+                    content_width,
+                    block_count,
+                );
                 let render_outcome = render_markdown_document(
                     &mut document_ui,
-                    document,
+                    &document,
                     self.language,
                     &theme,
                     self.zoom_factor,
                     document_base_dir,
                     &mut self.image_cache,
+                    block_heights,
                     self.pending_block_scroll,
                     active_search_query(&self.search_query),
                     active_search_block,
