@@ -46,6 +46,7 @@ pub fn load_markdown_document(path: &Path) -> Result<LoadedMarkdownDocument, Str
             timing: DocumentTiming {
                 total: load_started.elapsed(),
                 parse: Duration::ZERO,
+                byte_len: content.len(),
             },
             fingerprint,
         });
@@ -56,6 +57,7 @@ pub fn load_markdown_document(path: &Path) -> Result<LoadedMarkdownDocument, Str
     let timing = DocumentTiming {
         total: load_started.elapsed(),
         parse: parse_started.elapsed(),
+        byte_len: content.len(),
     };
     store_parsed_document(fingerprint, document.clone());
 
@@ -80,6 +82,7 @@ pub fn reload_markdown_document(
             timing: DocumentTiming {
                 total: load_started.elapsed(),
                 parse: Duration::ZERO,
+                byte_len: content.len(),
             },
         });
     }
@@ -90,6 +93,7 @@ pub fn reload_markdown_document(
             timing: DocumentTiming {
                 total: load_started.elapsed(),
                 parse: Duration::ZERO,
+                byte_len: content.len(),
             },
             fingerprint,
         }));
@@ -100,6 +104,7 @@ pub fn reload_markdown_document(
     let timing = DocumentTiming {
         total: load_started.elapsed(),
         parse: parse_started.elapsed(),
+        byte_len: content.len(),
     };
     store_parsed_document(fingerprint, document.clone());
 
