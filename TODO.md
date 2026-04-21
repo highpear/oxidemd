@@ -185,6 +185,7 @@ Goal: make the viewer pleasant for daily use.
 * [x] Add a dark mode friendly theme
 * [x] Improve spacing and typography
 * [x] Add basic keyboard shortcuts
+* [x] Add keyboard shortcut help
 * [x] Add simple zoom in / zoom out
 
 Exit criteria:

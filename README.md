@@ -35,6 +35,7 @@ Current capabilities:
 - Theme switching and document zoom
 - Table of contents and heading navigation
 - In-document search with match highlighting
+- Keyboard shortcut help
 - Syntax highlighting for fenced code blocks
 - Copy fenced code block contents
 - Restore the last session settings and file

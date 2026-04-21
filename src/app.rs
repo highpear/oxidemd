@@ -187,6 +187,7 @@ pub struct OxideMdApp {
     search_matches: Vec<SearchMatch>,
     active_search_index: Option<usize>,
     focus_search_input: bool,
+    show_shortcuts_help: bool,
     external_link_behavior: ExternalLinkBehavior,
     pending_external_link: Option<String>,
     pending_render_measurement: Option<PendingRenderMeasurement>,
@@ -230,6 +231,7 @@ impl OxideMdApp {
             search_matches: Vec::new(),
             active_search_index: None,
             focus_search_input: false,
+            show_shortcuts_help: false,
             external_link_behavior: ExternalLinkBehavior::AskFirst,
             pending_external_link: None,
             pending_render_measurement: None,
@@ -804,6 +806,8 @@ impl OxideMdApp {
         let focus_search = ctx.input_mut(|input| {
             input.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::F))
         });
+        let show_shortcuts_help =
+            ctx.input_mut(|input| input.consume_key(Modifiers::NONE, Key::F1));
         let reload_file = ctx.input_mut(|input| {
             input.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::R))
                 || input.consume_shortcut(&KeyboardShortcut::new(Modifiers::NONE, Key::F5))
@@ -839,6 +843,10 @@ impl OxideMdApp {
 
         if focus_search {
             self.focus_search_input = true;
+        }
+
+        if show_shortcuts_help {
+            self.show_shortcuts_help = true;
         }
 
         if reload_file {
@@ -1119,6 +1127,13 @@ impl OxideMdApp {
                     self.switch_external_link_behavior();
                 }
 
+                if ui
+                    .button(tr(self.language, TranslationKey::LabelShortcuts))
+                    .clicked()
+                {
+                    self.show_shortcuts_help = true;
+                }
+
                 ui.separator();
                 let current_file_label = format!(
                     "{} {}",
@@ -1161,6 +1176,50 @@ impl OxideMdApp {
                 status_response.on_hover_text(message);
             }
         });
+    }
+
+    fn render_shortcuts_help(&mut self, ctx: &egui::Context) {
+        if !self.show_shortcuts_help {
+            return;
+        }
+
+        let mut is_open = true;
+        egui::Window::new(tr(self.language, TranslationKey::LabelShortcuts))
+            .collapsible(false)
+            .resizable(false)
+            .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
+            .open(&mut is_open)
+            .show(ctx, |ui| {
+                egui::Grid::new("shortcuts_help_grid")
+                    .num_columns(2)
+                    .spacing(Vec2::new(24.0, 8.0))
+                    .striped(true)
+                    .show(ui, |ui| {
+                        ui.strong(tr(self.language, TranslationKey::LabelShortcutAction));
+                        ui.strong(tr(self.language, TranslationKey::LabelShortcut));
+                        ui.end_row();
+
+                        for (action, shortcut) in shortcuts_help_items(self.language) {
+                            ui.label(action);
+                            ui.monospace(shortcut);
+                            ui.end_row();
+                        }
+                    });
+
+                ui.add_space(12.0);
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if ui
+                        .button(tr(self.language, TranslationKey::ActionClose))
+                        .clicked()
+                    {
+                        self.show_shortcuts_help = false;
+                    }
+                });
+            });
+
+        if !is_open || ctx.input(|input| input.key_pressed(Key::Escape)) {
+            self.show_shortcuts_help = false;
+        }
     }
 
     fn render_bottom_bar(&mut self, ctx: &egui::Context) {
@@ -1530,6 +1589,7 @@ impl eframe::App for OxideMdApp {
         self.render_heading_panel(ctx);
         self.render_document_panel(ctx);
         self.render_external_link_confirmation(ctx);
+        self.render_shortcuts_help(ctx);
         self.render_drop_overlay(ctx);
     }
 }
@@ -1580,6 +1640,37 @@ fn recent_files_storage_value(recent_files: &[PathBuf]) -> String {
         .map(|path| path.display().to_string())
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+fn shortcuts_help_items(language: Language) -> [(&'static str, &'static str); 11] {
+    [
+        (tr(language, TranslationKey::ShortcutOpenFile), "Ctrl+O"),
+        (tr(language, TranslationKey::ShortcutFocusSearch), "Ctrl+F"),
+        (
+            tr(language, TranslationKey::ShortcutSearchNext),
+            "F3 / Enter",
+        ),
+        (
+            tr(language, TranslationKey::ShortcutSearchPrevious),
+            "Shift+F3",
+        ),
+        (
+            tr(language, TranslationKey::ShortcutReloadFile),
+            "Ctrl+R / F5",
+        ),
+        (tr(language, TranslationKey::ShortcutSwitchTheme), "Ctrl+T"),
+        (
+            tr(language, TranslationKey::ShortcutSwitchLanguage),
+            "Ctrl+L",
+        ),
+        (
+            tr(language, TranslationKey::ShortcutZoomIn),
+            "Ctrl++ / Ctrl+=",
+        ),
+        (tr(language, TranslationKey::ShortcutZoomOut), "Ctrl+-"),
+        (tr(language, TranslationKey::ShortcutResetZoom), "Ctrl+0"),
+        (tr(language, TranslationKey::ShortcutShowHelp), "F1"),
+    ]
 }
 
 fn active_search_query(search_query: &str) -> Option<&str> {
