@@ -249,6 +249,7 @@ Goal: consider future extensions without committing too early.
 * [x] Drag and drop file open
 * [ ] Multiple tabs
 * [x] Session restore
+* [x] Recent files
 * [ ] Export options
 * [ ] Optional CLI mode
 
