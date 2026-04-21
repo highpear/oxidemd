@@ -102,7 +102,7 @@ Items such as tabs, large file improvements, math, and Mermaid are planned for l
 - UI framework: `egui` / `eframe`
 - Markdown parser: `pulldown-cmark`
 - File watching: `notify`
-- Current i18n approach: Rust static mappings
+- Current i18n approach: a single Rust static translation table. This keeps the app dependency-free and simple while the supported UI text remains small.
 
 Shared manual test files live in `samples/`.
 Use `samples/long-form.md` to test longer reading flows such as heading navigation, zoom, theme changes, and live reload on a larger document.

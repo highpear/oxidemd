@@ -4,7 +4,7 @@ pub enum Language {
     Ja,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub enum TranslationKey {
     ActionCopy,
     ActionOpen,
@@ -46,97 +46,149 @@ pub enum TranslationKey {
     ThemeWarmPaper,
 }
 
+struct TranslationEntry {
+    key: TranslationKey,
+    en: &'static str,
+    ja: &'static str,
+}
+
+const TRANSLATIONS: &[TranslationEntry] = &[
+    entry(TranslationKey::ActionCopy, "Copy", "コピー"),
+    entry(
+        TranslationKey::ActionOpen,
+        "Open Markdown",
+        "Markdownを開く",
+    ),
+    entry(TranslationKey::ActionSearchNext, "Next", "次へ"),
+    entry(TranslationKey::ActionSearchPrevious, "Previous", "前へ"),
+    entry(TranslationKey::ActionSearchClear, "Clear", "クリア"),
+    entry(TranslationKey::ActionResetZoom, "Reset", "リセット"),
+    entry(
+        TranslationKey::ActionSwitchLanguage,
+        "日本語 / English",
+        "日本語 / English",
+    ),
+    entry(TranslationKey::ActionSwitchTheme, "Theme:", "テーマ:"),
+    entry(
+        TranslationKey::LabelCurrentFile,
+        "Current file:",
+        "現在のファイル:",
+    ),
+    entry(
+        TranslationKey::LabelNoFile,
+        "No file selected",
+        "ファイル未選択",
+    ),
+    entry(TranslationKey::LabelSearch, "Search:", "検索:"),
+    entry(TranslationKey::LabelSearchResults, "Matches:", "一致:"),
+    entry(TranslationKey::LabelZoom, "Zoom:", "ズーム:"),
+    entry(TranslationKey::MessageCopied, "Copied", "コピーしました"),
+    entry(
+        TranslationKey::MessageDropMarkdown,
+        "Drop Markdown file to open",
+        "Markdownファイルをドロップして開く",
+    ),
+    entry(
+        TranslationKey::MessageEmpty,
+        "No markdown file is open",
+        "Markdownファイルはまだ開かれていません",
+    ),
+    entry(
+        TranslationKey::MessageImageLoadFailed,
+        "Failed to load image:",
+        "画像の読み込みに失敗しました:",
+    ),
+    entry(
+        TranslationKey::MessageImageUnsupported,
+        "Only local image paths are supported:",
+        "ローカル画像パスのみ対応しています:",
+    ),
+    entry(
+        TranslationKey::MessageOpenPrompt,
+        "Choose or drop a Markdown file to start reading.",
+        "Markdownファイルを選択またはドロップして読み込みます。",
+    ),
+    entry(
+        TranslationKey::MessageSearchNoResults,
+        "No matches found",
+        "一致する内容はありません",
+    ),
+    entry(
+        TranslationKey::NavJumpToHeading,
+        "Jump to this section",
+        "この見出しへ移動",
+    ),
+    entry(TranslationKey::NavSections, "Sections", "見出し"),
+    entry(TranslationKey::ReloadError, "Error", "エラー"),
+    entry(TranslationKey::ReloadIdle, "Ready", "待機中"),
+    entry(TranslationKey::ReloadReloading, "Reloading", "再読み込み中"),
+    entry(
+        TranslationKey::StatusLoadFailed,
+        "Failed to load file:",
+        "ファイルの読み込みに失敗しました:",
+    ),
+    entry(TranslationKey::StatusLoaded, "Loaded:", "読み込み完了:"),
+    entry(
+        TranslationKey::StatusNoFile,
+        "No file selected.",
+        "ファイルが選択されていません。",
+    ),
+    entry(
+        TranslationKey::StatusReloadFailed,
+        "Failed to reload file:",
+        "ファイルの再読み込みに失敗しました:",
+    ),
+    entry(
+        TranslationKey::StatusReloadSkipped,
+        "No changes detected:",
+        "変更はありません:",
+    ),
+    entry(
+        TranslationKey::StatusReloadStarted,
+        "Reloading file:",
+        "ファイルを再読み込み中:",
+    ),
+    entry(
+        TranslationKey::StatusReloaded,
+        "Reloaded:",
+        "再読み込み完了:",
+    ),
+    entry(
+        TranslationKey::StatusUnsupportedFile,
+        "Unsupported file type:",
+        "対応していないファイル形式です:",
+    ),
+    entry(
+        TranslationKey::StatusWatchFailed,
+        "Failed to watch file:",
+        "ファイル監視の開始に失敗しました:",
+    ),
+    entry(
+        TranslationKey::StatusWorkerFailed,
+        "Failed to queue reload:",
+        "再読み込み要求の送信に失敗しました:",
+    ),
+    entry(TranslationKey::ThemeMist, "Mist", "ミスト"),
+    entry(TranslationKey::ThemeNightOwl, "Night Owl", "ナイトアウル"),
+    entry(
+        TranslationKey::ThemeWarmPaper,
+        "Warm Paper",
+        "ウォームペーパー",
+    ),
+];
+
+const fn entry(key: TranslationKey, en: &'static str, ja: &'static str) -> TranslationEntry {
+    TranslationEntry { key, en, ja }
+}
+
 pub fn tr(language: Language, key: TranslationKey) -> &'static str {
+    let Some(entry) = TRANSLATIONS.iter().find(|entry| entry.key == key) else {
+        debug_assert!(false, "missing translation key");
+        return "";
+    };
+
     match language {
-        Language::En => en(key),
-        Language::Ja => ja(key),
-    }
-}
-
-fn en(key: TranslationKey) -> &'static str {
-    match key {
-        TranslationKey::ActionCopy => "Copy",
-        TranslationKey::ActionOpen => "Open Markdown",
-        TranslationKey::ActionSearchNext => "Next",
-        TranslationKey::ActionSearchPrevious => "Previous",
-        TranslationKey::ActionSearchClear => "Clear",
-        TranslationKey::ActionResetZoom => "Reset",
-        TranslationKey::ActionSwitchLanguage => "日本語 / English",
-        TranslationKey::ActionSwitchTheme => "Theme:",
-        TranslationKey::LabelCurrentFile => "Current file:",
-        TranslationKey::LabelNoFile => "No file selected",
-        TranslationKey::LabelSearch => "Search:",
-        TranslationKey::LabelSearchResults => "Matches:",
-        TranslationKey::LabelZoom => "Zoom:",
-        TranslationKey::MessageCopied => "Copied",
-        TranslationKey::MessageDropMarkdown => "Drop Markdown file to open",
-        TranslationKey::MessageEmpty => "No markdown file is open",
-        TranslationKey::MessageImageLoadFailed => "Failed to load image:",
-        TranslationKey::MessageImageUnsupported => "Only local image paths are supported:",
-        TranslationKey::MessageOpenPrompt => "Choose or drop a Markdown file to start reading.",
-        TranslationKey::MessageSearchNoResults => "No matches found",
-        TranslationKey::NavJumpToHeading => "Jump to this section",
-        TranslationKey::NavSections => "Sections",
-        TranslationKey::ReloadError => "Error",
-        TranslationKey::ReloadIdle => "Ready",
-        TranslationKey::ReloadReloading => "Reloading",
-        TranslationKey::StatusLoadFailed => "Failed to load file:",
-        TranslationKey::StatusLoaded => "Loaded:",
-        TranslationKey::StatusNoFile => "No file selected.",
-        TranslationKey::StatusReloadFailed => "Failed to reload file:",
-        TranslationKey::StatusReloadSkipped => "No changes detected:",
-        TranslationKey::StatusReloadStarted => "Reloading file:",
-        TranslationKey::StatusReloaded => "Reloaded:",
-        TranslationKey::StatusUnsupportedFile => "Unsupported file type:",
-        TranslationKey::StatusWatchFailed => "Failed to watch file:",
-        TranslationKey::StatusWorkerFailed => "Failed to queue reload:",
-        TranslationKey::ThemeMist => "Mist",
-        TranslationKey::ThemeNightOwl => "Night Owl",
-        TranslationKey::ThemeWarmPaper => "Warm Paper",
-    }
-}
-
-fn ja(key: TranslationKey) -> &'static str {
-    match key {
-        TranslationKey::ActionCopy => "コピー",
-        TranslationKey::ActionOpen => "Markdownを開く",
-        TranslationKey::ActionSearchNext => "次へ",
-        TranslationKey::ActionSearchPrevious => "前へ",
-        TranslationKey::ActionSearchClear => "クリア",
-        TranslationKey::ActionResetZoom => "リセット",
-        TranslationKey::ActionSwitchLanguage => "日本語 / English",
-        TranslationKey::ActionSwitchTheme => "テーマ:",
-        TranslationKey::LabelCurrentFile => "現在のファイル:",
-        TranslationKey::LabelNoFile => "ファイル未選択",
-        TranslationKey::LabelSearch => "検索:",
-        TranslationKey::LabelSearchResults => "一致:",
-        TranslationKey::LabelZoom => "ズーム:",
-        TranslationKey::MessageCopied => "コピーしました",
-        TranslationKey::MessageDropMarkdown => "Markdownファイルをドロップして開く",
-        TranslationKey::MessageEmpty => "Markdownファイルはまだ開かれていません",
-        TranslationKey::MessageImageLoadFailed => "画像の読み込みに失敗しました:",
-        TranslationKey::MessageImageUnsupported => "ローカル画像パスのみ対応しています:",
-        TranslationKey::MessageOpenPrompt => {
-            "Markdownファイルを選択またはドロップして読み込みます。"
-        }
-        TranslationKey::MessageSearchNoResults => "一致する内容はありません",
-        TranslationKey::NavJumpToHeading => "この見出しへ移動",
-        TranslationKey::NavSections => "見出し",
-        TranslationKey::ReloadError => "エラー",
-        TranslationKey::ReloadIdle => "待機中",
-        TranslationKey::ReloadReloading => "再読み込み中",
-        TranslationKey::StatusLoadFailed => "ファイルの読み込みに失敗しました:",
-        TranslationKey::StatusLoaded => "読み込み完了:",
-        TranslationKey::StatusNoFile => "ファイルが選択されていません。",
-        TranslationKey::StatusReloadFailed => "ファイルの再読み込みに失敗しました:",
-        TranslationKey::StatusReloadSkipped => "変更はありません:",
-        TranslationKey::StatusReloadStarted => "ファイルを再読み込み中:",
-        TranslationKey::StatusReloaded => "再読み込み完了:",
-        TranslationKey::StatusUnsupportedFile => "対応していないファイル形式です:",
-        TranslationKey::StatusWatchFailed => "ファイル監視の開始に失敗しました:",
-        TranslationKey::StatusWorkerFailed => "再読み込み要求の送信に失敗しました:",
-        TranslationKey::ThemeMist => "ミスト",
-        TranslationKey::ThemeNightOwl => "ナイトアウル",
-        TranslationKey::ThemeWarmPaper => "ウォームペーパー",
+        Language::En => entry.en,
+        Language::Ja => entry.ja,
     }
 }
