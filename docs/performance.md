@@ -259,3 +259,29 @@ Conclusion:
 
 - The measured-height cache keeps first render timings in the same range while reducing scroll-position drift after blocks have been measured.
 - The remaining large-document validation should focus on manual TOC and search jumps near the start, middle, and end of long files.
+
+### 2026-04-22: Stabilize Virtualized Scroll Jumps
+
+Change:
+
+- Track whether a scroll target block had an existing measured height before rendering.
+- Keep the pending scroll target for one extra repaint when jumping to a newly measured block.
+- Let the next frame reuse fresh height measurements before clearing the pending scroll.
+
+Result:
+
+- 1 MiB initial load: 17 ms total, 16 ms parse
+- 1 MiB first render after load: 21 ms
+- 1 MiB reload after edit: 18 ms total, 17 ms parse
+- 1 MiB first render after reload: 1 ms
+- 1 MiB skipped reload: 0 ms total
+- 5 MiB initial load: 89 ms total, 87 ms parse
+- 5 MiB first render after load: 24 ms
+- 5 MiB reload after edit: 88 ms total, 85 ms parse
+- 5 MiB first render after reload: 4 ms
+- 5 MiB skipped reload: 2 ms total
+
+Conclusion:
+
+- The stabilization repaint keeps large-document render timings in the same range while giving TOC and search jumps a second frame to settle after initial block measurement.
+- The next validation step is manual navigation testing across start, middle, and end positions in a large generated document.

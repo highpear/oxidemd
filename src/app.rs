@@ -1209,7 +1209,9 @@ impl OxideMdApp {
                     ctx.request_repaint();
                 }
 
-                if render_outcome.did_scroll {
+                if render_outcome.needs_scroll_stabilization {
+                    ctx.request_repaint();
+                } else if render_outcome.did_scroll {
                     self.pending_block_scroll = None;
                 }
 
