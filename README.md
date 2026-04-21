@@ -23,6 +23,7 @@ The project is in early `v0.1` development.
 Current capabilities:
 
 - Open a single Markdown file with a native file dialog
+- Open a Markdown file from the command line
 - Open a Markdown file with drag and drop
 - Render core Markdown blocks
 - Render basic inline Markdown styling
@@ -61,7 +62,7 @@ The current target is intentionally small:
 - Single-file Markdown viewing
 - Reliable readability over feature breadth
 
-Items such as tabs, command-line file open, large file improvements, math, and Mermaid are planned for later phases.
+Items such as tabs, large file improvements, math, and Mermaid are planned for later phases.
 
 ---
 
@@ -82,7 +83,6 @@ Items such as tabs, command-line file open, large file improvements, math, and M
 
 ### Advanced Features
 
-- Command-line file open
 - Large file improvements
 - External link opening options
 
