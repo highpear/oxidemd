@@ -1044,6 +1044,7 @@ impl OxideMdApp {
                 });
                 return;
             };
+            let active_search_block = self.active_search_block();
 
             ScrollArea::vertical().show(ui, |ui| {
                 let document_base_dir = self.current_file.as_ref().and_then(|path| path.parent());
@@ -1115,6 +1116,7 @@ impl OxideMdApp {
                     &mut self.image_cache,
                     self.pending_block_scroll,
                     active_search_query(&self.search_query),
+                    active_search_block,
                 );
 
                 if let (Some(measurement), Some(started)) = (render_measurement, render_started) {
@@ -1196,6 +1198,12 @@ impl OxideMdApp {
                         );
                     });
             });
+    }
+
+    fn active_search_block(&self) -> Option<usize> {
+        self.active_search_index
+            .and_then(|index| self.search_matches.get(index))
+            .map(|search_match| search_match.block_index)
     }
 }
 

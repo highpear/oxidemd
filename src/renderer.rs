@@ -31,6 +31,7 @@ pub fn render_markdown_document(
     image_cache: &mut ImageCache,
     scroll_to_block: Option<usize>,
     search_query: Option<&str>,
+    active_search_block: Option<usize>,
 ) -> RenderOutcome {
     let mut did_scroll = false;
     let mut active_heading = None;
@@ -44,6 +45,10 @@ pub fn render_markdown_document(
     };
 
     for (block_index, block) in document.blocks.iter().enumerate() {
+        let search_highlight = SearchHighlight {
+            query: search_query,
+            is_active_block: active_search_block == Some(block_index),
+        };
         let estimated_height = estimate_block_height(block, zoom_factor);
         let block_top = ui.cursor().top();
         let block_bottom = block_top + estimated_height;
@@ -67,6 +72,12 @@ pub fn render_markdown_document(
             continue;
         }
 
+        if scroll_to_block == Some(block_index) {
+            let anchor = ui.allocate_response(egui::vec2(0.0, 0.0), egui::Sense::hover());
+            ui.scroll_to_rect(anchor.rect, Some(Align::TOP));
+            did_scroll = true;
+        }
+
         match block {
             Block::Heading { level, content } => {
                 let heading_state = render_heading(
@@ -78,7 +89,7 @@ pub fn render_markdown_document(
                     scroll_to_block,
                     block_index,
                     viewport_top,
-                    search_query,
+                    search_highlight,
                     &mut clicked_anchor,
                     &mut image_resources,
                 );
@@ -95,16 +106,11 @@ pub fn render_markdown_document(
                     InlineStyle::Body,
                     theme,
                     zoom_factor,
-                    search_query,
+                    search_highlight,
                     &mut clicked_anchor,
                     &mut image_resources,
                 );
                 ui.add_space(scale_spacing(BLOCK_SPACING_PARAGRAPH, zoom_factor));
-
-                if scroll_to_block == Some(block_index) {
-                    ui.scroll_to_cursor(Some(Align::TOP));
-                    did_scroll = true;
-                }
             }
             Block::UnorderedList(items) => {
                 for item in items {
@@ -114,18 +120,13 @@ pub fn render_markdown_document(
                         item,
                         theme,
                         zoom_factor,
-                        search_query,
+                        search_highlight,
                         &mut clicked_anchor,
                         &mut image_resources,
                     );
                     ui.add_space(scale_spacing(LIST_ITEM_SPACING, zoom_factor));
                 }
                 ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
-
-                if scroll_to_block == Some(block_index) {
-                    ui.scroll_to_cursor(Some(Align::TOP));
-                    did_scroll = true;
-                }
             }
             Block::OrderedList { start, items } => {
                 for (index, item) in items.iter().enumerate() {
@@ -136,18 +137,13 @@ pub fn render_markdown_document(
                         item,
                         theme,
                         zoom_factor,
-                        search_query,
+                        search_highlight,
                         &mut clicked_anchor,
                         &mut image_resources,
                     );
                     ui.add_space(scale_spacing(LIST_ITEM_SPACING, zoom_factor));
                 }
                 ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
-
-                if scroll_to_block == Some(block_index) {
-                    ui.scroll_to_cursor(Some(Align::TOP));
-                    did_scroll = true;
-                }
             }
             Block::BlockQuote(lines) => {
                 render_blockquote(
@@ -155,14 +151,10 @@ pub fn render_markdown_document(
                     lines,
                     theme,
                     zoom_factor,
-                    search_query,
+                    search_highlight,
                     &mut clicked_anchor,
                     &mut image_resources,
                 );
-                if scroll_to_block == Some(block_index) {
-                    ui.scroll_to_cursor(Some(Align::TOP));
-                    did_scroll = true;
-                }
             }
             Block::CodeBlock { language, code } => {
                 render_code_block(
@@ -174,11 +166,6 @@ pub fn render_markdown_document(
                     theme,
                     zoom_factor,
                 );
-
-                if scroll_to_block == Some(block_index) {
-                    ui.scroll_to_cursor(Some(Align::TOP));
-                    did_scroll = true;
-                }
             }
             Block::Table {
                 alignments,
@@ -193,15 +180,10 @@ pub fn render_markdown_document(
                     rows,
                     theme,
                     zoom_factor,
-                    search_query,
+                    search_highlight,
                     &mut clicked_anchor,
                     &mut image_resources,
                 );
-
-                if scroll_to_block == Some(block_index) {
-                    ui.scroll_to_cursor(Some(Align::TOP));
-                    did_scroll = true;
-                }
             }
         }
     }
@@ -319,6 +301,12 @@ pub struct RenderOutcome {
     pub clicked_anchor: Option<String>,
 }
 
+#[derive(Clone, Copy)]
+struct SearchHighlight<'a> {
+    query: Option<&'a str>,
+    is_active_block: bool,
+}
+
 struct ImageRenderResources<'a> {
     ui_language: Language,
     document_base_dir: Option<&'a Path>,
@@ -339,7 +327,7 @@ fn render_heading(
     scroll_to_block: Option<usize>,
     block_index: usize,
     viewport_top: f32,
-    search_query: Option<&str>,
+    search_highlight: SearchHighlight<'_>,
     clicked_anchor: &mut Option<String>,
     image_resources: &mut ImageRenderResources<'_>,
 ) -> HeadingRenderState {
@@ -365,7 +353,7 @@ fn render_heading(
             InlineStyle::Heading(size),
             theme,
             zoom_factor,
-            search_query,
+            search_highlight,
             clicked_anchor,
             image_resources,
         );
@@ -387,7 +375,7 @@ fn render_list_item(
     item: &InlineContent,
     theme: &Theme,
     zoom_factor: f32,
-    search_query: Option<&str>,
+    search_highlight: SearchHighlight<'_>,
     clicked_anchor: &mut Option<String>,
     image_resources: &mut ImageRenderResources<'_>,
 ) {
@@ -404,7 +392,7 @@ fn render_list_item(
                 InlineStyle::Body,
                 theme,
                 zoom_factor,
-                search_query,
+                search_highlight,
                 clicked_anchor,
                 image_resources,
             );
@@ -417,7 +405,7 @@ fn render_blockquote(
     lines: &[InlineContent],
     theme: &Theme,
     zoom_factor: f32,
-    search_query: Option<&str>,
+    search_highlight: SearchHighlight<'_>,
     clicked_anchor: &mut Option<String>,
     image_resources: &mut ImageRenderResources<'_>,
 ) {
@@ -436,7 +424,7 @@ fn render_blockquote(
                     InlineStyle::Quote,
                     theme,
                     zoom_factor,
-                    search_query,
+                    search_highlight,
                     clicked_anchor,
                     image_resources,
                 );
@@ -455,7 +443,7 @@ fn render_table(
     rows: &[Vec<InlineContent>],
     theme: &Theme,
     zoom_factor: f32,
-    search_query: Option<&str>,
+    search_highlight: SearchHighlight<'_>,
     clicked_anchor: &mut Option<String>,
     image_resources: &mut ImageRenderResources<'_>,
 ) {
@@ -485,7 +473,7 @@ fn render_table(
                                 InlineStyle::TableHeader,
                                 theme,
                                 zoom_factor,
-                                search_query,
+                                search_highlight,
                                 clicked_anchor,
                                 image_resources,
                             );
@@ -499,7 +487,7 @@ fn render_table(
                                     InlineStyle::TableCell,
                                     theme,
                                     zoom_factor,
-                                    search_query,
+                                    search_highlight,
                                     clicked_anchor,
                                     image_resources,
                                 );
@@ -519,7 +507,7 @@ fn render_table_row(
     style: InlineStyle,
     theme: &Theme,
     zoom_factor: f32,
-    search_query: Option<&str>,
+    search_highlight: SearchHighlight<'_>,
     clicked_anchor: &mut Option<String>,
     image_resources: &mut ImageRenderResources<'_>,
 ) {
@@ -548,7 +536,7 @@ fn render_table_row(
                 style,
                 theme,
                 zoom_factor,
-                search_query,
+                search_highlight,
                 clicked_anchor,
                 image_resources,
             );
@@ -565,7 +553,7 @@ fn render_aligned_cell(
     style: InlineStyle,
     theme: &Theme,
     zoom_factor: f32,
-    search_query: Option<&str>,
+    search_highlight: SearchHighlight<'_>,
     clicked_anchor: &mut Option<String>,
     image_resources: &mut ImageRenderResources<'_>,
 ) {
@@ -582,7 +570,7 @@ fn render_aligned_cell(
             style,
             theme,
             zoom_factor,
-            search_query,
+            search_highlight,
             clicked_anchor,
             image_resources,
         ),
@@ -593,7 +581,7 @@ fn render_aligned_cell(
                 style,
                 theme,
                 zoom_factor,
-                search_query,
+                search_highlight,
                 clicked_anchor,
                 image_resources,
             );
@@ -608,12 +596,12 @@ fn render_inline_aligned(
     style: InlineStyle,
     theme: &Theme,
     zoom_factor: f32,
-    search_query: Option<&str>,
+    search_highlight: SearchHighlight<'_>,
     clicked_anchor: &mut Option<String>,
     image_resources: &mut ImageRenderResources<'_>,
 ) {
     let available_width = ui.available_width();
-    let line_width = inline_content_width(ui, content, style, theme, zoom_factor, search_query);
+    let line_width = inline_content_width(ui, content, style, theme, zoom_factor, search_highlight);
     let leading_space = match alignment {
         Alignment::Center => ((available_width - line_width) / 2.0).max(0.0),
         Alignment::Right => (available_width - line_width).max(0.0),
@@ -633,7 +621,7 @@ fn render_inline_aligned(
                 style,
                 theme,
                 zoom_factor,
-                search_query,
+                search_highlight,
                 clicked_anchor,
                 image_resources,
             );
@@ -647,7 +635,7 @@ fn inline_content_width(
     style: InlineStyle,
     theme: &Theme,
     zoom_factor: f32,
-    search_query: Option<&str>,
+    search_highlight: SearchHighlight<'_>,
 ) -> f32 {
     let mut width = 0.0;
 
@@ -656,7 +644,7 @@ fn inline_content_width(
             continue;
         }
 
-        width += inline_span_width(ui, span, style, theme, zoom_factor, search_query);
+        width += inline_span_width(ui, span, style, theme, zoom_factor, search_highlight);
         width += ui.spacing().item_spacing.x;
     }
 
@@ -669,7 +657,7 @@ fn inline_span_width(
     style: InlineStyle,
     theme: &Theme,
     zoom_factor: f32,
-    search_query: Option<&str>,
+    search_highlight: SearchHighlight<'_>,
 ) -> f32 {
     match span {
         InlineSpan::Text(text) => text_width(ui, text, style, SpanKind::Plain, theme, zoom_factor),
@@ -692,7 +680,7 @@ fn inline_span_width(
         style,
         theme,
         zoom_factor,
-        search_query,
+        search_highlight,
     ))
 }
 
@@ -702,9 +690,9 @@ fn highlighted_text_width(
     style: InlineStyle,
     theme: &Theme,
     zoom_factor: f32,
-    search_query: Option<&str>,
+    search_highlight: SearchHighlight<'_>,
 ) -> f32 {
-    if search_query.is_none() {
+    if search_highlight.query.is_none() {
         return 0.0;
     }
 
@@ -718,10 +706,14 @@ fn highlighted_text_width(
         InlineSpan::LineBreak => return 0.0,
     };
 
-    split_highlighted_segments(text, search_query)
-        .iter()
-        .map(|segment| text_width(ui, segment.text, style, SpanKind::Plain, theme, zoom_factor))
-        .sum()
+    split_highlighted_segments(
+        text,
+        search_highlight.query,
+        search_highlight.is_active_block,
+    )
+    .iter()
+    .map(|segment| text_width(ui, segment.text, style, SpanKind::Plain, theme, zoom_factor))
+    .sum()
 }
 
 fn text_width(
@@ -771,7 +763,7 @@ fn render_inline(
     style: InlineStyle,
     theme: &Theme,
     zoom_factor: f32,
-    search_query: Option<&str>,
+    search_highlight: SearchHighlight<'_>,
     clicked_anchor: &mut Option<String>,
     image_resources: &mut ImageRenderResources<'_>,
 ) {
@@ -788,7 +780,7 @@ fn render_inline(
                     style,
                     theme,
                     zoom_factor,
-                    search_query,
+                    search_highlight,
                     clicked_anchor,
                     image_resources,
                 );
@@ -816,7 +808,7 @@ fn render_inline(
                     style,
                     theme,
                     zoom_factor,
-                    search_query,
+                    search_highlight,
                     clicked_anchor,
                     image_resources,
                 );
@@ -840,7 +832,7 @@ fn render_inline_span(
     style: InlineStyle,
     theme: &Theme,
     zoom_factor: f32,
-    search_query: Option<&str>,
+    search_highlight: SearchHighlight<'_>,
     clicked_anchor: &mut Option<String>,
     image_resources: &mut ImageRenderResources<'_>,
 ) {
@@ -852,7 +844,7 @@ fn render_inline_span(
             SpanKind::Plain,
             theme,
             zoom_factor,
-            search_query,
+            search_highlight,
         ),
         InlineSpan::Strong(text) => render_text_label(
             ui,
@@ -861,7 +853,7 @@ fn render_inline_span(
             SpanKind::Strong,
             theme,
             zoom_factor,
-            search_query,
+            search_highlight,
         ),
         InlineSpan::Emphasis(text) => render_text_label(
             ui,
@@ -870,7 +862,7 @@ fn render_inline_span(
             SpanKind::Emphasis,
             theme,
             zoom_factor,
-            search_query,
+            search_highlight,
         ),
         InlineSpan::Code(text) => render_text_label(
             ui,
@@ -879,11 +871,11 @@ fn render_inline_span(
             SpanKind::Code,
             theme,
             zoom_factor,
-            search_query,
+            search_highlight,
         ),
         InlineSpan::Link { text, destination } => {
             let rich_text = styled_text(text, style, SpanKind::Link, theme, zoom_factor)
-                .background_color(search_highlight_for_text(text, theme, search_query));
+                .background_color(search_highlight_for_text(text, theme, search_highlight));
             if let Some(anchor) = internal_anchor(destination) {
                 if ui.link(rich_text).clicked() {
                     *clicked_anchor = Some(anchor.to_owned());
@@ -1008,18 +1000,22 @@ fn render_text_label(
     kind: SpanKind,
     theme: &Theme,
     zoom_factor: f32,
-    search_query: Option<&str>,
+    search_highlight: SearchHighlight<'_>,
 ) {
     if text.is_empty() {
         return;
     }
 
-    if search_query.is_none() {
+    if search_highlight.query.is_none() {
         ui.label(styled_text(text, style, kind, theme, zoom_factor));
         return;
     }
 
-    let segments = split_highlighted_segments(text, search_query);
+    let segments = split_highlighted_segments(
+        text,
+        search_highlight.query,
+        search_highlight.is_active_block,
+    );
 
     if segments.len() == 1 && !segments[0].is_match {
         ui.label(styled_text(text, style, kind, theme, zoom_factor));
@@ -1030,7 +1026,8 @@ fn render_text_label(
         let mut rich_text = styled_text(segment.text, style, kind, theme, zoom_factor);
 
         if segment.is_match {
-            rich_text = rich_text.background_color(search_highlight_color(theme));
+            rich_text =
+                rich_text.background_color(search_highlight_color(theme, segment.is_active_match));
         }
 
         ui.label(rich_text);
@@ -1103,17 +1100,19 @@ fn scale_margin(value: i8, zoom_factor: f32) -> i8 {
 fn search_highlight_for_text(
     text: &str,
     theme: &Theme,
-    search_query: Option<&str>,
+    search_highlight: SearchHighlight<'_>,
 ) -> egui::Color32 {
-    if text_matches_query(text, search_query) {
-        search_highlight_color(theme)
+    if text_matches_query(text, search_highlight.query) {
+        search_highlight_color(theme, search_highlight.is_active_block)
     } else {
         egui::Color32::TRANSPARENT
     }
 }
 
-fn search_highlight_color(theme: &Theme) -> egui::Color32 {
-    theme
-        .status_loading_background
-        .gamma_multiply(if theme.is_dark { 0.65 } else { 0.9 })
+fn search_highlight_color(theme: &Theme, is_active_match: bool) -> egui::Color32 {
+    if is_active_match {
+        theme.search_active_match_background
+    } else {
+        theme.search_match_background
+    }
 }
