@@ -10,6 +10,7 @@ pub enum TranslationKey {
     ActionClose,
     ActionCopy,
     ActionCopyPath,
+    ActionClearRecentFiles,
     ActionExportHtml,
     ActionOpenExternalLink,
     ActionOpen,
@@ -37,6 +38,7 @@ pub enum TranslationKey {
     MessageImageLoadFailed,
     MessageImageUnsupported,
     MessageOpenPrompt,
+    MessageNoRecentFiles,
     MessageRecentFileUnavailable,
     MessageSearchNoResults,
     NavJumpToHeading,
@@ -46,8 +48,10 @@ pub enum TranslationKey {
     ReloadIdle,
     ReloadReloading,
     StatusLoadFailed,
+    StatusLastFileUnavailable,
     StatusLoaded,
     StatusPathCopied,
+    StatusRecentFilesCleared,
     StatusExportFailed,
     StatusExported,
     StatusNoFile,
@@ -87,6 +91,11 @@ const TRANSLATIONS: &[TranslationEntry] = &[
     entry(TranslationKey::ActionClose, "Close", "閉じる"),
     entry(TranslationKey::ActionCopy, "Copy", "コピー"),
     entry(TranslationKey::ActionCopyPath, "Copy Path", "パスをコピー"),
+    entry(
+        TranslationKey::ActionClearRecentFiles,
+        "Clear Recent Files",
+        "履歴をクリア",
+    ),
     entry(TranslationKey::ActionExportHtml, "HTML...", "HTML..."),
     entry(
         TranslationKey::ActionOpenExternalLink,
@@ -167,6 +176,11 @@ const TRANSLATIONS: &[TranslationEntry] = &[
         "Markdownファイルを選択またはドロップして読み込みます。",
     ),
     entry(
+        TranslationKey::MessageNoRecentFiles,
+        "No recent files",
+        "最近使ったファイルはありません",
+    ),
+    entry(
         TranslationKey::MessageRecentFileUnavailable,
         "Recent file is unavailable:",
         "最近使ったファイルを開けません:",
@@ -195,11 +209,21 @@ const TRANSLATIONS: &[TranslationEntry] = &[
         "Failed to load file:",
         "ファイルの読み込みに失敗しました:",
     ),
+    entry(
+        TranslationKey::StatusLastFileUnavailable,
+        "Last file is unavailable:",
+        "前回のファイルを開けません:",
+    ),
     entry(TranslationKey::StatusLoaded, "Loaded:", "読み込み完了:"),
     entry(
         TranslationKey::StatusPathCopied,
         "Copied:",
         "コピーしました:",
+    ),
+    entry(
+        TranslationKey::StatusRecentFilesCleared,
+        "Recent files cleared.",
+        "最近使ったファイルをクリアしました。",
     ),
     entry(
         TranslationKey::StatusExportFailed,

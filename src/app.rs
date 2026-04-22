@@ -285,10 +285,24 @@ impl OxideMdApp {
             self.recent_files = recent_files_from_storage_value(&recent_files);
         }
 
-        storage
-            .get_string(STORAGE_KEY_CURRENT_FILE)
-            .map(PathBuf::from)
-            .filter(|path| path.is_file() && is_markdown_path(path))
+        let Some(current_file) = storage.get_string(STORAGE_KEY_CURRENT_FILE) else {
+            return None;
+        };
+
+        if current_file.is_empty() {
+            return None;
+        }
+
+        let path = PathBuf::from(current_file);
+        if path.is_file() && is_markdown_path(&path) {
+            Some(path)
+        } else {
+            self.set_reload_error(
+                TranslationKey::StatusLastFileUnavailable,
+                path.display().to_string(),
+            );
+            None
+        }
     }
 
     fn load_initial_file(&mut self, path: PathBuf) {
@@ -412,6 +426,12 @@ impl OxideMdApp {
             TranslationKey::MessageRecentFileUnavailable,
             path.display().to_string(),
         );
+    }
+
+    fn clear_recent_files(&mut self) {
+        self.recent_files.clear();
+        self.reload_status = ReloadStatus::Idle;
+        self.set_status_message(tr(self.language, TranslationKey::StatusRecentFilesCleared));
     }
 
     fn handle_file_drops(&mut self, ctx: &egui::Context) {
@@ -1116,8 +1136,17 @@ impl OxideMdApp {
                 }
 
                 let mut selected_recent_file = None;
-                ui.add_enabled_ui(!self.recent_files.is_empty(), |ui| {
-                    ui.menu_button(tr(self.language, TranslationKey::LabelRecentFiles), |ui| {
+                let mut clear_recent_files = false;
+                ui.menu_button(tr(self.language, TranslationKey::LabelRecentFiles), |ui| {
+                    if self.recent_files.is_empty() {
+                        ui.add_enabled(
+                            false,
+                            egui::Button::new(tr(
+                                self.language,
+                                TranslationKey::MessageNoRecentFiles,
+                            )),
+                        );
+                    } else {
                         for path in self.recent_files.iter().cloned() {
                             let label = recent_file_label(&path);
                             if ui
@@ -1129,11 +1158,24 @@ impl OxideMdApp {
                                 ui.close();
                             }
                         }
-                    });
+
+                        ui.separator();
+                        if ui
+                            .button(tr(self.language, TranslationKey::ActionClearRecentFiles))
+                            .clicked()
+                        {
+                            clear_recent_files = true;
+                            ui.close();
+                        }
+                    }
                 });
 
                 if let Some(path) = selected_recent_file {
                     self.open_recent_file(path);
+                }
+
+                if clear_recent_files {
+                    self.clear_recent_files();
                 }
 
                 ui.add_enabled_ui(self.current_file.is_some(), |ui| {
