@@ -256,6 +256,7 @@ Goal: consider future extensions without committing too early.
   * [x] Report an unavailable restored session file
 * [x] Copy current file path
 * [x] Export options
+  * [x] Preserve relative image and link resolution in exported HTML
 * [x] Optional CLI mode
 
 Exit criteria:
@@ -279,6 +280,6 @@ Exit criteria:
 ## Current Priority
 
 1. Continue viewer polish and reliability improvements
-2. Improve HTML export quality checks
+2. Expand manual release checks
 3. Address remaining hot-path allocations when measurements justify it
 ---
