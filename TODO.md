@@ -251,6 +251,9 @@ Goal: consider future extensions without committing too early.
 * [ ] Multiple tabs
 * [x] Session restore
 * [x] Recent files
+  * [x] Show an empty recent-files menu state
+  * [x] Allow clearing recent files
+  * [x] Report an unavailable restored session file
 * [x] Copy current file path
 * [x] Export options
 * [x] Optional CLI mode
@@ -275,7 +278,7 @@ Exit criteria:
 
 ## Current Priority
 
-1. Manually validate TOC and search jumps across large documents
-2. Continue viewer polish and reliability improvements
+1. Continue viewer polish and reliability improvements
+2. Improve HTML export quality checks
 3. Address remaining hot-path allocations when measurements justify it
 ---
