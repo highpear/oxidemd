@@ -9,18 +9,22 @@ pub fn write_html_export(source_path: &Path, output_path: &Path) -> Result<(), S
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("OxideMD Export");
-    let html = markdown_to_html_document(&markdown, title);
+    let base_href = html_base_href(source_path);
+    let html = markdown_to_html_document(&markdown, title, base_href.as_deref());
 
     fs::write(output_path, html).map_err(|error| error.to_string())
 }
 
-fn markdown_to_html_document(markdown: &str, title: &str) -> String {
+fn markdown_to_html_document(markdown: &str, title: &str, base_href: Option<&str>) -> String {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
 
     let parser = Parser::new_ext(markdown, options);
     let mut body = String::new();
     html::push_html(&mut body, parser);
+    let base_tag = base_href
+        .map(|href| format!(r#"<base href="{}">"#, escape_html(href)))
+        .unwrap_or_default();
 
     format!(
         r#"<!doctype html>
@@ -29,6 +33,7 @@ fn markdown_to_html_document(markdown: &str, title: &str) -> String {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{}</title>
+{}
 <style>
 :root {{
   color-scheme: light;
@@ -105,8 +110,59 @@ img {{
 </html>
 "#,
         escape_html(title),
+        base_tag,
         body
     )
+}
+
+fn html_base_href(source_path: &Path) -> Option<String> {
+    let source_dir = source_path.parent().unwrap_or_else(|| Path::new("."));
+    let source_dir = source_dir.canonicalize().ok()?;
+
+    Some(file_url_for_directory(&source_dir))
+}
+
+fn file_url_for_directory(path: &Path) -> String {
+    let mut path = path.to_string_lossy().replace('\\', "/");
+    path = normalize_windows_file_url_path(&path);
+
+    if !path.ends_with('/') {
+        path.push('/');
+    }
+
+    if path.starts_with("//") {
+        format!("file:{}", percent_encode_file_url_path(&path))
+    } else {
+        format!("file:///{}", percent_encode_file_url_path(&path))
+    }
+}
+
+fn normalize_windows_file_url_path(path: &str) -> String {
+    if let Some(rest) = path.strip_prefix("//?/UNC/") {
+        format!("//{rest}")
+    } else if let Some(rest) = path.strip_prefix("//?/") {
+        rest.to_owned()
+    } else {
+        path.to_owned()
+    }
+}
+
+fn percent_encode_file_url_path(path: &str) -> String {
+    let mut encoded = String::new();
+
+    for byte in path.bytes() {
+        if is_file_url_path_byte(byte) {
+            encoded.push(byte as char);
+        } else {
+            encoded.push_str(&format!("%{byte:02X}"));
+        }
+    }
+
+    encoded
+}
+
+fn is_file_url_path_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~' | b'/' | b':')
 }
 
 fn escape_html(value: &str) -> String {
@@ -128,13 +184,17 @@ fn escape_html(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::markdown_to_html_document;
+    use super::{
+        file_url_for_directory, markdown_to_html_document, normalize_windows_file_url_path,
+    };
+    use std::path::Path;
 
     #[test]
     fn html_export_renders_markdown_blocks() {
         let html = markdown_to_html_document(
             "# Title\n\nA **bold** paragraph.\n\n| A | B |\n| - | - |\n| 1 | 2 |\n",
             "sample.md",
+            None,
         );
 
         assert!(html.contains("<h1>Title</h1>"));
@@ -144,8 +204,39 @@ mod tests {
 
     #[test]
     fn html_export_escapes_document_title() {
-        let html = markdown_to_html_document("# Title", "a <b>& \"quote\".md");
+        let html = markdown_to_html_document("# Title", "a <b>& \"quote\".md", None);
 
         assert!(html.contains("<title>a &lt;b&gt;&amp; &quot;quote&quot;.md</title>"));
+    }
+
+    #[test]
+    fn html_export_includes_base_href_when_available() {
+        let html = markdown_to_html_document(
+            "![Image](./assets/image.png)",
+            "sample.md",
+            Some("file:///C:/Docs/Markdown/"),
+        );
+
+        assert!(html.contains(r#"<base href="file:///C:/Docs/Markdown/">"#));
+        assert!(html.contains(r#"<img src="./assets/image.png" alt="Image" />"#));
+    }
+
+    #[test]
+    fn file_url_for_directory_encodes_spaces_and_fragments() {
+        let href = file_url_for_directory(Path::new(r"C:\Docs\Markdown Files\#drafts"));
+
+        assert_eq!(href, "file:///C:/Docs/Markdown%20Files/%23drafts/");
+    }
+
+    #[test]
+    fn normalize_windows_file_url_path_removes_verbatim_prefix() {
+        assert_eq!(
+            normalize_windows_file_url_path("//?/C:/Docs/Markdown"),
+            "C:/Docs/Markdown"
+        );
+        assert_eq!(
+            normalize_windows_file_url_path("//?/UNC/server/share/Docs"),
+            "//server/share/Docs"
+        );
     }
 }
