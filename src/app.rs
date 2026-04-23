@@ -17,7 +17,7 @@ use crate::metrics;
 use crate::parser::MarkdownDocument;
 use crate::reload_worker::{ReloadResponse, ReloadWorkerHandle, spawn_reload_worker};
 use crate::renderer::render_markdown_document;
-use crate::search::SearchMatch;
+use crate::search::SearchState;
 use crate::session::{
     ExternalLinkBehavior, SessionSaveData, is_markdown_path, remember_recent_file,
     restore_session as restore_saved_session, save_session,
@@ -145,10 +145,7 @@ pub struct OxideMdApp {
     pending_block_scroll: Option<usize>,
     active_heading: Option<usize>,
     selected_heading: Option<usize>,
-    search_query: String,
-    search_matches: Vec<SearchMatch>,
-    active_search_index: Option<usize>,
-    focus_search_input: bool,
+    search: SearchState,
     show_shortcuts_help: bool,
     external_link_behavior: ExternalLinkBehavior,
     pending_external_link: Option<String>,
@@ -189,10 +186,7 @@ impl OxideMdApp {
             pending_block_scroll: None,
             active_heading: None,
             selected_heading: None,
-            search_query: String::new(),
-            search_matches: Vec::new(),
-            active_search_index: None,
-            focus_search_input: false,
+            search: SearchState::new(),
             show_shortcuts_help: false,
             external_link_behavior: ExternalLinkBehavior::AskFirst,
             pending_external_link: None,
@@ -450,8 +444,7 @@ impl OxideMdApp {
                 self.pending_block_scroll = None;
                 self.active_heading = None;
                 self.selected_heading = None;
-                self.search_matches.clear();
-                self.active_search_index = None;
+                self.search.clear_matches();
                 self.pending_render_measurement = None;
                 self.set_reload_error(TranslationKey::StatusLoadFailed, error);
             }
@@ -738,14 +731,14 @@ impl OxideMdApp {
     }
 
     fn handle_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
-        let shortcuts = consume_shortcuts(ctx, !self.search_matches.is_empty());
+        let shortcuts = consume_shortcuts(ctx, self.search.has_matches());
 
         if shortcuts.open_file {
             self.open_markdown_file();
         }
 
         if shortcuts.focus_search {
-            self.focus_search_input = true;
+            self.search.focus_input = true;
         }
 
         if shortcuts.show_shortcuts_help {
@@ -786,62 +779,28 @@ impl OxideMdApp {
     }
 
     fn refresh_search_matches(&mut self) {
-        let Some(document) = self.document.as_ref() else {
-            self.search_matches.clear();
-            self.active_search_index = None;
-            return;
-        };
-
-        let previous_block = self
-            .active_search_index
-            .and_then(|index| self.search_matches.get(index))
-            .map(|entry| entry.block_index);
-
-        self.search_matches = document.search_matches(&self.search_query);
-
-        self.active_search_index = previous_block
-            .and_then(|block_index| {
-                self.search_matches
-                    .iter()
-                    .position(|entry| entry.block_index == block_index)
-            })
-            .or_else(|| (!self.search_matches.is_empty()).then_some(0));
+        self.search.refresh_matches(self.document.as_deref());
     }
 
     fn select_search_match(&mut self, index: usize) {
-        let Some(search_match) = self.search_matches.get(index) else {
-            return;
-        };
-
-        self.active_search_index = Some(index);
-        self.pending_block_scroll = Some(search_match.block_index);
-        self.selected_heading = None;
+        if let Some(block_index) = self.search.select_match(index) {
+            self.pending_block_scroll = Some(block_index);
+            self.selected_heading = None;
+        }
     }
 
     fn select_next_search_match(&mut self) {
-        if self.search_matches.is_empty() {
-            return;
+        if let Some(block_index) = self.search.select_next() {
+            self.pending_block_scroll = Some(block_index);
+            self.selected_heading = None;
         }
-
-        let next_index = match self.active_search_index {
-            Some(index) => (index + 1) % self.search_matches.len(),
-            None => 0,
-        };
-
-        self.select_search_match(next_index);
     }
 
     fn select_previous_search_match(&mut self) {
-        if self.search_matches.is_empty() {
-            return;
+        if let Some(block_index) = self.search.select_previous() {
+            self.pending_block_scroll = Some(block_index);
+            self.selected_heading = None;
         }
-
-        let previous_index = match self.active_search_index {
-            Some(0) | None => self.search_matches.len() - 1,
-            Some(index) => index - 1,
-        };
-
-        self.select_search_match(previous_index);
     }
 
     fn clear_selected_heading_on_manual_scroll(&mut self, ctx: &egui::Context) {
@@ -857,20 +816,20 @@ impl OxideMdApp {
 
         let search_input_id = egui::Id::new(SEARCH_INPUT_ID);
         let response = ui.add(
-            TextEdit::singleline(&mut self.search_query)
+            TextEdit::singleline(&mut self.search.query)
                 .id(search_input_id)
                 .desired_width(f32::INFINITY),
         );
 
-        if self.focus_search_input {
+        if self.search.focus_input {
             response.request_focus();
-            self.focus_search_input = false;
+            self.search.focus_input = false;
         }
 
         if response.changed() {
             self.refresh_search_matches();
 
-            if !self.search_matches.is_empty() {
+            if self.search.has_matches() {
                 self.select_search_match(0);
             }
         }
@@ -880,15 +839,15 @@ impl OxideMdApp {
         }
 
         ui.horizontal(|ui| {
-            let result_label = if self.search_matches.is_empty() {
+            let result_label = if self.search.matches.is_empty() {
                 tr(self.language, TranslationKey::MessageSearchNoResults).to_owned()
             } else {
-                let position = self.active_search_index.map(|index| index + 1).unwrap_or(0);
+                let position = self.search.active_index.map(|index| index + 1).unwrap_or(0);
                 format!(
                     "{} {}/{}",
                     tr(self.language, TranslationKey::LabelSearchResults),
                     position,
-                    self.search_matches.len()
+                    self.search.matches.len()
                 )
             };
             ui.label(result_label);
@@ -896,19 +855,17 @@ impl OxideMdApp {
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if ui
                     .add_enabled(
-                        !self.search_query.is_empty(),
+                        !self.search.query.is_empty(),
                         egui::Button::new(tr(self.language, TranslationKey::ActionSearchClear)),
                     )
                     .clicked()
                 {
-                    self.search_query.clear();
-                    self.search_matches.clear();
-                    self.active_search_index = None;
+                    self.search.clear();
                 }
 
                 if ui
                     .add_enabled(
-                        !self.search_matches.is_empty(),
+                        self.search.has_matches(),
                         egui::Button::new(tr(self.language, TranslationKey::ActionSearchNext)),
                     )
                     .clicked()
@@ -918,7 +875,7 @@ impl OxideMdApp {
 
                 if ui
                     .add_enabled(
-                        !self.search_matches.is_empty(),
+                        self.search.has_matches(),
                         egui::Button::new(tr(self.language, TranslationKey::ActionSearchPrevious)),
                     )
                     .clicked()
@@ -930,7 +887,7 @@ impl OxideMdApp {
     }
 
     fn render_search_results(&mut self, ui: &mut egui::Ui) {
-        if self.search_query.trim().is_empty() {
+        if self.search.active_query().is_none() {
             return;
         }
 
@@ -941,13 +898,13 @@ impl OxideMdApp {
             .id_salt("search_results_scroll")
             .max_height(180.0)
             .show(ui, |ui| {
-                if self.search_matches.is_empty() {
+                if self.search.matches.is_empty() {
                     ui.label(tr(self.language, TranslationKey::MessageSearchNoResults));
                     return;
                 }
 
-                for (index, search_match) in self.search_matches.iter().enumerate() {
-                    let is_active = self.active_search_index == Some(index);
+                for (index, search_match) in self.search.matches.iter().enumerate() {
+                    let is_active = self.search.active_index == Some(index);
 
                     let clicked = if search_match.preview.is_empty() {
                         ui.selectable_label(is_active, format!("#{}", search_match.block_index + 1))
@@ -1347,7 +1304,7 @@ impl OxideMdApp {
                     &mut self.image_cache,
                     block_heights,
                     self.pending_block_scroll,
-                    active_search_query(&self.search_query),
+                    self.search.active_query(),
                     active_search_block,
                 );
 
@@ -1444,9 +1401,7 @@ impl OxideMdApp {
     }
 
     fn active_search_block(&self) -> Option<usize> {
-        self.active_search_index
-            .and_then(|index| self.search_matches.get(index))
-            .map(|search_match| search_match.block_index)
+        self.search.active_block()
     }
 }
 
@@ -1511,15 +1466,6 @@ fn export_file_name(path: &Path) -> String {
         .unwrap_or("export");
 
     format!("{}.html", stem)
-}
-
-fn active_search_query(search_query: &str) -> Option<&str> {
-    let trimmed = search_query.trim();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed)
-    }
 }
 
 fn heading_nav_indent(level: pulldown_cmark::HeadingLevel) -> f32 {
