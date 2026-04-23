@@ -20,6 +20,9 @@ const LIST_ITEM_SPACING: f32 = 8.0;
 const TABLE_CELL_MIN_WIDTH: f32 = 120.0;
 const MATH_BLOCK_PADDING_X: i8 = 18;
 const MATH_BLOCK_PADDING_Y: i8 = 16;
+const INLINE_MATH_TARGET_HEIGHT_MULTIPLIER: f32 = 1.35;
+const INLINE_MATH_LINE_HEIGHT_MULTIPLIER: f32 = 1.45;
+const INLINE_MATH_BASELINE_OFFSET_MULTIPLIER: f32 = 0.18;
 const LARGE_DOCUMENT_BLOCK_THRESHOLD: usize = 2_000;
 const VIRTUAL_RENDER_OVERSCAN: f32 = 1_200.0;
 const ESTIMATED_CHARS_PER_LINE: usize = 90;
@@ -637,7 +640,15 @@ fn render_inline_aligned(
     render_resources: &mut RenderResources<'_>,
 ) {
     let available_width = ui.available_width();
-    let line_width = inline_content_width(ui, content, style, theme, zoom_factor, search_highlight);
+    let line_width = inline_content_width(
+        ui,
+        content,
+        style,
+        theme,
+        zoom_factor,
+        search_highlight,
+        render_resources,
+    );
     let leading_space = match alignment {
         Alignment::Center => ((available_width - line_width) / 2.0).max(0.0),
         Alignment::Right => (available_width - line_width).max(0.0),
@@ -672,6 +683,7 @@ fn inline_content_width(
     theme: &Theme,
     zoom_factor: f32,
     search_highlight: SearchHighlight<'_>,
+    render_resources: &mut RenderResources<'_>,
 ) -> f32 {
     let mut width = 0.0;
 
@@ -680,7 +692,15 @@ fn inline_content_width(
             continue;
         }
 
-        width += inline_span_width(ui, span, style, theme, zoom_factor, search_highlight);
+        width += inline_span_width(
+            ui,
+            span,
+            style,
+            theme,
+            zoom_factor,
+            search_highlight,
+            render_resources,
+        );
         width += ui.spacing().item_spacing.x;
     }
 
@@ -694,6 +714,7 @@ fn inline_span_width(
     theme: &Theme,
     zoom_factor: f32,
     search_highlight: SearchHighlight<'_>,
+    render_resources: &mut RenderResources<'_>,
 ) -> f32 {
     match span {
         InlineSpan::Text(text) => text_width(ui, text, style, SpanKind::Plain, theme, zoom_factor),
@@ -704,7 +725,14 @@ fn inline_span_width(
             text_width(ui, text, style, SpanKind::Emphasis, theme, zoom_factor)
         }
         InlineSpan::Code(text) => text_width(ui, text, style, SpanKind::Code, theme, zoom_factor),
-        InlineSpan::Math(text) => text_width(ui, text, style, SpanKind::Math, theme, zoom_factor),
+        InlineSpan::Math(text) => inline_math_width(
+            ui,
+            text,
+            style,
+            theme,
+            zoom_factor,
+            render_resources,
+        ),
         InlineSpan::Link { text, .. } => {
             text_width(ui, text, style, SpanKind::Link, theme, zoom_factor)
         }
@@ -752,6 +780,28 @@ fn highlighted_text_width(
     .iter()
     .map(|segment| text_width(ui, segment.text, style, SpanKind::Plain, theme, zoom_factor))
     .sum()
+}
+
+fn inline_math_width(
+    ui: &mut Ui,
+    text: &str,
+    style: InlineStyle,
+    theme: &Theme,
+    zoom_factor: f32,
+    render_resources: &mut RenderResources<'_>,
+) -> f32 {
+    let prepared = render_resources.math_render_cache.prepare(
+        ui.ctx(),
+        text,
+        MathRenderMode::Inline,
+        theme.is_dark,
+        zoom_factor,
+    );
+
+    match prepared {
+        PreparedMath::Raster { size, .. } => fit_inline_math_size(style, zoom_factor, size).x,
+        PreparedMath::Error(_) => text_width(ui, text, style, SpanKind::Math, theme, zoom_factor),
+    }
 }
 
 fn text_width(
@@ -923,7 +973,8 @@ fn render_inline_span(
 
             match prepared {
                 PreparedMath::Raster { texture, size } => {
-                    ui.add(egui::Image::from_texture(&texture).fit_to_exact_size(size));
+                    let fitted_size = fit_inline_math_size(style, zoom_factor, size);
+                    render_inline_math_image(ui, &texture, style, zoom_factor, fitted_size);
                 }
                 PreparedMath::Error(_) => render_text_label(
                     ui,
@@ -1189,10 +1240,7 @@ fn styled_text(
         SpanKind::Strong => rich_text.strong(),
         SpanKind::Emphasis => rich_text.italics(),
         SpanKind::Code => {
-            let font_size = match style {
-                InlineStyle::Heading(size) => (size - zoom_factor).max(INLINE_CODE_TEXT_SIZE),
-                _ => INLINE_CODE_TEXT_SIZE * zoom_factor,
-            };
+            let font_size = monospace_span_font_size(style, zoom_factor);
 
             rich_text = rich_text
                 .family(FontFamily::Monospace)
@@ -1202,10 +1250,7 @@ fn styled_text(
             rich_text
         }
         SpanKind::Math => {
-            let font_size = match style {
-                InlineStyle::Heading(size) => (size - zoom_factor).max(INLINE_CODE_TEXT_SIZE),
-                _ => INLINE_CODE_TEXT_SIZE * zoom_factor,
-            };
+            let font_size = monospace_span_font_size(style, zoom_factor);
 
             rich_text = rich_text
                 .family(FontFamily::Monospace)
@@ -1220,6 +1265,59 @@ fn styled_text(
 
             rich_text
         }
+    }
+}
+
+fn fit_inline_math_size(style: InlineStyle, zoom_factor: f32, size: egui::Vec2) -> egui::Vec2 {
+    if size.y <= 0.0 {
+        return size;
+    }
+
+    let target_height = monospace_span_font_size(style, zoom_factor)
+        * INLINE_MATH_TARGET_HEIGHT_MULTIPLIER;
+    let scale = (target_height / size.y).min(1.0);
+
+    egui::vec2(size.x * scale, size.y * scale)
+}
+
+fn render_inline_math_image(
+    ui: &mut Ui,
+    texture: &egui::TextureHandle,
+    style: InlineStyle,
+    zoom_factor: f32,
+    fitted_size: egui::Vec2,
+) {
+    let line_height = inline_math_line_height(style, zoom_factor);
+    let baseline_offset =
+        monospace_span_font_size(style, zoom_factor) * INLINE_MATH_BASELINE_OFFSET_MULTIPLIER;
+    let top_padding = (line_height - fitted_size.y - baseline_offset).max(0.0);
+    let allocated_size = egui::vec2(fitted_size.x, (top_padding + fitted_size.y).max(fitted_size.y));
+    let (rect, _) = ui.allocate_exact_size(allocated_size, egui::Sense::hover());
+    let image_rect = egui::Rect::from_min_size(
+        egui::pos2(rect.left(), rect.top() + top_padding),
+        fitted_size,
+    );
+
+    ui.put(
+        image_rect,
+        egui::Image::from_texture(texture).fit_to_exact_size(fitted_size),
+    );
+}
+
+fn inline_math_line_height(style: InlineStyle, zoom_factor: f32) -> f32 {
+    match style {
+        InlineStyle::Heading(size) => size * INLINE_MATH_LINE_HEIGHT_MULTIPLIER,
+        InlineStyle::Quote => QUOTE_TEXT_SIZE * zoom_factor * INLINE_MATH_LINE_HEIGHT_MULTIPLIER,
+        InlineStyle::Body | InlineStyle::TableHeader | InlineStyle::TableCell => {
+            BODY_TEXT_SIZE * zoom_factor * INLINE_MATH_LINE_HEIGHT_MULTIPLIER
+        }
+    }
+}
+
+fn monospace_span_font_size(style: InlineStyle, zoom_factor: f32) -> f32 {
+    match style {
+        InlineStyle::Heading(size) => (size - zoom_factor).max(INLINE_CODE_TEXT_SIZE),
+        _ => INLINE_CODE_TEXT_SIZE * zoom_factor,
     }
 }
 
