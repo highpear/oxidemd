@@ -922,16 +922,9 @@ fn render_inline_span(
             );
 
             match prepared {
-                PreparedMath::FallbackText(text) => render_text_label(
-                    ui,
-                    &text,
-                    style,
-                    SpanKind::Math,
-                    theme,
-                    zoom_factor,
-                    search_highlight,
-                ),
-                PreparedMath::Raster { .. } => {}
+                PreparedMath::Raster { texture, size } => {
+                    ui.add(egui::Image::from_texture(&texture).fit_to_exact_size(size));
+                }
                 PreparedMath::Error(_) => render_text_label(
                     ui,
                     text,
@@ -992,20 +985,6 @@ fn render_math_block(
                         egui::Image::from_texture(&texture)
                             .fit_to_exact_size(size)
                             .max_width(max_width),
-                    );
-                });
-            }
-            PreparedMath::FallbackText(expression) => {
-                ui.vertical_centered(|ui| {
-                    ui.label(
-                        RichText::new(expression)
-                            .size(BODY_TEXT_SIZE * zoom_factor)
-                            .color(theme.text_primary)
-                            .family(FontFamily::Monospace)
-                            .font(FontId::new(
-                                BODY_TEXT_SIZE * zoom_factor,
-                                FontFamily::Monospace,
-                            )),
                     );
                 });
             }

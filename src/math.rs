@@ -10,7 +10,6 @@ pub enum MathRenderMode {
 
 #[derive(Clone)]
 pub enum PreparedMath {
-    FallbackText(String),
     Raster { texture: TextureHandle, size: Vec2 },
     Error(String),
 }
@@ -69,9 +68,25 @@ fn prepare_math(
     zoom_factor: f32,
 ) -> PreparedMath {
     match mode {
-        MathRenderMode::Inline => PreparedMath::FallbackText(expression.to_owned()),
+        MathRenderMode::Inline => prepare_inline_math(ctx, expression, theme_is_dark, zoom_factor),
         MathRenderMode::Block => prepare_block_math(ctx, expression, theme_is_dark, zoom_factor),
     }
+}
+
+fn prepare_inline_math(
+    ctx: &egui::Context,
+    expression: &str,
+    theme_is_dark: bool,
+    zoom_factor: f32,
+) -> PreparedMath {
+    prepare_raster_math(
+        ctx,
+        expression,
+        theme_is_dark,
+        zoom_factor,
+        15.0,
+        MathRenderMode::Inline,
+    )
 }
 
 fn prepare_block_math(
@@ -80,10 +95,28 @@ fn prepare_block_math(
     theme_is_dark: bool,
     zoom_factor: f32,
 ) -> PreparedMath {
+    prepare_raster_math(
+        ctx,
+        expression,
+        theme_is_dark,
+        zoom_factor,
+        18.0,
+        MathRenderMode::Block,
+    )
+}
+
+fn prepare_raster_math(
+    ctx: &egui::Context,
+    expression: &str,
+    theme_is_dark: bool,
+    zoom_factor: f32,
+    base_font_size: f32,
+    mode: MathRenderMode,
+) -> PreparedMath {
     let font_size = if theme_is_dark {
-        18.0 * zoom_factor.max(1.0)
+        base_font_size * zoom_factor.max(1.0)
     } else {
-        18.0 * zoom_factor
+        base_font_size * zoom_factor
     };
 
     let svg = match mathjax_svg_rs::render_tex(
@@ -108,7 +141,10 @@ fn prepare_block_math(
         "math:{}:{}:{}:{}",
         if theme_is_dark { "dark" } else { "light" },
         zoom_bucket(zoom_factor),
-        "block",
+        match mode {
+            MathRenderMode::Inline => "inline",
+            MathRenderMode::Block => "block",
+        },
         expression
     );
     let texture = ctx.load_texture(texture_name, image, TextureOptions::LINEAR);
@@ -183,7 +219,15 @@ mod tests {
         let first = cache.prepare(&ctx, "x^2", MathRenderMode::Inline, false, 1.0);
         let second = cache.prepare(&ctx, "x^2", MathRenderMode::Inline, false, 1.0);
 
-        assert!(matches!(first, PreparedMath::FallbackText(ref text) if text == "x^2"));
-        assert!(matches!(second, PreparedMath::FallbackText(ref text) if text == "x^2"));
+        assert!(matches!(
+            (&first, &second),
+            (
+                PreparedMath::Raster { size: first_size, .. },
+                PreparedMath::Raster {
+                    size: second_size,
+                    ..
+                }
+            ) if first_size == second_size
+        ));
     }
 }

@@ -246,9 +246,9 @@ Goal: consider future extensions without committing too early.
 
 * [x] Image rendering (local PNG/JPEG)
 * [x] Add math parsing and fallback preview groundwork
-* [ ] Evaluate a lightweight native math rendering approach
-* [ ] Render inline math visually
-* [ ] Render display math visually
+* [x] Evaluate a lightweight native math rendering approach
+* [x] Render inline math visually
+* [x] Render display math visually
 * [x] Link clicking
 * [x] External link opening behavior options
 * [x] Drag and drop file open
