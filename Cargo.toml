@@ -8,7 +8,9 @@ license = "MIT"
 [dependencies]
 eframe = { version = "0.33", features = ["persistence"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+mathjax-svg-rs = "0.4"
 notify = "8"
 pulldown-cmark = "0.13"
+resvg = "0.47"
 rfd = "0.15"
 syntect = { version = "5", default-features = false, features = ["default-fancy"] }

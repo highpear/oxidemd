@@ -7,6 +7,7 @@ mod export;
 mod external_links;
 mod i18n;
 mod image_cache;
+mod math;
 mod metrics;
 mod parser;
 mod reload_worker;
