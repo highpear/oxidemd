@@ -249,6 +249,9 @@ Goal: consider future extensions without committing too early.
 * [x] Evaluate a lightweight native math rendering approach
 * [x] Render inline math visually
 * [x] Render display math visually
+* [ ] Design shared SVG rendering support for math and diagrams
+* [ ] Render math as SVG without rasterization
+* [ ] Evaluate Mermaid SVG rendering integration
 * [x] Link clicking
 * [x] External link opening behavior options
 * [x] Drag and drop file open
