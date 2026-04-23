@@ -3,8 +3,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use eframe::egui::{
-    self, Align, Align2, CentralPanel, Frame, Key, KeyboardShortcut, Layout, Margin, Modifiers,
-    RichText, ScrollArea, SidePanel, Slider, TextEdit, TopBottomPanel, UiBuilder, Vec2,
+    self, Align, Align2, CentralPanel, Frame, Key, Layout, Margin, RichText, ScrollArea, SidePanel,
+    Slider, TextEdit, TopBottomPanel, UiBuilder, Vec2,
 };
 use rfd::FileDialog;
 
@@ -21,6 +21,7 @@ use crate::session::{
     ExternalLinkBehavior, SessionSaveData, is_markdown_path, remember_recent_file,
     restore_session as restore_saved_session, save_session,
 };
+use crate::shortcuts::{consume_shortcuts, render_shortcuts_help};
 use crate::theme::{DEFAULT_THEME_ID, ThemeId, apply_theme, available_themes, theme};
 use crate::watcher::{FileWatchEvent, FileWatcherHandle, watch_file};
 
@@ -787,84 +788,49 @@ impl OxideMdApp {
     }
 
     fn handle_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
-        let open_file = ctx.input_mut(|input| {
-            input.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::O))
-        });
-        let focus_search = ctx.input_mut(|input| {
-            input.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::F))
-        });
-        let show_shortcuts_help =
-            ctx.input_mut(|input| input.consume_key(Modifiers::NONE, Key::F1));
-        let reload_file = ctx.input_mut(|input| {
-            input.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::R))
-                || input.consume_shortcut(&KeyboardShortcut::new(Modifiers::NONE, Key::F5))
-        });
-        let next_search = ctx.input_mut(|input| {
-            input.consume_shortcut(&KeyboardShortcut::new(Modifiers::NONE, Key::F3))
-        });
-        let next_search_from_enter = !self.search_matches.is_empty()
-            && ctx.input_mut(|input| input.consume_key(Modifiers::NONE, Key::Enter));
-        let previous_search = ctx.input_mut(|input| {
-            input.consume_shortcut(&KeyboardShortcut::new(Modifiers::SHIFT, Key::F3))
-        });
-        let switch_language = ctx.input_mut(|input| {
-            input.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::L))
-        });
-        let switch_theme = ctx.input_mut(|input| {
-            input.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::T))
-        });
-        let zoom_in = ctx.input_mut(|input| {
-            input.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::Plus))
-                || input.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::Equals))
-        });
-        let zoom_out = ctx.input_mut(|input| {
-            input.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::Minus))
-        });
-        let reset_zoom = ctx.input_mut(|input| {
-            input.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::Num0))
-        });
+        let shortcuts = consume_shortcuts(ctx, !self.search_matches.is_empty());
 
-        if open_file {
+        if shortcuts.open_file {
             self.open_markdown_file();
         }
 
-        if focus_search {
+        if shortcuts.focus_search {
             self.focus_search_input = true;
         }
 
-        if show_shortcuts_help {
+        if shortcuts.show_shortcuts_help {
             self.show_shortcuts_help = true;
         }
 
-        if reload_file {
+        if shortcuts.reload_file {
             self.request_manual_reload();
         }
 
-        if previous_search {
+        if shortcuts.previous_search {
             self.select_previous_search_match();
         }
 
-        if next_search || next_search_from_enter {
+        if shortcuts.next_search {
             self.select_next_search_match();
         }
 
-        if switch_language {
+        if shortcuts.switch_language {
             self.switch_language();
         }
 
-        if switch_theme {
+        if shortcuts.switch_theme {
             self.switch_theme();
         }
 
-        if zoom_in {
+        if shortcuts.zoom_in {
             self.zoom_in();
         }
 
-        if zoom_out {
+        if shortcuts.zoom_out {
             self.zoom_out();
         }
 
-        if reset_zoom {
+        if shortcuts.reset_zoom {
             self.reset_zoom();
         }
     }
@@ -1207,50 +1173,6 @@ impl OxideMdApp {
                 status_response.on_hover_text(message);
             }
         });
-    }
-
-    fn render_shortcuts_help(&mut self, ctx: &egui::Context) {
-        if !self.show_shortcuts_help {
-            return;
-        }
-
-        let mut is_open = true;
-        egui::Window::new(tr(self.language, TranslationKey::LabelShortcuts))
-            .collapsible(false)
-            .resizable(false)
-            .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
-            .open(&mut is_open)
-            .show(ctx, |ui| {
-                egui::Grid::new("shortcuts_help_grid")
-                    .num_columns(2)
-                    .spacing(Vec2::new(24.0, 8.0))
-                    .striped(true)
-                    .show(ui, |ui| {
-                        ui.strong(tr(self.language, TranslationKey::LabelShortcutAction));
-                        ui.strong(tr(self.language, TranslationKey::LabelShortcut));
-                        ui.end_row();
-
-                        for (action, shortcut) in shortcuts_help_items(self.language) {
-                            ui.label(action);
-                            ui.monospace(shortcut);
-                            ui.end_row();
-                        }
-                    });
-
-                ui.add_space(12.0);
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if ui
-                        .button(tr(self.language, TranslationKey::ActionClose))
-                        .clicked()
-                    {
-                        self.show_shortcuts_help = false;
-                    }
-                });
-            });
-
-        if !is_open || ctx.input(|input| input.key_pressed(Key::Escape)) {
-            self.show_shortcuts_help = false;
-        }
     }
 
     fn render_bottom_bar(&mut self, ctx: &egui::Context) {
@@ -1607,7 +1529,7 @@ impl eframe::App for OxideMdApp {
         self.render_heading_panel(ctx);
         self.render_document_panel(ctx);
         self.render_external_link_confirmation(ctx);
-        self.render_shortcuts_help(ctx);
+        render_shortcuts_help(ctx, self.language, &mut self.show_shortcuts_help);
         self.render_drop_overlay(ctx);
     }
 }
@@ -1634,37 +1556,6 @@ fn export_file_name(path: &Path) -> String {
         .unwrap_or("export");
 
     format!("{}.html", stem)
-}
-
-fn shortcuts_help_items(language: Language) -> [(&'static str, &'static str); 11] {
-    [
-        (tr(language, TranslationKey::ShortcutOpenFile), "Ctrl+O"),
-        (tr(language, TranslationKey::ShortcutFocusSearch), "Ctrl+F"),
-        (
-            tr(language, TranslationKey::ShortcutSearchNext),
-            "F3 / Enter",
-        ),
-        (
-            tr(language, TranslationKey::ShortcutSearchPrevious),
-            "Shift+F3",
-        ),
-        (
-            tr(language, TranslationKey::ShortcutReloadFile),
-            "Ctrl+R / F5",
-        ),
-        (tr(language, TranslationKey::ShortcutSwitchTheme), "Ctrl+T"),
-        (
-            tr(language, TranslationKey::ShortcutSwitchLanguage),
-            "Ctrl+L",
-        ),
-        (
-            tr(language, TranslationKey::ShortcutZoomIn),
-            "Ctrl++ / Ctrl+=",
-        ),
-        (tr(language, TranslationKey::ShortcutZoomOut), "Ctrl+-"),
-        (tr(language, TranslationKey::ShortcutResetZoom), "Ctrl+0"),
-        (tr(language, TranslationKey::ShortcutShowHelp), "F1"),
-    ]
 }
 
 fn active_search_query(search_query: &str) -> Option<&str> {
