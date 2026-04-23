@@ -25,6 +25,7 @@ use crate::session::{
 };
 use crate::shortcuts::{consume_shortcuts, render_shortcuts_help};
 use crate::theme::{DEFAULT_THEME_ID, ThemeId, apply_theme, available_themes, theme};
+use crate::top_bar::{TopBarState, render_top_bar};
 use crate::watcher::{FileWatchEvent, FileWatcherHandle, watch_file};
 
 #[derive(Clone, Copy)]
@@ -121,7 +122,6 @@ const HEADING_NAV_ITEM_INDENT: f32 = 10.0;
 const PREVIEW_WINDOW_SIDE_PADDING: f32 = 32.0;
 const PREVIEW_WINDOW_FALLBACK_HEIGHT: f32 = 720.0;
 const PREVIEW_WINDOW_MONITOR_MARGIN: f32 = 80.0;
-const TOP_BAR_FILE_LABEL_MAX_WIDTH: f32 = 280.0;
 const ZOOM_STEP_BUTTON_WIDTH: f32 = 28.0;
 pub struct OxideMdApp {
     ui_context: egui::Context,
@@ -392,15 +392,6 @@ impl OxideMdApp {
                 path.display().to_string(),
             );
         }
-    }
-
-    fn current_file_label(&self) -> String {
-        self.current_file
-            .as_ref()
-            .and_then(|path| path.file_name())
-            .and_then(|name| name.to_str())
-            .map(ToOwned::to_owned)
-            .unwrap_or_else(|| tr(self.language, TranslationKey::LabelNoFile).to_owned())
     }
 
     fn load_selected_file(&mut self, path: PathBuf) {
@@ -813,159 +804,64 @@ impl OxideMdApp {
 
     fn render_top_bar(&mut self, ctx: &egui::Context) {
         let theme = theme(self.theme_id);
+        let (reload_status_background, reload_status_text) = match self.reload_status {
+            ReloadStatus::Idle => (theme.status_idle_background, theme.status_idle_text),
+            ReloadStatus::Reloading => (theme.status_loading_background, theme.status_loading_text),
+            ReloadStatus::Error => (theme.status_error_background, theme.status_error_text),
+        };
+        let current_theme_label = self.current_theme_label();
 
-        TopBottomPanel::top("top_bar").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                if ui
-                    .button(tr(self.language, TranslationKey::ActionOpen))
-                    .clicked()
-                {
-                    self.open_markdown_file();
-                }
+        let action = render_top_bar(
+            ctx,
+            TopBarState {
+                language: self.language,
+                current_theme_label,
+                external_link_behavior: self.external_link_behavior,
+                current_file: self.current_file.as_deref(),
+                recent_files: &self.recent_files,
+                reload_status_label: self.reload_status_label(),
+                reload_status_background,
+                reload_status_text,
+                status_message: self.status_message.as_str(),
+                status_hover_message: self.status_hover_message.as_deref(),
+            },
+        );
 
-                let mut selected_recent_file = None;
-                let mut clear_recent_files = false;
-                ui.menu_button(tr(self.language, TranslationKey::LabelRecentFiles), |ui| {
-                    if self.recent_files.is_empty() {
-                        ui.add_enabled(
-                            false,
-                            egui::Button::new(tr(
-                                self.language,
-                                TranslationKey::MessageNoRecentFiles,
-                            )),
-                        );
-                    } else {
-                        for path in self.recent_files.iter().cloned() {
-                            let label = recent_file_label(&path);
-                            if ui
-                                .button(label)
-                                .on_hover_text(path.display().to_string())
-                                .clicked()
-                            {
-                                selected_recent_file = Some(path);
-                                ui.close();
-                            }
-                        }
+        if action.open_file {
+            self.open_markdown_file();
+        }
 
-                        ui.separator();
-                        if ui
-                            .button(tr(self.language, TranslationKey::ActionClearRecentFiles))
-                            .clicked()
-                        {
-                            clear_recent_files = true;
-                            ui.close();
-                        }
-                    }
-                });
+        if let Some(path) = action.open_recent_file {
+            self.open_recent_file(path);
+        }
 
-                if let Some(path) = selected_recent_file {
-                    self.open_recent_file(path);
-                }
+        if action.clear_recent_files {
+            self.clear_recent_files();
+        }
 
-                if clear_recent_files {
-                    self.clear_recent_files();
-                }
+        if action.export_html {
+            self.export_current_file_as_html();
+        }
 
-                ui.add_enabled_ui(self.current_file.is_some(), |ui| {
-                    ui.menu_button(tr(self.language, TranslationKey::LabelExport), |ui| {
-                        if ui
-                            .button(tr(self.language, TranslationKey::ActionExportHtml))
-                            .clicked()
-                        {
-                            self.export_current_file_as_html();
-                            ui.close();
-                        }
-                    });
-                });
+        if action.switch_language {
+            self.switch_language();
+        }
 
-                if ui
-                    .button(tr(self.language, TranslationKey::ActionSwitchLanguage))
-                    .clicked()
-                {
-                    self.switch_language();
-                }
+        if action.switch_theme {
+            self.switch_theme();
+        }
 
-                if ui
-                    .button(format!(
-                        "{} {}",
-                        tr(self.language, TranslationKey::ActionSwitchTheme),
-                        self.current_theme_label()
-                    ))
-                    .clicked()
-                {
-                    self.switch_theme();
-                }
+        if action.switch_external_links {
+            self.switch_external_link_behavior();
+        }
 
-                if ui
-                    .button(format!(
-                        "{} {}",
-                        tr(self.language, TranslationKey::LabelExternalLinks),
-                        self.external_link_behavior.label(self.language)
-                    ))
-                    .clicked()
-                {
-                    self.switch_external_link_behavior();
-                }
+        if action.show_shortcuts_help {
+            self.show_shortcuts_help = true;
+        }
 
-                if ui
-                    .button(tr(self.language, TranslationKey::LabelShortcuts))
-                    .clicked()
-                {
-                    self.show_shortcuts_help = true;
-                }
-
-                ui.separator();
-                let current_file_label = format!(
-                    "{} {}",
-                    tr(self.language, TranslationKey::LabelCurrentFile),
-                    self.current_file_label()
-                );
-                let file_label_response = ui.add_sized(
-                    [TOP_BAR_FILE_LABEL_MAX_WIDTH, ui.spacing().interact_size.y],
-                    egui::Label::new(current_file_label).truncate(),
-                );
-
-                if let Some(path) = &self.current_file {
-                    file_label_response.on_hover_text(path.display().to_string());
-                }
-
-                if ui
-                    .add_enabled(
-                        self.current_file.is_some(),
-                        egui::Button::new(tr(self.language, TranslationKey::ActionCopyPath)),
-                    )
-                    .clicked()
-                {
-                    self.copy_current_file_path(ctx);
-                }
-
-                ui.separator();
-                let (status_bg, status_text) = match self.reload_status {
-                    ReloadStatus::Idle => (theme.status_idle_background, theme.status_idle_text),
-                    ReloadStatus::Reloading => {
-                        (theme.status_loading_background, theme.status_loading_text)
-                    }
-                    ReloadStatus::Error => (theme.status_error_background, theme.status_error_text),
-                };
-
-                Frame::new()
-                    .fill(status_bg)
-                    .corner_radius(egui::CornerRadius::same(255))
-                    .inner_margin(Margin::symmetric(10, 4))
-                    .show(ui, |ui| {
-                        ui.label(
-                            RichText::new(self.reload_status_label())
-                                .color(status_text)
-                                .strong(),
-                        );
-                    });
-            });
-
-            let status_response = ui.add(egui::Label::new(self.status_message.as_str()).truncate());
-            if let Some(message) = &self.status_hover_message {
-                status_response.on_hover_text(message);
-            }
-        });
+        if action.copy_path {
+            self.copy_current_file_path(ctx);
+        }
     }
 
     fn render_bottom_bar(&mut self, ctx: &egui::Context) {
@@ -1350,13 +1246,6 @@ impl eframe::App for OxideMdApp {
 }
 
 fn status_path_label(path: &Path) -> String {
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .map(ToOwned::to_owned)
-        .unwrap_or_else(|| path.display().to_string())
-}
-
-fn recent_file_label(path: &Path) -> String {
     path.file_name()
         .and_then(|name| name.to_str())
         .map(ToOwned::to_owned)
