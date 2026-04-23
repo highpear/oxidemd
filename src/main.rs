@@ -10,6 +10,7 @@ mod parser;
 mod reload_worker;
 mod renderer;
 mod search;
+mod session;
 mod syntax;
 mod theme;
 mod watcher;
