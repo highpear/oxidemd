@@ -11,6 +11,7 @@ mod parser;
 mod reload_worker;
 mod renderer;
 mod search;
+mod search_panel;
 mod session;
 mod shortcuts;
 mod syntax;

@@ -3,8 +3,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use eframe::egui::{
-    self, Align, Align2, CentralPanel, Frame, Key, Layout, Margin, RichText, ScrollArea, SidePanel,
-    Slider, TextEdit, TopBottomPanel, UiBuilder, Vec2,
+    self, Align, Align2, CentralPanel, Frame, Layout, Margin, RichText, ScrollArea, SidePanel,
+    Slider, TopBottomPanel, UiBuilder, Vec2,
 };
 use rfd::FileDialog;
 
@@ -18,6 +18,7 @@ use crate::parser::MarkdownDocument;
 use crate::reload_worker::{ReloadResponse, ReloadWorkerHandle, spawn_reload_worker};
 use crate::renderer::render_markdown_document;
 use crate::search::SearchState;
+use crate::search_panel::{render_search_controls, render_search_results};
 use crate::session::{
     ExternalLinkBehavior, SessionSaveData, is_markdown_path, remember_recent_file,
     restore_session as restore_saved_session, save_session,
@@ -108,7 +109,6 @@ const DEFAULT_ZOOM_FACTOR: f32 = 1.0;
 const MIN_ZOOM_FACTOR: f32 = 0.8;
 const MAX_ZOOM_FACTOR: f32 = 1.8;
 const ZOOM_STEP: f32 = 0.1;
-const SEARCH_INPUT_ID: &str = "document_search_input";
 const DOCUMENT_FRAME_MAX_WIDTH: f32 = 840.0;
 const DOCUMENT_BODY_MAX_WIDTH: f32 = 760.0;
 const DOCUMENT_HORIZONTAL_PADDING: f32 = 64.0;
@@ -811,120 +811,6 @@ impl OxideMdApp {
         }
     }
 
-    fn render_search_controls(&mut self, ui: &mut egui::Ui) {
-        ui.label(tr(self.language, TranslationKey::LabelSearch));
-
-        let search_input_id = egui::Id::new(SEARCH_INPUT_ID);
-        let response = ui.add(
-            TextEdit::singleline(&mut self.search.query)
-                .id(search_input_id)
-                .desired_width(f32::INFINITY),
-        );
-
-        if self.search.focus_input {
-            response.request_focus();
-            self.search.focus_input = false;
-        }
-
-        if response.changed() {
-            self.refresh_search_matches();
-
-            if self.search.has_matches() {
-                self.select_search_match(0);
-            }
-        }
-
-        if response.has_focus() && ui.input(|input| input.key_pressed(Key::Enter)) {
-            self.select_next_search_match();
-        }
-
-        ui.horizontal(|ui| {
-            let result_label = if self.search.matches.is_empty() {
-                tr(self.language, TranslationKey::MessageSearchNoResults).to_owned()
-            } else {
-                let position = self.search.active_index.map(|index| index + 1).unwrap_or(0);
-                format!(
-                    "{} {}/{}",
-                    tr(self.language, TranslationKey::LabelSearchResults),
-                    position,
-                    self.search.matches.len()
-                )
-            };
-            ui.label(result_label);
-
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if ui
-                    .add_enabled(
-                        !self.search.query.is_empty(),
-                        egui::Button::new(tr(self.language, TranslationKey::ActionSearchClear)),
-                    )
-                    .clicked()
-                {
-                    self.search.clear();
-                }
-
-                if ui
-                    .add_enabled(
-                        self.search.has_matches(),
-                        egui::Button::new(tr(self.language, TranslationKey::ActionSearchNext)),
-                    )
-                    .clicked()
-                {
-                    self.select_next_search_match();
-                }
-
-                if ui
-                    .add_enabled(
-                        self.search.has_matches(),
-                        egui::Button::new(tr(self.language, TranslationKey::ActionSearchPrevious)),
-                    )
-                    .clicked()
-                {
-                    self.select_previous_search_match();
-                }
-            });
-        });
-    }
-
-    fn render_search_results(&mut self, ui: &mut egui::Ui) {
-        if self.search.active_query().is_none() {
-            return;
-        }
-
-        let mut clicked_match = None;
-
-        ui.add_space(8.0);
-        ScrollArea::vertical()
-            .id_salt("search_results_scroll")
-            .max_height(180.0)
-            .show(ui, |ui| {
-                if self.search.matches.is_empty() {
-                    ui.label(tr(self.language, TranslationKey::MessageSearchNoResults));
-                    return;
-                }
-
-                for (index, search_match) in self.search.matches.iter().enumerate() {
-                    let is_active = self.search.active_index == Some(index);
-
-                    let clicked = if search_match.preview.is_empty() {
-                        ui.selectable_label(is_active, format!("#{}", search_match.block_index + 1))
-                            .clicked()
-                    } else {
-                        ui.selectable_label(is_active, search_match.preview.as_str())
-                            .clicked()
-                    };
-
-                    if clicked {
-                        clicked_match = Some(index);
-                    }
-                }
-            });
-
-        if let Some(index) = clicked_match {
-            self.select_search_match(index);
-        }
-    }
-
     fn render_top_bar(&mut self, ctx: &egui::Context) {
         let theme = theme(self.theme_id);
 
@@ -1136,8 +1022,27 @@ impl OxideMdApp {
             .default_width(HEADING_PANEL_DEFAULT_WIDTH)
             .width_range(HEADING_PANEL_MIN_WIDTH..=HEADING_PANEL_MAX_WIDTH)
             .show(ctx, |ui| {
-                self.render_search_controls(ui);
-                self.render_search_results(ui);
+                let search_action = render_search_controls(ui, self.language, &mut self.search);
+                if search_action.query_changed {
+                    self.refresh_search_matches();
+
+                    if self.search.has_matches() {
+                        self.select_search_match(0);
+                    }
+                }
+
+                if search_action.select_previous {
+                    self.select_previous_search_match();
+                }
+
+                if search_action.select_next {
+                    self.select_next_search_match();
+                }
+
+                if let Some(index) = render_search_results(ui, self.language, &self.search) {
+                    self.select_search_match(index);
+                }
+
                 ui.add_space(12.0);
                 ui.separator();
                 ui.add_space(8.0);
