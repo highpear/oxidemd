@@ -101,6 +101,7 @@ fn prepare_block_math(
         Ok(image) => image,
         Err(error) => return PreparedMath::Error(error),
     };
+    let image = recolor_math_image(image, math_text_rgb(theme_is_dark));
 
     let size = Vec2::new(image.size[0] as f32, image.size[1] as f32);
     let texture_name = format!(
@@ -134,6 +135,35 @@ fn rasterize_svg(svg: &str) -> Result<ColorImage, String> {
         [width as usize, height as usize],
         pixmap.data(),
     ))
+}
+
+fn recolor_math_image(mut image: ColorImage, target_rgb: [u8; 3]) -> ColorImage {
+    for pixel in &mut image.pixels {
+        let alpha = pixel.a();
+        if alpha == 0 {
+            continue;
+        }
+
+        let premultiply =
+            |channel: u8| -> u8 { ((channel as u16 * alpha as u16 + 127) / 255) as u8 };
+
+        *pixel = egui::Color32::from_rgba_premultiplied(
+            premultiply(target_rgb[0]),
+            premultiply(target_rgb[1]),
+            premultiply(target_rgb[2]),
+            alpha,
+        );
+    }
+
+    image
+}
+
+fn math_text_rgb(theme_is_dark: bool) -> [u8; 3] {
+    if theme_is_dark {
+        [224, 232, 242]
+    } else {
+        [34, 34, 34]
+    }
 }
 
 fn zoom_bucket(zoom_factor: f32) -> u16 {

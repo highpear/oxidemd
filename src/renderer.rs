@@ -18,6 +18,8 @@ const BLOCK_SPACING_PARAGRAPH: f32 = 18.0;
 const BLOCK_SPACING_SECTION: f32 = 24.0;
 const LIST_ITEM_SPACING: f32 = 8.0;
 const TABLE_CELL_MIN_WIDTH: f32 = 120.0;
+const MATH_BLOCK_PADDING_X: i8 = 18;
+const MATH_BLOCK_PADDING_Y: i8 = 16;
 const LARGE_DOCUMENT_BLOCK_THRESHOLD: usize = 2_000;
 const VIRTUAL_RENDER_OVERSCAN: f32 = 1_200.0;
 const ESTIMATED_CHARS_PER_LINE: usize = 90;
@@ -975,30 +977,26 @@ fn render_math_block(
     );
 
     Frame::new()
-        .fill(theme.code_background)
+        .fill(theme.widget_inactive_background)
         .stroke(Stroke::new(1.0, theme.content_border))
         .corner_radius(egui::CornerRadius::same(6))
         .inner_margin(egui::Margin::symmetric(
-            scale_margin(14, zoom_factor),
-            scale_margin(12, zoom_factor),
+            scale_margin(MATH_BLOCK_PADDING_X, zoom_factor),
+            scale_margin(MATH_BLOCK_PADDING_Y, zoom_factor),
         ))
-        .show(ui, |ui| {
-            ui.label(
-                RichText::new(tr(render_resources.ui_language, TranslationKey::LabelMath))
-                    .size(QUOTE_TEXT_SIZE * zoom_factor)
-                    .color(theme.text_secondary),
-            );
-            ui.add_space(scale_spacing(6.0, zoom_factor));
-            match prepared {
-                PreparedMath::Raster { texture, size } => {
-                    let max_width = ui.available_width().max(120.0);
+        .show(ui, |ui| match prepared {
+            PreparedMath::Raster { texture, size } => {
+                let max_width = ui.available_width().max(120.0);
+                ui.vertical_centered(|ui| {
                     ui.add(
                         egui::Image::from_texture(&texture)
                             .fit_to_exact_size(size)
                             .max_width(max_width),
                     );
-                }
-                PreparedMath::FallbackText(expression) => {
+                });
+            }
+            PreparedMath::FallbackText(expression) => {
+                ui.vertical_centered(|ui| {
                     ui.label(
                         RichText::new(expression)
                             .size(BODY_TEXT_SIZE * zoom_factor)
@@ -1009,14 +1007,16 @@ fn render_math_block(
                                 FontFamily::Monospace,
                             )),
                     );
-                }
-                PreparedMath::Error(error) => {
-                    ui.label(
-                        RichText::new(error)
-                            .size(QUOTE_TEXT_SIZE * zoom_factor)
-                            .color(theme.status_error_text),
-                    );
-                    ui.add_space(scale_spacing(6.0, zoom_factor));
+                });
+            }
+            PreparedMath::Error(error) => {
+                ui.label(
+                    RichText::new(error)
+                        .size(QUOTE_TEXT_SIZE * zoom_factor)
+                        .color(theme.status_error_text),
+                );
+                ui.add_space(scale_spacing(6.0, zoom_factor));
+                ui.vertical_centered(|ui| {
                     ui.label(
                         RichText::new(expression)
                             .size(BODY_TEXT_SIZE * zoom_factor)
@@ -1027,7 +1027,7 @@ fn render_math_block(
                                 FontFamily::Monospace,
                             )),
                     );
-                }
+                });
             }
         });
 
@@ -1209,7 +1209,7 @@ fn styled_text(
         SpanKind::Plain => rich_text,
         SpanKind::Strong => rich_text.strong(),
         SpanKind::Emphasis => rich_text.italics(),
-        SpanKind::Code | SpanKind::Math => {
+        SpanKind::Code => {
             let font_size = match style {
                 InlineStyle::Heading(size) => (size - zoom_factor).max(INLINE_CODE_TEXT_SIZE),
                 _ => INLINE_CODE_TEXT_SIZE * zoom_factor,
@@ -1219,6 +1219,20 @@ fn styled_text(
                 .family(FontFamily::Monospace)
                 .font(FontId::new(font_size, FontFamily::Monospace))
                 .background_color(theme.code_background);
+
+            rich_text
+        }
+        SpanKind::Math => {
+            let font_size = match style {
+                InlineStyle::Heading(size) => (size - zoom_factor).max(INLINE_CODE_TEXT_SIZE),
+                _ => INLINE_CODE_TEXT_SIZE * zoom_factor,
+            };
+
+            rich_text = rich_text
+                .family(FontFamily::Monospace)
+                .font(FontId::new(font_size, FontFamily::Monospace))
+                .color(theme.text_primary)
+                .italics();
 
             rich_text
         }
