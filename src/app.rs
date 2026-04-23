@@ -4,10 +4,11 @@ use std::time::{Duration, Instant};
 
 use eframe::egui::{
     self, Align, Align2, CentralPanel, Frame, Layout, Margin, RichText, ScrollArea, SidePanel,
-    Slider, TopBottomPanel, UiBuilder, Vec2,
+    UiBuilder, Vec2,
 };
 use rfd::FileDialog;
 
+use crate::bottom_bar::{BottomBarState, render_bottom_bar};
 use crate::document_loader::{DocumentFingerprint, FileSnapshot, load_markdown_document};
 use crate::export::write_html_export;
 use crate::external_links::{handle_external_link_click, render_external_link_confirmation};
@@ -122,7 +123,6 @@ const HEADING_NAV_ITEM_INDENT: f32 = 10.0;
 const PREVIEW_WINDOW_SIDE_PADDING: f32 = 32.0;
 const PREVIEW_WINDOW_FALLBACK_HEIGHT: f32 = 720.0;
 const PREVIEW_WINDOW_MONITOR_MARGIN: f32 = 80.0;
-const ZOOM_STEP_BUTTON_WIDTH: f32 = 28.0;
 pub struct OxideMdApp {
     ui_context: egui::Context,
     language: Language,
@@ -287,18 +287,6 @@ impl OxideMdApp {
 
     fn reset_zoom(&mut self) {
         self.zoom_factor = DEFAULT_ZOOM_FACTOR;
-    }
-
-    fn zoom_label(&self) -> String {
-        format!(
-            "{} {}%",
-            tr(self.language, TranslationKey::LabelZoom),
-            (self.zoom_factor * 100.0).round()
-        )
-    }
-
-    fn zoom_percent(&self) -> f32 {
-        self.zoom_factor * 100.0
     }
 
     fn open_markdown_file(&mut self) {
@@ -865,49 +853,29 @@ impl OxideMdApp {
     }
 
     fn render_bottom_bar(&mut self, ctx: &egui::Context) {
-        TopBottomPanel::bottom("bottom_bar").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(self.zoom_label());
+        let action = render_bottom_bar(
+            ctx,
+            BottomBarState {
+                language: self.language,
+                zoom_factor: self.zoom_factor,
+                min_zoom_factor: MIN_ZOOM_FACTOR,
+                max_zoom_factor: MAX_ZOOM_FACTOR,
+                zoom_step: ZOOM_STEP,
+            },
+            &mut self.zoom_factor,
+        );
 
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if ui
-                        .button(tr(self.language, TranslationKey::ActionResetZoom))
-                        .clicked()
-                    {
-                        self.reset_zoom();
-                    }
+        if action.zoom_in {
+            self.zoom_in();
+        }
 
-                    if ui
-                        .add_enabled(
-                            self.zoom_factor < MAX_ZOOM_FACTOR,
-                            egui::Button::new("+").min_size(Vec2::splat(ZOOM_STEP_BUTTON_WIDTH)),
-                        )
-                        .clicked()
-                    {
-                        self.zoom_in();
-                    }
+        if action.zoom_out {
+            self.zoom_out();
+        }
 
-                    let slider =
-                        Slider::new(&mut self.zoom_factor, MIN_ZOOM_FACTOR..=MAX_ZOOM_FACTOR)
-                            .show_value(false)
-                            .step_by(ZOOM_STEP.into())
-                            .smart_aim(false);
-                    ui.add_sized([160.0, 0.0], slider);
-
-                    if ui
-                        .add_enabled(
-                            self.zoom_factor > MIN_ZOOM_FACTOR,
-                            egui::Button::new("-").min_size(Vec2::splat(ZOOM_STEP_BUTTON_WIDTH)),
-                        )
-                        .clicked()
-                    {
-                        self.zoom_out();
-                    }
-
-                    ui.label(format!("{:.0}%", self.zoom_percent()));
-                });
-            });
-        });
+        if action.reset_zoom {
+            self.reset_zoom();
+        }
     }
 
     fn render_heading_panel(&mut self, ctx: &egui::Context) {
