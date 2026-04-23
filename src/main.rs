@@ -16,6 +16,7 @@ mod session;
 mod shortcuts;
 mod syntax;
 mod theme;
+mod top_bar;
 mod watcher;
 
 use std::env;
