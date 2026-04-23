@@ -17,6 +17,10 @@ use crate::parser::MarkdownDocument;
 use crate::reload_worker::{ReloadResponse, ReloadWorkerHandle, spawn_reload_worker};
 use crate::renderer::render_markdown_document;
 use crate::search::SearchMatch;
+use crate::session::{
+    ExternalLinkBehavior, SessionSaveData, is_markdown_path, remember_recent_file,
+    restore_session as restore_saved_session, save_session,
+};
 use crate::theme::{DEFAULT_THEME_ID, ThemeId, apply_theme, available_themes, theme};
 use crate::watcher::{FileWatchEvent, FileWatcherHandle, watch_file};
 
@@ -30,12 +34,6 @@ enum ReloadStatus {
 enum RenderMeasurementReason {
     Load,
     Reload,
-}
-
-#[derive(Clone, Copy)]
-enum ExternalLinkBehavior {
-    AskFirst,
-    OpenDirectly,
 }
 
 struct PendingRenderMeasurement {
@@ -55,37 +53,6 @@ impl RenderMeasurementReason {
         match self {
             RenderMeasurementReason::Load => "load",
             RenderMeasurementReason::Reload => "reload",
-        }
-    }
-}
-
-impl ExternalLinkBehavior {
-    fn next(self) -> Self {
-        match self {
-            Self::AskFirst => Self::OpenDirectly,
-            Self::OpenDirectly => Self::AskFirst,
-        }
-    }
-
-    fn label(self, language: Language) -> &'static str {
-        match self {
-            Self::AskFirst => tr(language, TranslationKey::ValueAskFirst),
-            Self::OpenDirectly => tr(language, TranslationKey::ValueOpenDirectly),
-        }
-    }
-
-    fn storage_value(self) -> &'static str {
-        match self {
-            Self::AskFirst => "ask",
-            Self::OpenDirectly => "open",
-        }
-    }
-
-    fn from_storage_value(value: &str) -> Option<Self> {
-        match value {
-            "ask" => Some(Self::AskFirst),
-            "open" => Some(Self::OpenDirectly),
-            _ => None,
         }
     }
 }
@@ -154,14 +121,6 @@ const PREVIEW_WINDOW_FALLBACK_HEIGHT: f32 = 720.0;
 const PREVIEW_WINDOW_MONITOR_MARGIN: f32 = 80.0;
 const TOP_BAR_FILE_LABEL_MAX_WIDTH: f32 = 280.0;
 const ZOOM_STEP_BUTTON_WIDTH: f32 = 28.0;
-const MAX_RECENT_FILES: usize = 8;
-const STORAGE_KEY_LANGUAGE: &str = "oxidemd.language";
-const STORAGE_KEY_THEME: &str = "oxidemd.theme";
-const STORAGE_KEY_ZOOM: &str = "oxidemd.zoom";
-const STORAGE_KEY_EXTERNAL_LINKS: &str = "oxidemd.external_links";
-const STORAGE_KEY_CURRENT_FILE: &str = "oxidemd.current_file";
-const STORAGE_KEY_RECENT_FILES: &str = "oxidemd.recent_files";
-
 pub struct OxideMdApp {
     ui_context: egui::Context,
     language: Language,
@@ -251,58 +210,36 @@ impl OxideMdApp {
     }
 
     fn restore_session(&mut self, storage: Option<&dyn eframe::Storage>) -> Option<PathBuf> {
-        let storage = storage?;
+        let restored = restore_saved_session(storage, MIN_ZOOM_FACTOR, MAX_ZOOM_FACTOR);
 
-        if let Some(language) = storage
-            .get_string(STORAGE_KEY_LANGUAGE)
-            .and_then(|value| language_from_storage_value(&value))
-        {
+        if let Some(language) = restored.language {
             self.language = language;
         }
 
-        if let Some(theme_id) = storage
-            .get_string(STORAGE_KEY_THEME)
-            .and_then(|value| theme_id_from_storage_value(&value))
-        {
+        if let Some(theme_id) = restored.theme_id {
             self.theme_id = theme_id;
         }
 
-        if let Some(zoom_factor) = storage
-            .get_string(STORAGE_KEY_ZOOM)
-            .and_then(|value| value.parse::<f32>().ok())
-        {
-            self.zoom_factor = zoom_factor.clamp(MIN_ZOOM_FACTOR, MAX_ZOOM_FACTOR);
+        if let Some(zoom_factor) = restored.zoom_factor {
+            self.zoom_factor = zoom_factor;
         }
 
-        if let Some(external_link_behavior) = storage
-            .get_string(STORAGE_KEY_EXTERNAL_LINKS)
-            .and_then(|value| ExternalLinkBehavior::from_storage_value(&value))
-        {
+        if let Some(external_link_behavior) = restored.external_link_behavior {
             self.external_link_behavior = external_link_behavior;
         }
 
-        if let Some(recent_files) = storage.get_string(STORAGE_KEY_RECENT_FILES) {
-            self.recent_files = recent_files_from_storage_value(&recent_files);
+        if let Some(recent_files) = restored.recent_files {
+            self.recent_files = recent_files;
         }
 
-        let Some(current_file) = storage.get_string(STORAGE_KEY_CURRENT_FILE) else {
-            return None;
-        };
-
-        if current_file.is_empty() {
-            return None;
-        }
-
-        let path = PathBuf::from(current_file);
-        if path.is_file() && is_markdown_path(&path) {
-            Some(path)
-        } else {
+        if let Some(path) = restored.unavailable_current_file {
             self.set_reload_error(
                 TranslationKey::StatusLastFileUnavailable,
                 path.display().to_string(),
             );
-            None
         }
+
+        restored.current_file
     }
 
     fn load_initial_file(&mut self, path: PathBuf) {
@@ -476,7 +413,7 @@ impl OxideMdApp {
                 let document = loaded.document;
                 let active_heading = document.headings().first().map(|item| item.block_index);
                 self.current_file = Some(path.clone());
-                self.remember_recent_file(&path);
+                remember_recent_file(&mut self.recent_files, &path);
                 self.document = Some(document);
                 self.document_fingerprint = Some(loaded.fingerprint);
                 self.document_file_snapshot = loaded.file_snapshot;
@@ -517,14 +454,6 @@ impl OxideMdApp {
                 self.set_reload_error(TranslationKey::StatusLoadFailed, error);
             }
         }
-    }
-
-    fn remember_recent_file(&mut self, path: &Path) {
-        let path = path.to_path_buf();
-        self.recent_files
-            .retain(|recent_path| recent_path != &path && recent_path.is_file());
-        self.recent_files.insert(0, path);
-        self.recent_files.truncate(MAX_RECENT_FILES);
     }
 
     fn start_watching_file(&mut self, path: &Path) {
@@ -1646,29 +1575,16 @@ impl OxideMdApp {
 
 impl eframe::App for OxideMdApp {
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        storage.set_string(
-            STORAGE_KEY_LANGUAGE,
-            language_storage_value(self.language).to_owned(),
-        );
-        storage.set_string(
-            STORAGE_KEY_THEME,
-            theme_id_storage_value(self.theme_id).to_owned(),
-        );
-        storage.set_string(STORAGE_KEY_ZOOM, self.zoom_factor.to_string());
-        storage.set_string(
-            STORAGE_KEY_EXTERNAL_LINKS,
-            self.external_link_behavior.storage_value().to_owned(),
-        );
-
-        if let Some(path) = &self.current_file {
-            storage.set_string(STORAGE_KEY_CURRENT_FILE, path.display().to_string());
-        } else {
-            storage.set_string(STORAGE_KEY_CURRENT_FILE, String::new());
-        }
-
-        storage.set_string(
-            STORAGE_KEY_RECENT_FILES,
-            recent_files_storage_value(&self.recent_files),
+        save_session(
+            storage,
+            SessionSaveData {
+                language: self.language,
+                theme_id: self.theme_id,
+                zoom_factor: self.zoom_factor,
+                external_link_behavior: self.external_link_behavior,
+                current_file: self.current_file.as_deref(),
+                recent_files: &self.recent_files,
+            },
         );
     }
 
@@ -1696,15 +1612,6 @@ impl eframe::App for OxideMdApp {
     }
 }
 
-fn is_markdown_path(path: &Path) -> bool {
-    path.extension()
-        .and_then(|extension| extension.to_str())
-        .map(|extension| {
-            extension.eq_ignore_ascii_case("md") || extension.eq_ignore_ascii_case("markdown")
-        })
-        .unwrap_or(false)
-}
-
 fn status_path_label(path: &Path) -> String {
     path.file_name()
         .and_then(|name| name.to_str())
@@ -1727,31 +1634,6 @@ fn export_file_name(path: &Path) -> String {
         .unwrap_or("export");
 
     format!("{}.html", stem)
-}
-
-fn recent_files_from_storage_value(value: &str) -> Vec<PathBuf> {
-    let mut recent_files = Vec::new();
-
-    for path in value.lines().map(PathBuf::from) {
-        if recent_files.len() >= MAX_RECENT_FILES {
-            break;
-        }
-
-        if path.is_file() && is_markdown_path(&path) && !recent_files.contains(&path) {
-            recent_files.push(path);
-        }
-    }
-
-    recent_files
-}
-
-fn recent_files_storage_value(recent_files: &[PathBuf]) -> String {
-    recent_files
-        .iter()
-        .take(MAX_RECENT_FILES)
-        .map(|path| path.display().to_string())
-        .collect::<Vec<_>>()
-        .join("\n")
 }
 
 fn shortcuts_help_items(language: Language) -> [(&'static str, &'static str); 11] {
@@ -1796,38 +1678,6 @@ fn active_search_query(search_query: &str) -> Option<&str> {
 
 fn open_external_link(ctx: &egui::Context, url: String) {
     ctx.open_url(egui::OpenUrl::new_tab(url));
-}
-
-fn language_storage_value(language: Language) -> &'static str {
-    match language {
-        Language::En => "en",
-        Language::Ja => "ja",
-    }
-}
-
-fn language_from_storage_value(value: &str) -> Option<Language> {
-    match value {
-        "en" => Some(Language::En),
-        "ja" => Some(Language::Ja),
-        _ => None,
-    }
-}
-
-fn theme_id_storage_value(theme_id: ThemeId) -> &'static str {
-    match theme_id {
-        ThemeId::WarmPaper => "warm_paper",
-        ThemeId::Mist => "mist",
-        ThemeId::NightOwl => "night_owl",
-    }
-}
-
-fn theme_id_from_storage_value(value: &str) -> Option<ThemeId> {
-    match value {
-        "warm_paper" => Some(ThemeId::WarmPaper),
-        "mist" => Some(ThemeId::Mist),
-        "night_owl" => Some(ThemeId::NightOwl),
-        _ => None,
-    }
 }
 
 fn heading_nav_indent(level: pulldown_cmark::HeadingLevel) -> f32 {
