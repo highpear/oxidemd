@@ -1,4 +1,5 @@
 mod app;
+mod bottom_bar;
 mod cli;
 mod code_block;
 mod document_loader;
