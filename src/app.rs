@@ -10,6 +10,7 @@ use rfd::FileDialog;
 
 use crate::document_loader::{DocumentFingerprint, FileSnapshot, load_markdown_document};
 use crate::export::write_html_export;
+use crate::external_links::{handle_external_link_click, render_external_link_confirmation};
 use crate::i18n::{Language, TranslationKey, tr};
 use crate::image_cache::ImageCache;
 use crate::metrics;
@@ -584,57 +585,6 @@ impl OxideMdApp {
 
         self.pending_reload_at = None;
         self.enqueue_reload(path);
-    }
-
-    fn handle_external_link_click(&mut self, ctx: &egui::Context, url: String) {
-        match self.external_link_behavior {
-            ExternalLinkBehavior::AskFirst => {
-                self.pending_external_link = Some(url);
-            }
-            ExternalLinkBehavior::OpenDirectly => {
-                open_external_link(ctx, url);
-            }
-        }
-    }
-
-    fn render_external_link_confirmation(&mut self, ctx: &egui::Context) {
-        let Some(url) = self.pending_external_link.clone() else {
-            return;
-        };
-
-        let mut open_link = false;
-        let mut cancel = false;
-
-        egui::Window::new(tr(self.language, TranslationKey::MessageExternalLinkPrompt))
-            .collapsible(false)
-            .resizable(false)
-            .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
-            .show(ctx, |ui| {
-                ui.label(url.as_str());
-                ui.add_space(8.0);
-                ui.horizontal(|ui| {
-                    if ui
-                        .button(tr(self.language, TranslationKey::ActionOpenExternalLink))
-                        .clicked()
-                    {
-                        open_link = true;
-                    }
-
-                    if ui
-                        .button(tr(self.language, TranslationKey::ActionCancel))
-                        .clicked()
-                    {
-                        cancel = true;
-                    }
-                });
-            });
-
-        if open_link {
-            self.pending_external_link = None;
-            open_external_link(ctx, url);
-        } else if cancel {
-            self.pending_external_link = None;
-        }
     }
 
     fn enqueue_reload(&mut self, path: PathBuf) {
@@ -1426,7 +1376,12 @@ impl OxideMdApp {
                 }
 
                 if let Some(url) = render_outcome.clicked_external_link {
-                    self.handle_external_link_click(ctx, url);
+                    handle_external_link_click(
+                        ctx,
+                        self.external_link_behavior,
+                        &mut self.pending_external_link,
+                        url,
+                    );
                 }
 
                 if render_outcome.needs_scroll_stabilization {
@@ -1528,7 +1483,7 @@ impl eframe::App for OxideMdApp {
         self.render_bottom_bar(ctx);
         self.render_heading_panel(ctx);
         self.render_document_panel(ctx);
-        self.render_external_link_confirmation(ctx);
+        render_external_link_confirmation(ctx, self.language, &mut self.pending_external_link);
         render_shortcuts_help(ctx, self.language, &mut self.show_shortcuts_help);
         self.render_drop_overlay(ctx);
     }
@@ -1565,10 +1520,6 @@ fn active_search_query(search_query: &str) -> Option<&str> {
     } else {
         Some(trimmed)
     }
-}
-
-fn open_external_link(ctx: &egui::Context, url: String) {
-    ctx.open_url(egui::OpenUrl::new_tab(url));
 }
 
 fn heading_nav_indent(level: pulldown_cmark::HeadingLevel) -> f32 {

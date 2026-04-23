@@ -3,6 +3,7 @@ mod cli;
 mod code_block;
 mod document_loader;
 mod export;
+mod external_links;
 mod i18n;
 mod image_cache;
 mod metrics;
