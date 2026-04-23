@@ -1,3 +1,5 @@
+use crate::parser::MarkdownDocument;
+
 const MAX_PREVIEW_CHARS: usize = 72;
 
 #[derive(Clone)]
@@ -6,10 +8,108 @@ pub struct SearchMatch {
     pub preview: String,
 }
 
+pub struct SearchState {
+    pub query: String,
+    pub matches: Vec<SearchMatch>,
+    pub active_index: Option<usize>,
+    pub focus_input: bool,
+}
+
 pub struct HighlightSegment<'a> {
     pub text: &'a str,
     pub is_match: bool,
     pub is_active_match: bool,
+}
+
+impl SearchState {
+    pub fn new() -> Self {
+        Self {
+            query: String::new(),
+            matches: Vec::new(),
+            active_index: None,
+            focus_input: false,
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.query.clear();
+        self.matches.clear();
+        self.active_index = None;
+    }
+
+    pub fn clear_matches(&mut self) {
+        self.matches.clear();
+        self.active_index = None;
+    }
+
+    pub fn refresh_matches(&mut self, document: Option<&MarkdownDocument>) {
+        let Some(document) = document else {
+            self.clear_matches();
+            return;
+        };
+
+        let previous_block = self.active_block();
+        self.matches = document.search_matches(&self.query);
+
+        self.active_index = previous_block
+            .and_then(|block_index| {
+                self.matches
+                    .iter()
+                    .position(|entry| entry.block_index == block_index)
+            })
+            .or_else(|| (!self.matches.is_empty()).then_some(0));
+    }
+
+    pub fn select_match(&mut self, index: usize) -> Option<usize> {
+        let search_match = self.matches.get(index)?;
+        self.active_index = Some(index);
+        Some(search_match.block_index)
+    }
+
+    pub fn select_next(&mut self) -> Option<usize> {
+        if self.matches.is_empty() {
+            return None;
+        }
+
+        let next_index = match self.active_index {
+            Some(index) => (index + 1) % self.matches.len(),
+            None => 0,
+        };
+
+        self.select_match(next_index)
+    }
+
+    pub fn select_previous(&mut self) -> Option<usize> {
+        if self.matches.is_empty() {
+            return None;
+        }
+
+        let previous_index = match self.active_index {
+            Some(0) | None => self.matches.len() - 1,
+            Some(index) => index - 1,
+        };
+
+        self.select_match(previous_index)
+    }
+
+    pub fn has_matches(&self) -> bool {
+        !self.matches.is_empty()
+    }
+
+    pub fn active_block(&self) -> Option<usize> {
+        self.active_index
+            .and_then(|index| self.matches.get(index))
+            .map(|search_match| search_match.block_index)
+    }
+
+    pub fn active_query(&self) -> Option<&str> {
+        let trimmed = self.query.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    }
 }
 
 pub fn normalized_query(query: &str) -> Option<String> {
