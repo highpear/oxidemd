@@ -67,6 +67,7 @@ pub enum Block {
 pub fn parse_markdown(input: &str) -> MarkdownDocument {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_TABLES);
+    options.insert(Options::ENABLE_MATH);
 
     let mut parser = Parser::new_ext(input, options).peekable();
     let mut blocks = Vec::new();
@@ -81,7 +82,7 @@ pub fn parse_markdown(input: &str) -> MarkdownDocument {
             }
             Event::Start(Tag::Paragraph) => {
                 let content = collect_inline_content(&mut parser, TagEnd::Paragraph);
-                if let Some(expression) = extract_math_block(&content) {
+                if let Some(expression) = standalone_math_block(&content) {
                     blocks.push(Block::MathBlock { expression });
                 } else if !content.is_empty() {
                     blocks.push(Block::Paragraph(content));
@@ -129,6 +130,14 @@ pub fn parse_markdown(input: &str) -> MarkdownDocument {
                         alignments,
                         headers,
                         rows,
+                    });
+                }
+            }
+            Event::DisplayMath(value) => {
+                let expression = value.trim();
+                if !expression.is_empty() {
+                    blocks.push(Block::MathBlock {
+                        expression: expression.to_owned(),
                     });
                 }
             }
@@ -310,8 +319,11 @@ where
     I: Iterator<Item = Event<'a>>,
 {
     match event {
-        Event::Text(value) => push_text_span(spans, value.as_ref()),
+        Event::Text(value) => spans.push(InlineSpan::Text(value.to_string())),
         Event::Code(value) => spans.push(InlineSpan::Code(value.to_string())),
+        Event::InlineMath(value) | Event::DisplayMath(value) => {
+            spans.push(InlineSpan::Math(value.to_string()))
+        }
         Event::SoftBreak | Event::HardBreak => spans.push(InlineSpan::LineBreak),
         Event::Start(Tag::Strong) => {
             let text = collect_text_until(parser, TagEnd::Strong);
@@ -346,97 +358,6 @@ where
     }
 }
 
-fn push_text_span(spans: &mut Vec<InlineSpan>, text: &str) {
-    if text.is_empty() {
-        return;
-    }
-
-    let mut pending_start = 0usize;
-    let mut search_start = 0usize;
-
-    while let Some(open_offset) = text[search_start..].find('$') {
-        let open = search_start + open_offset;
-
-        if is_escaped(text, open) || is_double_dollar_at(text, open) {
-            search_start = open + 1;
-            continue;
-        }
-
-        let expression_start = open + 1;
-        let Some(close) = find_inline_math_close(text, expression_start) else {
-            search_start = open + 1;
-            continue;
-        };
-
-        let expression = text[expression_start..close].trim();
-        if expression.is_empty() {
-            search_start = close + 1;
-            continue;
-        }
-
-        if pending_start < open {
-            spans.push(InlineSpan::Text(text[pending_start..open].to_owned()));
-        }
-
-        spans.push(InlineSpan::Math(expression.to_owned()));
-        pending_start = close + 1;
-        search_start = pending_start;
-    }
-
-    if pending_start < text.len() {
-        spans.push(InlineSpan::Text(text[pending_start..].to_owned()));
-    }
-}
-
-fn find_inline_math_close(text: &str, start: usize) -> Option<usize> {
-    text[start..]
-        .match_indices('$')
-        .map(|(offset, _)| start + offset)
-        .find(|index| !is_escaped(text, *index) && !is_double_dollar_at(text, *index))
-}
-
-fn is_double_dollar_at(text: &str, index: usize) -> bool {
-    text[index..].starts_with("$$") || text[..index].ends_with('$')
-}
-
-fn is_escaped(text: &str, index: usize) -> bool {
-    let backslash_count = text[..index]
-        .chars()
-        .rev()
-        .take_while(|character| *character == '\\')
-        .count();
-
-    backslash_count % 2 == 1
-}
-
-fn extract_math_block(content: &InlineContent) -> Option<String> {
-    let mut text = String::new();
-
-    for span in &content.spans {
-        match span {
-            InlineSpan::Text(value) => text.push_str(value),
-            InlineSpan::LineBreak => text.push('\n'),
-            _ => return None,
-        }
-    }
-
-    let trimmed = text.trim();
-    let expression = if trimmed.starts_with("$$") && trimmed.ends_with("$$") {
-        &trimmed[2..trimmed.len() - 2]
-    } else if trimmed.starts_with("\\[") && trimmed.ends_with("\\]") {
-        &trimmed[2..trimmed.len() - 2]
-    } else {
-        return None;
-    };
-
-    let expression = expression.trim();
-    if expression.is_empty() {
-        None
-    } else {
-        Some(expression.to_owned())
-    }
-}
-
 fn collect_heading_nav_items(blocks: &[Block]) -> Vec<HeadingNavItem> {
     let mut used_anchors = HashMap::new();
 
@@ -462,6 +383,27 @@ fn collect_heading_nav_items(blocks: &[Block]) -> Vec<HeadingNavItem> {
             _ => None,
         })
         .collect()
+}
+
+fn standalone_math_block(content: &InlineContent) -> Option<String> {
+    let mut expression = None;
+
+    for span in &content.spans {
+        match span {
+            InlineSpan::Math(value) if expression.is_none() => {
+                let trimmed = value.trim();
+                if trimmed.is_empty() {
+                    return None;
+                }
+                expression = Some(trimmed.to_owned());
+            }
+            InlineSpan::Text(text) if text.trim().is_empty() => {}
+            InlineSpan::LineBreak => {}
+            _ => return None,
+        }
+    }
+
+    expression
 }
 
 fn unique_anchor(title: &str, used_anchors: &mut HashMap<String, usize>) -> String {

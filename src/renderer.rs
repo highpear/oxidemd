@@ -6,6 +6,7 @@ use pulldown_cmark::{Alignment, HeadingLevel};
 use crate::code_block::render_code_block;
 use crate::i18n::{Language, TranslationKey, tr};
 use crate::image_cache::{ImageCache, ImageLoadState};
+use crate::math::{MathRenderCache, MathRenderMode, PreparedMath};
 use crate::parser::{Block, InlineContent, InlineSpan, MarkdownDocument};
 use crate::search::{split_highlighted_segments, text_matches_query};
 use crate::theme::Theme;
@@ -29,6 +30,7 @@ pub fn render_markdown_document(
     zoom_factor: f32,
     document_base_dir: Option<&Path>,
     image_cache: &mut ImageCache,
+    math_render_cache: &mut MathRenderCache,
     block_heights: &mut [Option<f32>],
     scroll_to_block: Option<usize>,
     search_query: Option<&str>,
@@ -40,10 +42,11 @@ pub fn render_markdown_document(
     let mut link_actions = LinkActions::default();
     let viewport_top = ui.clip_rect().top();
     let viewport_bottom = ui.clip_rect().bottom();
-    let mut image_resources = ImageRenderResources {
+    let mut render_resources = RenderResources {
         ui_language,
         document_base_dir,
         image_cache,
+        math_render_cache,
     };
 
     for (block_index, block) in document.blocks.iter().enumerate() {
@@ -98,7 +101,7 @@ pub fn render_markdown_document(
                     viewport_top,
                     search_highlight,
                     &mut link_actions,
-                    &mut image_resources,
+                    &mut render_resources,
                 );
                 did_scroll |= heading_state.did_scroll;
 
@@ -115,7 +118,7 @@ pub fn render_markdown_document(
                     zoom_factor,
                     search_highlight,
                     &mut link_actions,
-                    &mut image_resources,
+                    &mut render_resources,
                 );
                 ui.add_space(scale_spacing(BLOCK_SPACING_PARAGRAPH, zoom_factor));
             }
@@ -129,7 +132,7 @@ pub fn render_markdown_document(
                         zoom_factor,
                         search_highlight,
                         &mut link_actions,
-                        &mut image_resources,
+                        &mut render_resources,
                     );
                     ui.add_space(scale_spacing(LIST_ITEM_SPACING, zoom_factor));
                 }
@@ -146,7 +149,7 @@ pub fn render_markdown_document(
                         zoom_factor,
                         search_highlight,
                         &mut link_actions,
-                        &mut image_resources,
+                        &mut render_resources,
                     );
                     ui.add_space(scale_spacing(LIST_ITEM_SPACING, zoom_factor));
                 }
@@ -160,7 +163,7 @@ pub fn render_markdown_document(
                     zoom_factor,
                     search_highlight,
                     &mut link_actions,
-                    &mut image_resources,
+                    &mut render_resources,
                 );
             }
             Block::CodeBlock { language, code } => {
@@ -175,7 +178,7 @@ pub fn render_markdown_document(
                 );
             }
             Block::MathBlock { expression } => {
-                render_math_block(ui, ui_language, expression, theme, zoom_factor);
+                render_math_block(ui, expression, theme, zoom_factor, &mut render_resources);
             }
             Block::Table {
                 alignments,
@@ -192,7 +195,7 @@ pub fn render_markdown_document(
                     zoom_factor,
                     search_highlight,
                     &mut link_actions,
-                    &mut image_resources,
+                    &mut render_resources,
                 );
             }
         }
@@ -331,10 +334,11 @@ struct SearchHighlight<'a> {
     is_active_block: bool,
 }
 
-struct ImageRenderResources<'a> {
+struct RenderResources<'a> {
     ui_language: Language,
     document_base_dir: Option<&'a Path>,
     image_cache: &'a mut ImageCache,
+    math_render_cache: &'a mut MathRenderCache,
 }
 
 #[derive(Default)]
@@ -359,7 +363,7 @@ fn render_heading(
     viewport_top: f32,
     search_highlight: SearchHighlight<'_>,
     link_actions: &mut LinkActions,
-    image_resources: &mut ImageRenderResources<'_>,
+    render_resources: &mut RenderResources<'_>,
 ) -> HeadingRenderState {
     let size = match level {
         HeadingLevel::H1 => 31.0,
@@ -385,7 +389,7 @@ fn render_heading(
             zoom_factor,
             search_highlight,
             link_actions,
-            image_resources,
+            render_resources,
         );
         ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
     });
@@ -407,7 +411,7 @@ fn render_list_item(
     zoom_factor: f32,
     search_highlight: SearchHighlight<'_>,
     link_actions: &mut LinkActions,
-    image_resources: &mut ImageRenderResources<'_>,
+    render_resources: &mut RenderResources<'_>,
 ) {
     ui.horizontal_top(|ui| {
         ui.add_sized(
@@ -424,7 +428,7 @@ fn render_list_item(
                 zoom_factor,
                 search_highlight,
                 link_actions,
-                image_resources,
+                render_resources,
             );
         });
     });
@@ -437,7 +441,7 @@ fn render_blockquote(
     zoom_factor: f32,
     search_highlight: SearchHighlight<'_>,
     link_actions: &mut LinkActions,
-    image_resources: &mut ImageRenderResources<'_>,
+    render_resources: &mut RenderResources<'_>,
 ) {
     Frame::new()
         .fill(theme.quote_background)
@@ -456,7 +460,7 @@ fn render_blockquote(
                     zoom_factor,
                     search_highlight,
                     link_actions,
-                    image_resources,
+                    render_resources,
                 );
                 ui.add_space(scale_spacing(6.0, zoom_factor));
             }
@@ -475,7 +479,7 @@ fn render_table(
     zoom_factor: f32,
     search_highlight: SearchHighlight<'_>,
     link_actions: &mut LinkActions,
-    image_resources: &mut ImageRenderResources<'_>,
+    render_resources: &mut RenderResources<'_>,
 ) {
     let column_count = table_column_count(headers, rows);
     if column_count == 0 {
@@ -505,7 +509,7 @@ fn render_table(
                                 zoom_factor,
                                 search_highlight,
                                 link_actions,
-                                image_resources,
+                                render_resources,
                             );
 
                             for row in rows {
@@ -519,7 +523,7 @@ fn render_table(
                                     zoom_factor,
                                     search_highlight,
                                     link_actions,
-                                    image_resources,
+                                    render_resources,
                                 );
                             }
                         });
@@ -539,7 +543,7 @@ fn render_table_row(
     zoom_factor: f32,
     search_highlight: SearchHighlight<'_>,
     link_actions: &mut LinkActions,
-    image_resources: &mut ImageRenderResources<'_>,
+    render_resources: &mut RenderResources<'_>,
 ) {
     for column_index in 0..column_count {
         let cell = cells.get(column_index);
@@ -568,7 +572,7 @@ fn render_table_row(
                 zoom_factor,
                 search_highlight,
                 link_actions,
-                image_resources,
+                render_resources,
             );
         });
     }
@@ -585,7 +589,7 @@ fn render_aligned_cell(
     zoom_factor: f32,
     search_highlight: SearchHighlight<'_>,
     link_actions: &mut LinkActions,
-    image_resources: &mut ImageRenderResources<'_>,
+    render_resources: &mut RenderResources<'_>,
 ) {
     let Some(cell) = cell else {
         ui.label("");
@@ -602,7 +606,7 @@ fn render_aligned_cell(
             zoom_factor,
             search_highlight,
             link_actions,
-            image_resources,
+            render_resources,
         ),
         Alignment::None | Alignment::Left => {
             render_inline(
@@ -613,7 +617,7 @@ fn render_aligned_cell(
                 zoom_factor,
                 search_highlight,
                 link_actions,
-                image_resources,
+                render_resources,
             );
         }
     }
@@ -628,7 +632,7 @@ fn render_inline_aligned(
     zoom_factor: f32,
     search_highlight: SearchHighlight<'_>,
     link_actions: &mut LinkActions,
-    image_resources: &mut ImageRenderResources<'_>,
+    render_resources: &mut RenderResources<'_>,
 ) {
     let available_width = ui.available_width();
     let line_width = inline_content_width(ui, content, style, theme, zoom_factor, search_highlight);
@@ -653,7 +657,7 @@ fn render_inline_aligned(
                 zoom_factor,
                 search_highlight,
                 link_actions,
-                image_resources,
+                render_resources,
             );
         }
     });
@@ -797,7 +801,7 @@ fn render_inline(
     zoom_factor: f32,
     search_highlight: SearchHighlight<'_>,
     link_actions: &mut LinkActions,
-    image_resources: &mut ImageRenderResources<'_>,
+    render_resources: &mut RenderResources<'_>,
 ) {
     if !content
         .spans
@@ -814,7 +818,7 @@ fn render_inline(
                     zoom_factor,
                     search_highlight,
                     link_actions,
-                    image_resources,
+                    render_resources,
                 );
             }
         });
@@ -842,7 +846,7 @@ fn render_inline(
                     zoom_factor,
                     search_highlight,
                     link_actions,
-                    image_resources,
+                    render_resources,
                 );
             }
         });
@@ -867,7 +871,7 @@ fn render_inline_span(
     zoom_factor: f32,
     search_highlight: SearchHighlight<'_>,
     link_actions: &mut LinkActions,
-    image_resources: &mut ImageRenderResources<'_>,
+    render_resources: &mut RenderResources<'_>,
 ) {
     match span {
         InlineSpan::Text(text) => render_text_label(
@@ -906,15 +910,37 @@ fn render_inline_span(
             zoom_factor,
             search_highlight,
         ),
-        InlineSpan::Math(text) => render_text_label(
-            ui,
-            text,
-            style,
-            SpanKind::Math,
-            theme,
-            zoom_factor,
-            search_highlight,
-        ),
+        InlineSpan::Math(text) => {
+            let prepared = render_resources.math_render_cache.prepare(
+                ui.ctx(),
+                text,
+                MathRenderMode::Inline,
+                theme.is_dark,
+                zoom_factor,
+            );
+
+            match prepared {
+                PreparedMath::FallbackText(text) => render_text_label(
+                    ui,
+                    &text,
+                    style,
+                    SpanKind::Math,
+                    theme,
+                    zoom_factor,
+                    search_highlight,
+                ),
+                PreparedMath::Raster { .. } => {}
+                PreparedMath::Error(_) => render_text_label(
+                    ui,
+                    text,
+                    style,
+                    SpanKind::Math,
+                    theme,
+                    zoom_factor,
+                    search_highlight,
+                ),
+            }
+        }
         InlineSpan::Link { text, destination } => {
             let rich_text = styled_text(text, style, SpanKind::Link, theme, zoom_factor)
                 .background_color(search_highlight_for_text(text, theme, search_highlight));
@@ -927,7 +953,7 @@ fn render_inline_span(
             }
         }
         InlineSpan::Image { alt, destination } => {
-            render_image_span(ui, alt, destination, theme, zoom_factor, image_resources)
+            render_image_span(ui, alt, destination, theme, zoom_factor, render_resources)
         }
         InlineSpan::LineBreak => {}
     }
@@ -935,11 +961,19 @@ fn render_inline_span(
 
 fn render_math_block(
     ui: &mut Ui,
-    ui_language: Language,
     expression: &str,
     theme: &Theme,
     zoom_factor: f32,
+    render_resources: &mut RenderResources<'_>,
 ) {
+    let prepared = render_resources.math_render_cache.prepare(
+        ui.ctx(),
+        expression,
+        MathRenderMode::Block,
+        theme.is_dark,
+        zoom_factor,
+    );
+
     Frame::new()
         .fill(theme.code_background)
         .stroke(Stroke::new(1.0, theme.content_border))
@@ -950,21 +984,51 @@ fn render_math_block(
         ))
         .show(ui, |ui| {
             ui.label(
-                RichText::new(tr(ui_language, TranslationKey::LabelMath))
+                RichText::new(tr(render_resources.ui_language, TranslationKey::LabelMath))
                     .size(QUOTE_TEXT_SIZE * zoom_factor)
                     .color(theme.text_secondary),
             );
             ui.add_space(scale_spacing(6.0, zoom_factor));
-            ui.label(
-                RichText::new(expression)
-                    .size(BODY_TEXT_SIZE * zoom_factor)
-                    .color(theme.text_primary)
-                    .family(FontFamily::Monospace)
-                    .font(FontId::new(
-                        BODY_TEXT_SIZE * zoom_factor,
-                        FontFamily::Monospace,
-                    )),
-            );
+            match prepared {
+                PreparedMath::Raster { texture, size } => {
+                    let max_width = ui.available_width().max(120.0);
+                    ui.add(
+                        egui::Image::from_texture(&texture)
+                            .fit_to_exact_size(size)
+                            .max_width(max_width),
+                    );
+                }
+                PreparedMath::FallbackText(expression) => {
+                    ui.label(
+                        RichText::new(expression)
+                            .size(BODY_TEXT_SIZE * zoom_factor)
+                            .color(theme.text_primary)
+                            .family(FontFamily::Monospace)
+                            .font(FontId::new(
+                                BODY_TEXT_SIZE * zoom_factor,
+                                FontFamily::Monospace,
+                            )),
+                    );
+                }
+                PreparedMath::Error(error) => {
+                    ui.label(
+                        RichText::new(error)
+                            .size(QUOTE_TEXT_SIZE * zoom_factor)
+                            .color(theme.status_error_text),
+                    );
+                    ui.add_space(scale_spacing(6.0, zoom_factor));
+                    ui.label(
+                        RichText::new(expression)
+                            .size(BODY_TEXT_SIZE * zoom_factor)
+                            .color(theme.text_primary)
+                            .family(FontFamily::Monospace)
+                            .font(FontId::new(
+                                BODY_TEXT_SIZE * zoom_factor,
+                                FontFamily::Monospace,
+                            )),
+                    );
+                }
+            }
         });
 
     ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
@@ -976,14 +1040,14 @@ fn render_image_span(
     destination: &str,
     theme: &Theme,
     zoom_factor: f32,
-    image_resources: &mut ImageRenderResources<'_>,
+    render_resources: &mut RenderResources<'_>,
 ) {
-    let Some(path) = resolve_local_image_path(image_resources.document_base_dir, destination)
+    let Some(path) = resolve_local_image_path(render_resources.document_base_dir, destination)
     else {
         render_image_message(
             ui,
             tr(
-                image_resources.ui_language,
+                render_resources.ui_language,
                 TranslationKey::MessageImageUnsupported,
             ),
             destination,
@@ -993,7 +1057,7 @@ fn render_image_span(
         return;
     };
 
-    match image_resources.image_cache.load(ui.ctx(), &path) {
+    match render_resources.image_cache.load(ui.ctx(), &path) {
         ImageLoadState::Loaded(texture) => {
             let max_width = ui.available_width().max(120.0);
             ui.add(
@@ -1012,7 +1076,7 @@ fn render_image_span(
             render_image_message(
                 ui,
                 tr(
-                    image_resources.ui_language,
+                    render_resources.ui_language,
                     TranslationKey::MessageImageLoadFailed,
                 ),
                 detail,

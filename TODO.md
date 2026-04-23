@@ -284,6 +284,7 @@ Exit criteria:
 ## Current Priority
 
 1. Continue viewer polish and reliability improvements
-2. Expand manual release checks
-3. Address remaining hot-path allocations when measurements justify it
+2. Evaluate native math rendering and parser integration
+3. Expand manual release checks
+4. Address remaining hot-path allocations when measurements justify it
 ---
