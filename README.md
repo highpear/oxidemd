@@ -30,6 +30,7 @@ Current capabilities:
 - Open links from rendered content
 - Choose whether external links open directly or ask first
 - Render local PNG and JPEG images
+- Detect inline and display math with a plain fallback preview
 - Live reload when the opened file changes
 - English and Japanese UI strings
 - Theme switching and document zoom
@@ -58,6 +59,7 @@ Currently supported Markdown elements:
 - Inline code
 - Links
 - Images (local PNG/JPEG)
+- Math fallback preview (`$...$`, `$$...$$`)
 
 ---
 
@@ -69,7 +71,7 @@ The current target is intentionally small:
 - Single-file Markdown viewing
 - Reliable readability over feature breadth
 
-Items such as tabs, large file improvements, math, and Mermaid are planned for later phases.
+Items such as tabs, large file improvements, full math rendering, and Mermaid are planned for later phases.
 
 ---
 

@@ -31,6 +31,7 @@ pub enum InlineSpan {
     Strong(String),
     Emphasis(String),
     Code(String),
+    Math(String),
     Link { text: String, destination: String },
     Image { alt: String, destination: String },
     LineBreak,
@@ -52,6 +53,9 @@ pub enum Block {
     CodeBlock {
         language: Option<String>,
         code: String,
+    },
+    MathBlock {
+        expression: String,
     },
     Table {
         alignments: Vec<Alignment>,
@@ -77,7 +81,9 @@ pub fn parse_markdown(input: &str) -> MarkdownDocument {
             }
             Event::Start(Tag::Paragraph) => {
                 let content = collect_inline_content(&mut parser, TagEnd::Paragraph);
-                if !content.is_empty() {
+                if let Some(expression) = extract_math_block(&content) {
+                    blocks.push(Block::MathBlock { expression });
+                } else if !content.is_empty() {
                     blocks.push(Block::Paragraph(content));
                 }
             }
@@ -345,7 +351,90 @@ fn push_text_span(spans: &mut Vec<InlineSpan>, text: &str) {
         return;
     }
 
-    spans.push(InlineSpan::Text(text.to_owned()));
+    let mut pending_start = 0usize;
+    let mut search_start = 0usize;
+
+    while let Some(open_offset) = text[search_start..].find('$') {
+        let open = search_start + open_offset;
+
+        if is_escaped(text, open) || is_double_dollar_at(text, open) {
+            search_start = open + 1;
+            continue;
+        }
+
+        let expression_start = open + 1;
+        let Some(close) = find_inline_math_close(text, expression_start) else {
+            search_start = open + 1;
+            continue;
+        };
+
+        let expression = text[expression_start..close].trim();
+        if expression.is_empty() {
+            search_start = close + 1;
+            continue;
+        }
+
+        if pending_start < open {
+            spans.push(InlineSpan::Text(text[pending_start..open].to_owned()));
+        }
+
+        spans.push(InlineSpan::Math(expression.to_owned()));
+        pending_start = close + 1;
+        search_start = pending_start;
+    }
+
+    if pending_start < text.len() {
+        spans.push(InlineSpan::Text(text[pending_start..].to_owned()));
+    }
+}
+
+fn find_inline_math_close(text: &str, start: usize) -> Option<usize> {
+    text[start..]
+        .match_indices('$')
+        .map(|(offset, _)| start + offset)
+        .find(|index| !is_escaped(text, *index) && !is_double_dollar_at(text, *index))
+}
+
+fn is_double_dollar_at(text: &str, index: usize) -> bool {
+    text[index..].starts_with("$$") || text[..index].ends_with('$')
+}
+
+fn is_escaped(text: &str, index: usize) -> bool {
+    let backslash_count = text[..index]
+        .chars()
+        .rev()
+        .take_while(|character| *character == '\\')
+        .count();
+
+    backslash_count % 2 == 1
+}
+
+fn extract_math_block(content: &InlineContent) -> Option<String> {
+    let mut text = String::new();
+
+    for span in &content.spans {
+        match span {
+            InlineSpan::Text(value) => text.push_str(value),
+            InlineSpan::LineBreak => text.push('\n'),
+            _ => return None,
+        }
+    }
+
+    let trimmed = text.trim();
+    let expression = if trimmed.starts_with("$$") && trimmed.ends_with("$$") {
+        &trimmed[2..trimmed.len() - 2]
+    } else if trimmed.starts_with("\\[") && trimmed.ends_with("\\]") {
+        &trimmed[2..trimmed.len() - 2]
+    } else {
+        return None;
+    };
+
+    let expression = expression.trim();
+    if expression.is_empty() {
+        None
+    } else {
+        Some(expression.to_owned())
+    }
 }
 
 fn collect_heading_nav_items(blocks: &[Block]) -> Vec<HeadingNavItem> {
@@ -421,7 +510,8 @@ impl InlineContent {
             InlineSpan::Text(text)
             | InlineSpan::Strong(text)
             | InlineSpan::Emphasis(text)
-            | InlineSpan::Code(text) => text.is_empty(),
+            | InlineSpan::Code(text)
+            | InlineSpan::Math(text) => text.is_empty(),
             InlineSpan::Link { text, .. } => text.is_empty(),
             InlineSpan::Image {
                 alt, destination, ..
@@ -438,7 +528,8 @@ impl InlineContent {
                 InlineSpan::Text(value)
                 | InlineSpan::Strong(value)
                 | InlineSpan::Emphasis(value)
-                | InlineSpan::Code(value) => text.push_str(value),
+                | InlineSpan::Code(value)
+                | InlineSpan::Math(value) => text.push_str(value),
                 InlineSpan::Link { text: value, .. } => text.push_str(value),
                 InlineSpan::Image { alt, .. } => text.push_str(alt),
                 InlineSpan::LineBreak => text.push(' '),
@@ -457,6 +548,9 @@ impl Block {
             Block::OrderedList { items, .. } => join_inline_items(items),
             Block::BlockQuote(lines) => join_inline_items(lines),
             Block::CodeBlock { code, .. } => code.split_whitespace().collect::<Vec<_>>().join(" "),
+            Block::MathBlock { expression } => {
+                expression.split_whitespace().collect::<Vec<_>>().join(" ")
+            }
             Block::Table { headers, rows, .. } => {
                 let mut items = headers.to_vec();
                 items.extend(rows.iter().flatten().cloned());
@@ -521,4 +615,50 @@ fn join_inline_items(items: &[InlineContent]) -> String {
         .filter(|text| !text.is_empty())
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Block, InlineSpan, parse_markdown};
+
+    #[test]
+    fn parses_inline_math_spans() {
+        let document = parse_markdown("Euler wrote $e^{i\\pi} + 1 = 0$ in one line.");
+
+        let Block::Paragraph(content) = &document.blocks[0] else {
+            panic!("expected paragraph");
+        };
+
+        assert!(matches!(content.spans[0], InlineSpan::Text(_)));
+        assert!(matches!(
+            &content.spans[1],
+            InlineSpan::Math(expression) if expression == "e^{i\\pi} + 1 = 0"
+        ));
+    }
+
+    #[test]
+    fn parses_display_math_blocks() {
+        let document = parse_markdown("$$\na^2 + b^2 = c^2\n$$");
+
+        assert!(matches!(
+            &document.blocks[0],
+            Block::MathBlock { expression } if expression == "a^2 + b^2 = c^2"
+        ));
+    }
+
+    #[test]
+    fn leaves_unclosed_inline_math_as_text() {
+        let document = parse_markdown("This costs $5 today.");
+
+        let Block::Paragraph(content) = &document.blocks[0] else {
+            panic!("expected paragraph");
+        };
+
+        assert!(
+            content
+                .spans
+                .iter()
+                .all(|span| !matches!(span, InlineSpan::Math(_)))
+        );
+    }
 }

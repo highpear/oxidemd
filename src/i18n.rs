@@ -23,6 +23,7 @@ pub enum TranslationKey {
     LabelCurrentFile,
     LabelExport,
     LabelExternalLinks,
+    LabelMath,
     LabelNoFile,
     LabelRecentFiles,
     LabelSearch,
@@ -124,6 +125,7 @@ const TRANSLATIONS: &[TranslationEntry] = &[
     ),
     entry(TranslationKey::LabelExport, "Export", "エクスポート"),
     entry(TranslationKey::LabelExternalLinks, "Links:", "リンク:"),
+    entry(TranslationKey::LabelMath, "Math", "数式"),
     entry(
         TranslationKey::LabelNoFile,
         "No file selected",
