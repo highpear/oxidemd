@@ -174,6 +174,9 @@ pub fn render_markdown_document(
                     zoom_factor,
                 );
             }
+            Block::MathBlock { expression } => {
+                render_math_block(ui, ui_language, expression, theme, zoom_factor);
+            }
             Block::Table {
                 alignments,
                 headers,
@@ -256,6 +259,10 @@ fn estimate_block_height(block: &Block, zoom_factor: f32) -> f32 {
             let line_count = code.lines().count().max(1) as f32;
             line_count * scale_spacing(20.0, zoom_factor) + scale_spacing(42.0, zoom_factor)
         }
+        Block::MathBlock { expression } => {
+            let line_count = expression.lines().count().max(1) as f32;
+            line_count * scale_spacing(22.0, zoom_factor) + scale_spacing(58.0, zoom_factor)
+        }
         Block::Table { headers, rows, .. } => {
             let row_count = rows.len() + usize::from(!headers.is_empty());
             row_count.max(1) as f32 * scale_spacing(34.0, zoom_factor)
@@ -288,7 +295,8 @@ fn estimate_inline_line_count(content: &InlineContent) -> usize {
             InlineSpan::Text(text)
             | InlineSpan::Strong(text)
             | InlineSpan::Emphasis(text)
-            | InlineSpan::Code(text) => {
+            | InlineSpan::Code(text)
+            | InlineSpan::Math(text) => {
                 line_len += text.len();
             }
             InlineSpan::Link { text, .. } | InlineSpan::Image { alt: text, .. } => {
@@ -690,6 +698,7 @@ fn inline_span_width(
             text_width(ui, text, style, SpanKind::Emphasis, theme, zoom_factor)
         }
         InlineSpan::Code(text) => text_width(ui, text, style, SpanKind::Code, theme, zoom_factor),
+        InlineSpan::Math(text) => text_width(ui, text, style, SpanKind::Math, theme, zoom_factor),
         InlineSpan::Link { text, .. } => {
             text_width(ui, text, style, SpanKind::Link, theme, zoom_factor)
         }
@@ -722,7 +731,8 @@ fn highlighted_text_width(
         InlineSpan::Text(text)
         | InlineSpan::Strong(text)
         | InlineSpan::Emphasis(text)
-        | InlineSpan::Code(text) => text.as_str(),
+        | InlineSpan::Code(text)
+        | InlineSpan::Math(text) => text.as_str(),
         InlineSpan::Link { text, .. } => text.as_str(),
         InlineSpan::Image { alt, .. } => alt.as_str(),
         InlineSpan::LineBreak => return 0.0,
@@ -845,6 +855,7 @@ enum SpanKind {
     Strong,
     Emphasis,
     Code,
+    Math,
     Link,
 }
 
@@ -895,6 +906,15 @@ fn render_inline_span(
             zoom_factor,
             search_highlight,
         ),
+        InlineSpan::Math(text) => render_text_label(
+            ui,
+            text,
+            style,
+            SpanKind::Math,
+            theme,
+            zoom_factor,
+            search_highlight,
+        ),
         InlineSpan::Link { text, destination } => {
             let rich_text = styled_text(text, style, SpanKind::Link, theme, zoom_factor)
                 .background_color(search_highlight_for_text(text, theme, search_highlight));
@@ -911,6 +931,43 @@ fn render_inline_span(
         }
         InlineSpan::LineBreak => {}
     }
+}
+
+fn render_math_block(
+    ui: &mut Ui,
+    ui_language: Language,
+    expression: &str,
+    theme: &Theme,
+    zoom_factor: f32,
+) {
+    Frame::new()
+        .fill(theme.code_background)
+        .stroke(Stroke::new(1.0, theme.content_border))
+        .corner_radius(egui::CornerRadius::same(6))
+        .inner_margin(egui::Margin::symmetric(
+            scale_margin(14, zoom_factor),
+            scale_margin(12, zoom_factor),
+        ))
+        .show(ui, |ui| {
+            ui.label(
+                RichText::new(tr(ui_language, TranslationKey::LabelMath))
+                    .size(QUOTE_TEXT_SIZE * zoom_factor)
+                    .color(theme.text_secondary),
+            );
+            ui.add_space(scale_spacing(6.0, zoom_factor));
+            ui.label(
+                RichText::new(expression)
+                    .size(BODY_TEXT_SIZE * zoom_factor)
+                    .color(theme.text_primary)
+                    .family(FontFamily::Monospace)
+                    .font(FontId::new(
+                        BODY_TEXT_SIZE * zoom_factor,
+                        FontFamily::Monospace,
+                    )),
+            );
+        });
+
+    ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
 }
 
 fn render_image_span(
@@ -1088,7 +1145,7 @@ fn styled_text(
         SpanKind::Plain => rich_text,
         SpanKind::Strong => rich_text.strong(),
         SpanKind::Emphasis => rich_text.italics(),
-        SpanKind::Code => {
+        SpanKind::Code | SpanKind::Math => {
             let font_size = match style {
                 InlineStyle::Heading(size) => (size - zoom_factor).max(INLINE_CODE_TEXT_SIZE),
                 _ => INLINE_CODE_TEXT_SIZE * zoom_factor,
