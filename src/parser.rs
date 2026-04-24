@@ -471,14 +471,15 @@ impl InlineContent {
                 | InlineSpan::Strong(value)
                 | InlineSpan::Emphasis(value)
                 | InlineSpan::Code(value)
-                | InlineSpan::Math(value) => text.push_str(value),
-                InlineSpan::Link { text: value, .. } => text.push_str(value),
-                InlineSpan::Image { alt, .. } => text.push_str(alt),
-                InlineSpan::LineBreak => text.push(' '),
+                | InlineSpan::Math(value) => append_normalized_text(&mut text, value),
+                InlineSpan::Link { text: value, .. } => append_normalized_text(&mut text, value),
+                InlineSpan::Image { alt, .. } => append_normalized_text(&mut text, alt),
+                InlineSpan::LineBreak => push_normalized_space(&mut text),
             }
         }
 
-        text.split_whitespace().collect::<Vec<_>>().join(" ")
+        trim_trailing_normalized_space(&mut text);
+        text
     }
 }
 
@@ -489,14 +490,22 @@ impl Block {
             Block::UnorderedList(items) => join_inline_items(items),
             Block::OrderedList { items, .. } => join_inline_items(items),
             Block::BlockQuote(lines) => join_inline_items(lines),
-            Block::CodeBlock { code, .. } => code.split_whitespace().collect::<Vec<_>>().join(" "),
-            Block::MathBlock { expression } => {
-                expression.split_whitespace().collect::<Vec<_>>().join(" ")
-            }
+            Block::CodeBlock { code, .. } => normalized_text(code),
+            Block::MathBlock { expression } => normalized_text(expression),
             Block::Table { headers, rows, .. } => {
-                let mut items = headers.to_vec();
-                items.extend(rows.iter().flatten().cloned());
-                join_inline_items(&items)
+                let mut text = String::new();
+
+                for header in headers {
+                    append_joined_inline_content(&mut text, header);
+                }
+
+                for row in rows {
+                    for cell in row {
+                        append_joined_inline_content(&mut text, cell);
+                    }
+                }
+
+                text
             }
         }
     }
@@ -551,12 +560,55 @@ fn normalize_anchor(anchor: &str) -> String {
 }
 
 fn join_inline_items(items: &[InlineContent]) -> String {
-    items
-        .iter()
-        .map(InlineContent::plain_text)
-        .filter(|text| !text.is_empty())
-        .collect::<Vec<_>>()
-        .join(" ")
+    let mut joined = String::new();
+
+    for item in items {
+        append_joined_inline_content(&mut joined, item);
+    }
+
+    joined
+}
+
+fn normalized_text(text: &str) -> String {
+    let mut normalized = String::new();
+    append_normalized_text(&mut normalized, text);
+    trim_trailing_normalized_space(&mut normalized);
+    normalized
+}
+
+fn append_joined_inline_content(buffer: &mut String, content: &InlineContent) {
+    let plain_text = content.plain_text();
+    if plain_text.is_empty() {
+        return;
+    }
+
+    if !buffer.is_empty() {
+        buffer.push(' ');
+    }
+
+    buffer.push_str(&plain_text);
+}
+
+fn append_normalized_text(buffer: &mut String, text: &str) {
+    for character in text.chars() {
+        if character.is_whitespace() {
+            push_normalized_space(buffer);
+        } else {
+            buffer.push(character);
+        }
+    }
+}
+
+fn push_normalized_space(buffer: &mut String) {
+    if !buffer.is_empty() && !buffer.ends_with(' ') {
+        buffer.push(' ');
+    }
+}
+
+fn trim_trailing_normalized_space(buffer: &mut String) {
+    if buffer.ends_with(' ') {
+        buffer.pop();
+    }
 }
 
 #[cfg(test)]
