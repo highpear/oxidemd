@@ -381,3 +381,29 @@ Conclusion:
 
 - Render timings stay in the same general range, and the larger parse/reload shifts look like normal run-to-run variance rather than a render regression from this change.
 - The main benefit is lower temporary allocation pressure while measuring and painting highlighted inline text.
+
+### 2026-04-24: Normalize Search Plain Text Without Temporary Vectors
+
+Change:
+
+- Replace `split_whitespace().collect::<Vec<_>>().join(" ")` search-text normalization paths with direct `String` builders.
+- Avoid cloning table headers and cells just to build searchable plain text.
+- Reuse the same normalized-text helpers for inline content, code blocks, math blocks, and joined list/table content.
+
+Result:
+
+- 1 MiB initial load: 18 ms -> 19 ms
+- 1 MiB first render after load: 21 ms -> 20 ms
+- 1 MiB reload after edit: 21 ms -> 19 ms
+- 1 MiB first render after reload: 1 ms -> 0 ms
+- 1 MiB skipped reload: 0 ms -> 0 ms
+- 5 MiB initial load: 100 ms -> 97 ms
+- 5 MiB first render after load: 25 ms -> 23 ms
+- 5 MiB reload after edit: 107 ms -> 91 ms
+- 5 MiB first render after reload: 4 ms -> 3 ms
+- 5 MiB skipped reload: 2 ms -> 2 ms
+
+Conclusion:
+
+- The largest visible improvement is on reload-heavy paths, which is consistent with search match generation doing less temporary allocation while rebuilding block plain text.
+- This keeps moving the remaining hot-path allocation work in the right direction without adding new dependencies or complexity.
