@@ -137,12 +137,21 @@ pub fn preview_text(text: &str) -> String {
         return String::new();
     }
 
-    let mut preview = String::new();
-    for character in trimmed.chars().take(MAX_PREVIEW_CHARS) {
+    let mut preview = String::with_capacity(trimmed.len().min(MAX_PREVIEW_CHARS + 3));
+    let mut preview_chars = 0usize;
+    let mut truncated = false;
+
+    for character in trimmed.chars() {
+        if preview_chars == MAX_PREVIEW_CHARS {
+            truncated = true;
+            break;
+        }
+
         preview.push(character);
+        preview_chars += 1;
     }
 
-    if trimmed.chars().count() > MAX_PREVIEW_CHARS {
+    if truncated {
         preview.push_str("...");
     }
 
