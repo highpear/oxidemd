@@ -251,6 +251,7 @@ Goal: consider future extensions without committing too early.
 * [x] Render display math visually
 * [ ] Design shared SVG rendering support for math and diagrams
 * [ ] Render math as SVG without rasterization
+* [ ] Support selecting and copying rendered math as text
 * [ ] Evaluate Mermaid SVG rendering integration
 * [x] Link clicking
 * [x] External link opening behavior options

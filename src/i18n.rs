@@ -9,6 +9,7 @@ pub enum TranslationKey {
     ActionCancel,
     ActionClose,
     ActionCopy,
+    ActionCopyTex,
     ActionCopyPath,
     ActionClearRecentFiles,
     ActionExportHtml,
@@ -91,6 +92,7 @@ const TRANSLATIONS: &[TranslationEntry] = &[
     entry(TranslationKey::ActionCancel, "Cancel", "キャンセル"),
     entry(TranslationKey::ActionClose, "Close", "閉じる"),
     entry(TranslationKey::ActionCopy, "Copy", "コピー"),
+    entry(TranslationKey::ActionCopyTex, "Copy TeX", "TeXをコピー"),
     entry(TranslationKey::ActionCopyPath, "Copy Path", "パスをコピー"),
     entry(
         TranslationKey::ActionClearRecentFiles,
