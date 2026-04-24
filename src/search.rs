@@ -21,6 +21,12 @@ pub struct HighlightSegment<'a> {
     pub is_active_match: bool,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct HighlightWalkSummary {
+    pub segment_count: usize,
+    pub match_count: usize,
+}
+
 impl SearchState {
     pub fn new() -> Self {
         Self {
@@ -143,16 +149,37 @@ pub fn preview_text(text: &str) -> String {
     preview
 }
 
+#[cfg(test)]
 pub fn split_highlighted_segments<'a>(
     text: &'a str,
     search_query: Option<&str>,
     is_active_match: bool,
 ) -> Vec<HighlightSegment<'a>> {
+    let mut segments = Vec::new();
+    for_each_highlighted_segment(text, search_query, is_active_match, |segment| {
+        segments.push(segment);
+    });
+    segments
+}
+
+pub fn for_each_highlighted_segment<'a, F>(
+    text: &'a str,
+    search_query: Option<&str>,
+    is_active_match: bool,
+    mut visit: F,
+) -> HighlightWalkSummary
+where
+    F: FnMut(HighlightSegment<'a>),
+{
     let Some(query) = search_query.and_then(normalized_query) else {
-        return unmatched_segment(text);
+        visit_unmatched_segment(text, &mut visit);
+        return HighlightWalkSummary {
+            segment_count: 1,
+            match_count: 0,
+        };
     };
 
-    split_segments_with_normalized_query(text, &query, is_active_match)
+    for_each_segment_with_normalized_query(text, &query, is_active_match, visit)
 }
 
 pub fn text_matches_query(text: &str, search_query: Option<&str>) -> bool {
@@ -163,17 +190,26 @@ pub fn text_matches_query(text: &str, search_query: Option<&str>) -> bool {
     contains_normalized_query(text, &query)
 }
 
-fn split_segments_with_normalized_query<'a>(
+fn for_each_segment_with_normalized_query<'a, F>(
     text: &'a str,
     normalized_query: &str,
     is_active_match: bool,
-) -> Vec<HighlightSegment<'a>> {
+    mut visit: F,
+) -> HighlightWalkSummary
+where
+    F: FnMut(HighlightSegment<'a>),
+{
     if normalized_query.is_empty() {
-        return unmatched_segment(text);
+        let mut summary = HighlightWalkSummary::default();
+        visit_unmatched_segment(text, &mut |segment| {
+            summary.segment_count += 1;
+            visit(segment);
+        });
+        return summary;
     }
 
     let (folded_text, source_ranges) = folded_text_with_source_ranges(text);
-    let mut segments = Vec::new();
+    let mut summary = HighlightWalkSummary::default();
     let mut current_start = 0usize;
     let mut search_start = 0usize;
 
@@ -187,35 +223,43 @@ fn split_segments_with_normalized_query<'a>(
         };
 
         if current_start < match_start {
-            segments.push(HighlightSegment {
+            visit(HighlightSegment {
                 text: &text[current_start..match_start],
                 is_match: false,
                 is_active_match: false,
             });
+            summary.segment_count += 1;
         }
 
-        segments.push(HighlightSegment {
+        visit(HighlightSegment {
             text: &text[match_start..match_end],
             is_match: true,
             is_active_match,
         });
+        summary.segment_count += 1;
+        summary.match_count += 1;
 
         current_start = match_end;
         search_start = folded_match_end;
     }
 
     if current_start < text.len() {
-        segments.push(HighlightSegment {
+        visit(HighlightSegment {
             text: &text[current_start..],
             is_match: false,
             is_active_match: false,
         });
+        summary.segment_count += 1;
     }
 
-    if segments.is_empty() {
-        unmatched_segment(text)
+    if summary.segment_count == 0 {
+        visit_unmatched_segment(text, &mut visit);
+        HighlightWalkSummary {
+            segment_count: 1,
+            match_count: 0,
+        }
     } else {
-        segments
+        summary
     }
 }
 
@@ -265,12 +309,15 @@ fn source_range_for_folded_match(
     Some((start_range.source_start, end_range.source_end))
 }
 
-fn unmatched_segment(text: &str) -> Vec<HighlightSegment<'_>> {
-    vec![HighlightSegment {
+fn visit_unmatched_segment<'a, F>(text: &'a str, visit: &mut F)
+where
+    F: FnMut(HighlightSegment<'a>),
+{
+    visit(HighlightSegment {
         text,
         is_match: false,
         is_active_match: false,
-    }]
+    });
 }
 
 #[cfg(test)]

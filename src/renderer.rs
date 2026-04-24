@@ -9,7 +9,7 @@ use crate::i18n::{Language, TranslationKey, tr};
 use crate::image_cache::{ImageCache, ImageLoadState};
 use crate::math::{MathRenderCache, MathRenderMode, PreparedMath};
 use crate::parser::{Block, InlineContent, InlineSpan, MarkdownDocument};
-use crate::search::{split_highlighted_segments, text_matches_query};
+use crate::search::{for_each_highlighted_segment, text_matches_query};
 use crate::theme::Theme;
 
 const BODY_TEXT_SIZE: f32 = 17.0;
@@ -798,14 +798,17 @@ fn highlighted_text_width(
         InlineSpan::LineBreak => return 0.0,
     };
 
-    split_highlighted_segments(
+    let mut width = 0.0;
+    for_each_highlighted_segment(
         text,
         search_highlight.query,
         search_highlight.is_active_block,
+        |segment| {
+            width += text_width(ui, segment.text, style, SpanKind::Plain, theme, zoom_factor);
+        },
     )
-    .iter()
-    .map(|segment| text_width(ui, segment.text, style, SpanKind::Plain, theme, zoom_factor))
-    .sum()
+    ;
+    width
 }
 
 fn inline_math_width(
@@ -1261,18 +1264,23 @@ fn render_text_label(
         return;
     }
 
-    let segments = split_highlighted_segments(
+    let summary = for_each_highlighted_segment(
         text,
         search_highlight.query,
         search_highlight.is_active_block,
+        |_| {},
     );
 
-    if segments.len() == 1 && !segments[0].is_match {
+    if summary.match_count == 0 {
         ui.label(styled_text(text, style, kind, theme, zoom_factor));
         return;
     }
 
-    for segment in segments {
+    for_each_highlighted_segment(
+        text,
+        search_highlight.query,
+        search_highlight.is_active_block,
+        |segment| {
         let mut rich_text = styled_text(segment.text, style, kind, theme, zoom_factor);
 
         if segment.is_match {
@@ -1281,7 +1289,8 @@ fn render_text_label(
         }
 
         ui.label(rich_text);
-    }
+        },
+    );
 }
 
 fn styled_text(

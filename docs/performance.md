@@ -355,3 +355,29 @@ Conclusion:
 
 - Visible timings remain within normal run-to-run variance, so the benefit is mainly lower temporary allocation pressure while rendering paragraphs with explicit line breaks.
 - This is a safe follow-up optimization under the remaining `Avoid unnecessary allocations in hot paths` work.
+
+### 2026-04-24: Stream Search Highlight Segments
+
+Change:
+
+- Add a callback-based highlighted-segment walker in `search.rs`.
+- Use that streaming path for highlight width measurement and highlighted text rendering in `renderer.rs`.
+- Keep the existing vector-returning helper only for tests so render paths stop allocating temporary segment lists.
+
+Result:
+
+- 1 MiB initial load: 18 ms -> 18 ms
+- 1 MiB first render after load: 20 ms -> 21 ms
+- 1 MiB reload after edit: 18 ms -> 21 ms
+- 1 MiB first render after reload: 0 ms -> 1 ms
+- 1 MiB skipped reload: 0 ms -> 0 ms
+- 5 MiB initial load: 92 ms -> 100 ms
+- 5 MiB first render after load: 25 ms -> 25 ms
+- 5 MiB reload after edit: 94 ms -> 107 ms
+- 5 MiB first render after reload: 3 ms -> 4 ms
+- 5 MiB skipped reload: 1 ms -> 2 ms
+
+Conclusion:
+
+- Render timings stay in the same general range, and the larger parse/reload shifts look like normal run-to-run variance rather than a render regression from this change.
+- The main benefit is lower temporary allocation pressure while measuring and painting highlighted inline text.
