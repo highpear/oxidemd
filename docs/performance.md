@@ -407,3 +407,29 @@ Conclusion:
 
 - The largest visible improvement is on reload-heavy paths, which is consistent with search match generation doing less temporary allocation while rebuilding block plain text.
 - This keeps moving the remaining hot-path allocation work in the right direction without adding new dependencies or complexity.
+
+### 2026-04-24: Make Search Preview Text Single Pass
+
+Change:
+
+- Build search preview strings in a single character pass.
+- Avoid counting characters in a second pass just to decide whether to append `...`.
+- Reserve preview buffer capacity up front for the common truncated case.
+
+Result:
+
+- 1 MiB initial load: 19 ms -> 18 ms
+- 1 MiB first render after load: 20 ms -> 20 ms
+- 1 MiB reload after edit: 19 ms -> 18 ms
+- 1 MiB first render after reload: 0 ms -> 1 ms
+- 1 MiB skipped reload: 0 ms -> 0 ms
+- 5 MiB initial load: 97 ms -> 94 ms
+- 5 MiB first render after load: 23 ms -> 24 ms
+- 5 MiB reload after edit: 91 ms -> 91 ms
+- 5 MiB first render after reload: 3 ms -> 3 ms
+- 5 MiB skipped reload: 2 ms -> 2 ms
+
+Conclusion:
+
+- Timings remain within the same range, with a small improvement on initial load and no sign of regression in render behavior.
+- The benefit is modest but consistent with removing repeated character scanning during search result preview generation.
