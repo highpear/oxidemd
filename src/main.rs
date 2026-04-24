@@ -16,6 +16,7 @@ mod search;
 mod search_panel;
 mod session;
 mod shortcuts;
+mod svg;
 mod syntax;
 mod theme;
 mod top_bar;
@@ -72,6 +73,7 @@ fn run_gui(initial_file: Option<PathBuf>) -> eframe::Result<()> {
         "OxideMD",
         options,
         Box::new(|cc| {
+            egui_extras::install_image_loaders(&cc.egui_ctx);
             configure_fonts(&cc.egui_ctx);
             apply_theme(&cc.egui_ctx, &theme(DEFAULT_THEME_ID));
             Ok(Box::new(OxideMdApp::new(

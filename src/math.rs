@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use eframe::egui::{self, ColorImage, TextureHandle, TextureOptions, Vec2};
+use eframe::egui::{self};
+
+use crate::svg::{SvgAsset, apply_current_color};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum MathRenderMode {
@@ -10,7 +12,7 @@ pub enum MathRenderMode {
 
 #[derive(Clone)]
 pub enum PreparedMath {
-    Raster { texture: TextureHandle, size: Vec2 },
+    Svg(SvgAsset),
     Error(String),
 }
 
@@ -38,7 +40,7 @@ impl MathRenderCache {
 
     pub fn prepare(
         &mut self,
-        ctx: &egui::Context,
+        _ctx: &egui::Context,
         expression: &str,
         mode: MathRenderMode,
         theme_is_dark: bool,
@@ -55,58 +57,24 @@ impl MathRenderCache {
 
         self.entries
             .entry(key)
-            .or_insert_with(|| prepare_math(ctx, expression, mode, theme_is_dark, zoom_factor))
+            .or_insert_with(|| prepare_math(expression, mode, theme_is_dark, zoom_factor))
             .clone()
     }
 }
 
 fn prepare_math(
-    ctx: &egui::Context,
     expression: &str,
     mode: MathRenderMode,
     theme_is_dark: bool,
     zoom_factor: f32,
 ) -> PreparedMath {
     match mode {
-        MathRenderMode::Inline => prepare_inline_math(ctx, expression, theme_is_dark, zoom_factor),
-        MathRenderMode::Block => prepare_block_math(ctx, expression, theme_is_dark, zoom_factor),
+        MathRenderMode::Inline => prepare_svg_math(expression, theme_is_dark, zoom_factor, 15.0, mode),
+        MathRenderMode::Block => prepare_svg_math(expression, theme_is_dark, zoom_factor, 18.0, mode),
     }
 }
 
-fn prepare_inline_math(
-    ctx: &egui::Context,
-    expression: &str,
-    theme_is_dark: bool,
-    zoom_factor: f32,
-) -> PreparedMath {
-    prepare_raster_math(
-        ctx,
-        expression,
-        theme_is_dark,
-        zoom_factor,
-        15.0,
-        MathRenderMode::Inline,
-    )
-}
-
-fn prepare_block_math(
-    ctx: &egui::Context,
-    expression: &str,
-    theme_is_dark: bool,
-    zoom_factor: f32,
-) -> PreparedMath {
-    prepare_raster_math(
-        ctx,
-        expression,
-        theme_is_dark,
-        zoom_factor,
-        18.0,
-        MathRenderMode::Block,
-    )
-}
-
-fn prepare_raster_math(
-    ctx: &egui::Context,
+fn prepare_svg_math(
     expression: &str,
     theme_is_dark: bool,
     zoom_factor: f32,
@@ -130,15 +98,9 @@ fn prepare_raster_math(
         Err(error) => return PreparedMath::Error(error.to_string()),
     };
 
-    let image = match rasterize_svg(&svg) {
-        Ok(image) => image,
-        Err(error) => return PreparedMath::Error(error),
-    };
-    let image = recolor_math_image(image, math_text_rgb(theme_is_dark));
-
-    let size = Vec2::new(image.size[0] as f32, image.size[1] as f32);
-    let texture_name = format!(
-        "math:{}:{}:{}:{}",
+    let svg = apply_current_color(&svg, math_text_color(theme_is_dark));
+    let uri = format!(
+        "bytes://math-{}-{}-{}-{}.svg",
         if theme_is_dark { "dark" } else { "light" },
         zoom_bucket(zoom_factor),
         match mode {
@@ -147,58 +109,18 @@ fn prepare_raster_math(
         },
         expression
     );
-    let texture = ctx.load_texture(texture_name, image, TextureOptions::LINEAR);
 
-    PreparedMath::Raster { texture, size }
-}
-
-fn rasterize_svg(svg: &str) -> Result<ColorImage, String> {
-    let options = resvg::usvg::Options::default();
-    let tree = resvg::usvg::Tree::from_str(svg, &options).map_err(|error| error.to_string())?;
-    let size = tree.size();
-    let width = size.width().ceil().max(1.0) as u32;
-    let height = size.height().ceil().max(1.0) as u32;
-    let mut pixmap =
-        resvg::tiny_skia::Pixmap::new(width, height).ok_or("Failed to allocate pixmap")?;
-
-    resvg::render(
-        &tree,
-        resvg::tiny_skia::Transform::identity(),
-        &mut pixmap.as_mut(),
-    );
-
-    Ok(ColorImage::from_rgba_premultiplied(
-        [width as usize, height as usize],
-        pixmap.data(),
-    ))
-}
-
-fn recolor_math_image(mut image: ColorImage, target_rgb: [u8; 3]) -> ColorImage {
-    for pixel in &mut image.pixels {
-        let alpha = pixel.a();
-        if alpha == 0 {
-            continue;
-        }
-
-        let premultiply =
-            |channel: u8| -> u8 { ((channel as u16 * alpha as u16 + 127) / 255) as u8 };
-
-        *pixel = egui::Color32::from_rgba_premultiplied(
-            premultiply(target_rgb[0]),
-            premultiply(target_rgb[1]),
-            premultiply(target_rgb[2]),
-            alpha,
-        );
+    match SvgAsset::from_source(uri, svg) {
+        Ok(svg) => PreparedMath::Svg(svg),
+        Err(error) => PreparedMath::Error(error),
     }
-
-    image
 }
 
-fn math_text_rgb(theme_is_dark: bool) -> [u8; 3] {
+fn math_text_color(theme_is_dark: bool) -> egui::Color32 {
     if theme_is_dark {
-        [224, 232, 242]
+        egui::Color32::from_rgb(224, 232, 242)
     } else {
-        [34, 34, 34]
+        egui::Color32::from_rgb(34, 34, 34)
     }
 }
 
@@ -221,13 +143,13 @@ mod tests {
 
         assert!(matches!(
             (&first, &second),
-            (
-                PreparedMath::Raster { size: first_size, .. },
-                PreparedMath::Raster {
-                    size: second_size,
-                    ..
-                }
-            ) if first_size == second_size
+            (PreparedMath::Svg(first_svg), PreparedMath::Svg(second_svg))
+                if first_svg.size() == second_svg.size()
+                && first_svg.uri() == second_svg.uri()
+        ) || matches!(
+            (&first, &second),
+            (PreparedMath::Error(first_error), PreparedMath::Error(second_error))
+                if first_error == second_error
         ));
     }
 }
