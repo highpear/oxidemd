@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use eframe::egui::{self, Align, FontFamily, FontId, Frame, RichText, Stroke, Ui, WidgetText};
 use pulldown_cmark::{Alignment, HeadingLevel};
@@ -26,6 +27,8 @@ const INLINE_MATH_BASELINE_OFFSET_MULTIPLIER: f32 = 0.18;
 const LARGE_DOCUMENT_BLOCK_THRESHOLD: usize = 2_000;
 const VIRTUAL_RENDER_OVERSCAN: f32 = 1_200.0;
 const ESTIMATED_CHARS_PER_LINE: usize = 90;
+const COPY_FEEDBACK_DURATION_SECONDS: f64 = 1.2;
+const MATH_COPY_FEEDBACK_SLOT_WIDTH: f32 = 88.0;
 
 pub fn render_markdown_document(
     ui: &mut Ui,
@@ -183,7 +186,14 @@ pub fn render_markdown_document(
                 );
             }
             Block::MathBlock { expression } => {
-                render_math_block(ui, expression, theme, zoom_factor, &mut render_resources);
+                render_math_block(
+                    ui,
+                    block_index,
+                    expression,
+                    theme,
+                    zoom_factor,
+                    &mut render_resources,
+                );
             }
             Block::Table {
                 alignments,
@@ -355,6 +365,12 @@ struct LinkActions {
 struct HeadingRenderState {
     did_scroll: bool,
     is_active: bool,
+}
+
+#[derive(Clone, Copy)]
+struct MathCopyFeedbackState {
+    block_index: usize,
+    copied_at: f64,
 }
 
 fn render_heading(
@@ -974,7 +990,15 @@ fn render_inline_span(
             match prepared {
                 PreparedMath::Svg(svg) => {
                     let fitted_size = fit_inline_math_size(style, zoom_factor, svg.size());
-                    render_inline_math_image(ui, &svg, style, zoom_factor, fitted_size);
+                    render_inline_math_image(
+                        ui,
+                        &svg,
+                        text,
+                        style,
+                        zoom_factor,
+                        render_resources.ui_language,
+                        fitted_size,
+                    );
                 }
                 PreparedMath::Error(_) => render_text_label(
                     ui,
@@ -1007,6 +1031,7 @@ fn render_inline_span(
 
 fn render_math_block(
     ui: &mut Ui,
+    block_index: usize,
     expression: &str,
     theme: &Theme,
     zoom_factor: f32,
@@ -1028,36 +1053,56 @@ fn render_math_block(
             scale_margin(MATH_BLOCK_PADDING_X, zoom_factor),
             scale_margin(MATH_BLOCK_PADDING_Y, zoom_factor),
         ))
-        .show(ui, |ui| match prepared {
-            PreparedMath::Svg(svg) => {
-                let max_width = ui.available_width().max(120.0);
-                ui.vertical_centered(|ui| {
-                    ui.add(
-                        egui::Image::from_bytes(svg.uri().to_owned(), svg.bytes())
-                            .fit_to_exact_size(svg.size())
-                            .max_width(max_width),
-                    );
-                });
-            }
-            PreparedMath::Error(error) => {
-                ui.label(
-                    RichText::new(error)
-                        .size(QUOTE_TEXT_SIZE * zoom_factor)
-                        .color(theme.status_error_text),
-                );
-                ui.add_space(scale_spacing(6.0, zoom_factor));
-                ui.vertical_centered(|ui| {
+        .show(ui, |ui| {
+            render_math_block_header(
+                ui,
+                block_index,
+                expression,
+                render_resources.ui_language,
+                theme,
+                zoom_factor,
+            );
+            ui.add_space(scale_spacing(6.0, zoom_factor));
+
+            match prepared {
+                PreparedMath::Svg(svg) => {
+                    let max_width = ui.available_width().max(120.0);
+                    ui.vertical_centered(|ui| {
+                        let response = ui.add(
+                            egui::Image::from_bytes(svg.uri().to_owned(), svg.bytes())
+                                .fit_to_exact_size(svg.size())
+                                .max_width(max_width)
+                                .sense(egui::Sense::click()),
+                        );
+                        if response.clicked() {
+                            ui.ctx().copy_text(expression.to_owned());
+                        }
+                        response.on_hover_text(tr(
+                            render_resources.ui_language,
+                            TranslationKey::ActionCopy,
+                        ));
+                    });
+                }
+                PreparedMath::Error(error) => {
                     ui.label(
-                        RichText::new(expression)
-                            .size(BODY_TEXT_SIZE * zoom_factor)
-                            .color(theme.text_primary)
-                            .family(FontFamily::Monospace)
-                            .font(FontId::new(
-                                BODY_TEXT_SIZE * zoom_factor,
-                                FontFamily::Monospace,
-                            )),
+                        RichText::new(error)
+                            .size(QUOTE_TEXT_SIZE * zoom_factor)
+                            .color(theme.status_error_text),
                     );
-                });
+                    ui.add_space(scale_spacing(6.0, zoom_factor));
+                    ui.vertical_centered(|ui| {
+                        ui.label(
+                            RichText::new(expression)
+                                .size(BODY_TEXT_SIZE * zoom_factor)
+                                .color(theme.text_primary)
+                                .family(FontFamily::Monospace)
+                                .font(FontId::new(
+                                    BODY_TEXT_SIZE * zoom_factor,
+                                    FontFamily::Monospace,
+                                )),
+                        );
+                    });
+                }
             }
         });
 
@@ -1283,8 +1328,10 @@ fn fit_inline_math_size(style: InlineStyle, zoom_factor: f32, size: egui::Vec2) 
 fn render_inline_math_image(
     ui: &mut Ui,
     svg: &crate::svg::SvgAsset,
+    expression: &str,
     style: InlineStyle,
     zoom_factor: f32,
+    ui_language: Language,
     fitted_size: egui::Vec2,
 ) {
     let line_height = inline_math_line_height(style, zoom_factor);
@@ -1292,16 +1339,91 @@ fn render_inline_math_image(
         monospace_span_font_size(style, zoom_factor) * INLINE_MATH_BASELINE_OFFSET_MULTIPLIER;
     let top_padding = (line_height - fitted_size.y - baseline_offset).max(0.0);
     let allocated_size = egui::vec2(fitted_size.x, (top_padding + fitted_size.y).max(fitted_size.y));
-    let (rect, _) = ui.allocate_exact_size(allocated_size, egui::Sense::hover());
+    let (rect, response) = ui.allocate_exact_size(allocated_size, egui::Sense::click());
     let image_rect = egui::Rect::from_min_size(
         egui::pos2(rect.left(), rect.top() + top_padding),
         fitted_size,
     );
 
+    if response.clicked() {
+        ui.ctx().copy_text(expression.to_owned());
+    }
+    response.on_hover_text(tr(ui_language, TranslationKey::ActionCopy));
+
     ui.put(
         image_rect,
         egui::Image::from_bytes(svg.uri().to_owned(), svg.bytes()).fit_to_exact_size(fitted_size),
     );
+}
+
+fn render_math_block_header(
+    ui: &mut Ui,
+    block_index: usize,
+    expression: &str,
+    ui_language: Language,
+    theme: &Theme,
+    zoom_factor: f32,
+) {
+    let feedback_id = ui.make_persistent_id("math_block_copy_feedback");
+    let copied = ui
+        .ctx()
+        .data(|data| data.get_temp::<MathCopyFeedbackState>(feedback_id));
+    let now = ui.ctx().input(|input| input.time);
+    let show_copied = copied
+        .filter(|copied| copied.block_index == block_index)
+        .map(|copied| now - copied.copied_at < COPY_FEEDBACK_DURATION_SECONDS)
+        .unwrap_or(false);
+
+    if show_copied {
+        ui.ctx()
+            .request_repaint_after(Duration::from_secs_f64(COPY_FEEDBACK_DURATION_SECONDS));
+    }
+
+    ui.horizontal(|ui| {
+        ui.label(
+            RichText::new(tr(ui_language, TranslationKey::LabelMath))
+                .size(QUOTE_TEXT_SIZE * zoom_factor)
+                .strong()
+                .color(theme.text_secondary),
+        );
+
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui
+                .button(tr(ui_language, TranslationKey::ActionCopy))
+                .clicked()
+            {
+                let copied_at = ui.ctx().input(|input| input.time);
+                ui.ctx().copy_text(expression.to_owned());
+                ui.ctx().data_mut(|data| {
+                    data.insert_temp(
+                        feedback_id,
+                        MathCopyFeedbackState {
+                            block_index,
+                            copied_at,
+                        },
+                    );
+                });
+                ui.ctx()
+                    .request_repaint_after(Duration::from_secs_f64(COPY_FEEDBACK_DURATION_SECONDS));
+            }
+
+            ui.add_space(scale_spacing(8.0, zoom_factor));
+
+            ui.allocate_ui_with_layout(
+                egui::vec2(MATH_COPY_FEEDBACK_SLOT_WIDTH * zoom_factor, 0.0),
+                egui::Layout::right_to_left(egui::Align::Center),
+                |ui| {
+                    if show_copied {
+                        ui.label(
+                            RichText::new(tr(ui_language, TranslationKey::MessageCopied))
+                                .size(QUOTE_TEXT_SIZE * zoom_factor)
+                                .color(theme.text_secondary),
+                        );
+                    }
+                },
+            );
+        });
+    });
 }
 
 fn inline_math_line_height(style: InlineStyle, zoom_factor: f32) -> f32 {
