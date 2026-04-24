@@ -799,7 +799,7 @@ fn inline_math_width(
     );
 
     match prepared {
-        PreparedMath::Raster { size, .. } => fit_inline_math_size(style, zoom_factor, size).x,
+        PreparedMath::Svg(svg) => fit_inline_math_size(style, zoom_factor, svg.size()).x,
         PreparedMath::Error(_) => text_width(ui, text, style, SpanKind::Math, theme, zoom_factor),
     }
 }
@@ -972,9 +972,9 @@ fn render_inline_span(
             );
 
             match prepared {
-                PreparedMath::Raster { texture, size } => {
-                    let fitted_size = fit_inline_math_size(style, zoom_factor, size);
-                    render_inline_math_image(ui, &texture, style, zoom_factor, fitted_size);
+                PreparedMath::Svg(svg) => {
+                    let fitted_size = fit_inline_math_size(style, zoom_factor, svg.size());
+                    render_inline_math_image(ui, &svg, style, zoom_factor, fitted_size);
                 }
                 PreparedMath::Error(_) => render_text_label(
                     ui,
@@ -1029,12 +1029,12 @@ fn render_math_block(
             scale_margin(MATH_BLOCK_PADDING_Y, zoom_factor),
         ))
         .show(ui, |ui| match prepared {
-            PreparedMath::Raster { texture, size } => {
+            PreparedMath::Svg(svg) => {
                 let max_width = ui.available_width().max(120.0);
                 ui.vertical_centered(|ui| {
                     ui.add(
-                        egui::Image::from_texture(&texture)
-                            .fit_to_exact_size(size)
+                        egui::Image::from_bytes(svg.uri().to_owned(), svg.bytes())
+                            .fit_to_exact_size(svg.size())
                             .max_width(max_width),
                     );
                 });
@@ -1282,7 +1282,7 @@ fn fit_inline_math_size(style: InlineStyle, zoom_factor: f32, size: egui::Vec2) 
 
 fn render_inline_math_image(
     ui: &mut Ui,
-    texture: &egui::TextureHandle,
+    svg: &crate::svg::SvgAsset,
     style: InlineStyle,
     zoom_factor: f32,
     fitted_size: egui::Vec2,
@@ -1300,7 +1300,7 @@ fn render_inline_math_image(
 
     ui.put(
         image_rect,
-        egui::Image::from_texture(texture).fit_to_exact_size(fitted_size),
+        egui::Image::from_bytes(svg.uri().to_owned(), svg.bytes()).fit_to_exact_size(fitted_size),
     );
 }
 
