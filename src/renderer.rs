@@ -40,6 +40,7 @@ pub fn render_markdown_document(
     image_cache: &mut ImageCache,
     math_render_cache: &mut MathRenderCache,
     block_heights: &mut [Option<f32>],
+    estimated_block_heights: &[f32],
     scroll_to_block: Option<usize>,
     search_query: Option<&str>,
     active_search_block: Option<usize>,
@@ -63,8 +64,9 @@ pub fn render_markdown_document(
             is_active_block: active_search_block == Some(block_index),
         };
         let measured_block_height = block_heights.get(block_index).and_then(|height| *height);
-        let block_height =
-            measured_block_height.unwrap_or_else(|| estimate_block_height(block, zoom_factor));
+        let block_height = measured_block_height
+            .or_else(|| estimated_block_heights.get(block_index).copied())
+            .unwrap_or_else(|| estimate_block_height(block, zoom_factor));
         let block_top = ui.cursor().top();
         let block_bottom = block_top + block_height;
 
@@ -228,6 +230,14 @@ pub fn render_markdown_document(
         clicked_anchor: link_actions.clicked_anchor,
         clicked_external_link: link_actions.clicked_external_link,
     }
+}
+
+pub fn estimate_document_block_heights(document: &MarkdownDocument, zoom_factor: f32) -> Vec<f32> {
+    document
+        .blocks
+        .iter()
+        .map(|block| estimate_block_height(block, zoom_factor))
+        .collect()
 }
 
 fn should_skip_block(

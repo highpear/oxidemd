@@ -145,7 +145,7 @@ Goal: prepare the app for large files and frequent updates.
 * [x] Cache parsed output
 * [x] Avoid unnecessary re-parsing
 * [ ] Avoid unnecessary allocations in hot paths
-* [ ] Keep rendering work predictable
+* [x] Keep rendering work predictable
 
 Exit criteria:
 
