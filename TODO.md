@@ -150,7 +150,7 @@ Goal: prepare the app for large files and frequent updates.
 Exit criteria:
 
 * [x] Basic performance metrics are available
-* [ ] Major bottlenecks are visible
+* [x] Major bottlenecks are visible
 * [ ] The codebase is ready for focused optimization
 
 ---
@@ -236,7 +236,7 @@ Goal: keep the app usable with larger Markdown files.
 Exit criteria:
 
 * [ ] Large files remain usable
-* [ ] Performance work is based on measurement, not guesswork
+* [x] Performance work is based on measurement, not guesswork
 
 ---
 
@@ -250,7 +250,7 @@ Goal: consider future extensions without committing too early.
 * [x] Render inline math visually
 * [x] Render display math visually
 * [ ] Design shared SVG rendering support for math and diagrams
-* [ ] Render math as SVG without rasterization
+* [x] Render math as SVG without rasterization
 * [ ] Support selecting and copying rendered math as text
 * [ ] Evaluate Mermaid SVG rendering integration
 * [x] Link clicking
