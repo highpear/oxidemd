@@ -18,7 +18,7 @@ use crate::math::MathRenderCache;
 use crate::metrics;
 use crate::parser::MarkdownDocument;
 use crate::reload_worker::{ReloadResponse, ReloadWorkerHandle, spawn_reload_worker};
-use crate::renderer::render_markdown_document;
+use crate::renderer::{estimate_document_block_heights, render_markdown_document};
 use crate::search::SearchState;
 use crate::search_panel::{render_search_controls, render_search_results};
 use crate::session::{
@@ -51,7 +51,9 @@ struct BlockHeightCache {
     fingerprint: Option<DocumentFingerprint>,
     zoom_factor_bits: u32,
     content_width_bits: u32,
+    estimated_zoom_factor_bits: u32,
     heights: Vec<Option<f32>>,
+    estimated_heights: Vec<f32>,
 }
 
 impl RenderMeasurementReason {
@@ -69,7 +71,9 @@ impl BlockHeightCache {
             fingerprint: None,
             zoom_factor_bits: 0,
             content_width_bits: 0,
+            estimated_zoom_factor_bits: 0,
             heights: Vec::new(),
+            estimated_heights: Vec::new(),
         }
     }
 
@@ -77,35 +81,48 @@ impl BlockHeightCache {
         self.fingerprint = None;
         self.zoom_factor_bits = 0;
         self.content_width_bits = 0;
+        self.estimated_zoom_factor_bits = 0;
         self.heights.clear();
+        self.estimated_heights.clear();
     }
 
-    fn heights_for(
+    fn prepare(
         &mut self,
         fingerprint: Option<DocumentFingerprint>,
+        document: &MarkdownDocument,
         zoom_factor: f32,
         content_width: f32,
-        block_count: usize,
-    ) -> &mut [Option<f32>] {
+    ) {
         let zoom_factor_bits = zoom_factor.to_bits();
         let content_width_bits = content_width.round().to_bits();
+        let document_or_zoom_changed =
+            self.fingerprint != fingerprint || self.zoom_factor_bits != zoom_factor_bits;
+        let content_width_changed = self.content_width_bits != content_width_bits;
 
-        if self.fingerprint != fingerprint
-            || self.zoom_factor_bits != zoom_factor_bits
-            || self.content_width_bits != content_width_bits
-        {
+        if document_or_zoom_changed {
             self.fingerprint = fingerprint;
             self.zoom_factor_bits = zoom_factor_bits;
+            self.estimated_zoom_factor_bits = zoom_factor_bits;
+            self.estimated_heights = estimate_document_block_heights(document, zoom_factor);
+        }
+
+        if document_or_zoom_changed || content_width_changed {
             self.content_width_bits = content_width_bits;
             self.heights.clear();
         }
 
-        if self.heights.len() != block_count {
-            self.heights.resize(block_count, None);
+        if self.heights.len() != document.blocks.len() {
+            self.heights.resize(document.blocks.len(), None);
         }
 
-        &mut self.heights
+        if self.estimated_zoom_factor_bits != zoom_factor_bits
+            || self.estimated_heights.len() != document.blocks.len()
+        {
+            self.estimated_zoom_factor_bits = zoom_factor_bits;
+            self.estimated_heights = estimate_document_block_heights(document, zoom_factor);
+        }
     }
+
 }
 
 const DEFAULT_ZOOM_FACTOR: f32 = 1.0;
@@ -1063,12 +1080,17 @@ impl OxideMdApp {
                 let render_started = render_measurement.as_ref().map(|_| Instant::now());
                 let block_count = document.blocks.len();
                 let heading_count = document.headings().len();
-                let block_heights = self.block_height_cache.heights_for(
+                self.block_height_cache.prepare(
                     self.document_fingerprint,
+                    &document,
                     self.zoom_factor,
                     content_width,
-                    block_count,
                 );
+                let BlockHeightCache {
+                    heights: block_heights,
+                    estimated_heights: estimated_block_heights,
+                    ..
+                } = &mut self.block_height_cache;
                 let render_outcome = render_markdown_document(
                     &mut document_ui,
                     &document,
@@ -1079,6 +1101,7 @@ impl OxideMdApp {
                     &mut self.image_cache,
                     &mut self.math_render_cache,
                     block_heights,
+                    estimated_block_heights,
                     self.pending_block_scroll,
                     self.search.active_query(),
                     active_search_block,

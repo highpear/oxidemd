@@ -303,3 +303,29 @@ Conclusion:
 
 - The stabilization repaint keeps large-document render timings in the same range while giving TOC and search jumps a second frame to settle after initial block measurement.
 - The next validation step is manual navigation testing across start, middle, and end positions in a large generated document.
+
+### 2026-04-24: Cache Estimated Block Heights
+
+Change:
+
+- Cache estimated block heights separately from measured block heights.
+- Reuse those estimates across frames instead of recomputing inline height guesses for every unmeasured block.
+- Clear only measured heights when the document body width changes so viewport estimation stays stable while measurements rebuild.
+
+Result:
+
+- 1 MiB initial load: 17 ms -> 19 ms
+- 1 MiB first render after load: 20 ms -> 20 ms
+- 1 MiB reload after edit: 17 ms -> 18 ms
+- 1 MiB first render after reload: 1 ms -> 0 ms
+- 1 MiB skipped reload: 0 ms -> 0 ms
+- 5 MiB initial load: 87 ms -> 93 ms
+- 5 MiB first render after load: 24 ms -> 24 ms
+- 5 MiB reload after edit: 87 ms -> 96 ms
+- 5 MiB first render after reload: 4 ms -> 3 ms
+- 5 MiB skipped reload: 2 ms -> 2 ms
+
+Conclusion:
+
+- Visible render timings stay in the same range, which suggests the change mainly improves frame-to-frame predictability rather than headline throughput.
+- Keeping estimated heights alive across repaint and width-reset paths removes repeated estimation work while measured heights continue to refine scroll spacing for visible blocks.
