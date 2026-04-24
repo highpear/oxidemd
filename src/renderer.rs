@@ -1079,7 +1079,7 @@ fn render_math_block(
                         }
                         response.on_hover_text(tr(
                             render_resources.ui_language,
-                            TranslationKey::ActionCopy,
+                            TranslationKey::ActionCopyTex,
                         ));
                     });
                 }
@@ -1348,7 +1348,7 @@ fn render_inline_math_image(
     if response.clicked() {
         ui.ctx().copy_text(expression.to_owned());
     }
-    response.on_hover_text(tr(ui_language, TranslationKey::ActionCopy));
+    response.on_hover_text(tr(ui_language, TranslationKey::ActionCopyTex));
 
     ui.put(
         image_rect,
@@ -1389,7 +1389,7 @@ fn render_math_block_header(
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui
-                .button(tr(ui_language, TranslationKey::ActionCopy))
+                .button(tr(ui_language, TranslationKey::ActionCopyTex))
                 .clicked()
             {
                 let copied_at = ui.ctx().input(|input| input.time);
