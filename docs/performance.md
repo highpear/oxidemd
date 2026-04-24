@@ -329,3 +329,29 @@ Conclusion:
 
 - Visible render timings stay in the same range, which suggests the change mainly improves frame-to-frame predictability rather than headline throughput.
 - Keeping estimated heights alive across repaint and width-reset paths removes repeated estimation work while measured heights continue to refine scroll spacing for visible blocks.
+
+### 2026-04-24: Stream Inline Line-Break Rendering
+
+Change:
+
+- Replace the temporary `Vec<Vec<&InlineSpan>>` line-splitting path in `render_inline`.
+- Render each inline line directly from slices between `InlineSpan::LineBreak` markers.
+- Keep the no-line-break fast path and wrapped layout behavior unchanged.
+
+Result:
+
+- 1 MiB initial load: 19 ms -> 18 ms
+- 1 MiB first render after load: 20 ms -> 20 ms
+- 1 MiB reload after edit: 18 ms -> 18 ms
+- 1 MiB first render after reload: 0 ms -> 0 ms
+- 1 MiB skipped reload: 0 ms -> 0 ms
+- 5 MiB initial load: 93 ms -> 92 ms
+- 5 MiB first render after load: 24 ms -> 25 ms
+- 5 MiB reload after edit: 96 ms -> 94 ms
+- 5 MiB first render after reload: 3 ms -> 3 ms
+- 5 MiB skipped reload: 2 ms -> 1 ms
+
+Conclusion:
+
+- Visible timings remain within normal run-to-run variance, so the benefit is mainly lower temporary allocation pressure while rendering paragraphs with explicit line breaks.
+- This is a safe follow-up optimization under the remaining `Avoid unnecessary allocations in hot paths` work.

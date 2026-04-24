@@ -881,54 +881,76 @@ fn render_inline(
     link_actions: &mut LinkActions,
     render_resources: &mut RenderResources<'_>,
 ) {
-    if !content
-        .spans
-        .iter()
-        .any(|span| matches!(span, InlineSpan::LineBreak))
-    {
-        ui.horizontal_wrapped(|ui| {
-            for span in &content.spans {
-                render_inline_span(
-                    ui,
-                    span,
-                    style,
-                    theme,
-                    zoom_factor,
-                    search_highlight,
-                    link_actions,
-                    render_resources,
-                );
-            }
-        });
-        return;
-    }
+    let mut line_start = 0usize;
+    let mut has_line_break = false;
 
-    let mut lines: Vec<Vec<&InlineSpan>> = vec![Vec::new()];
-
-    for span in &content.spans {
+    for (index, span) in content.spans.iter().enumerate() {
         if matches!(span, InlineSpan::LineBreak) {
-            lines.push(Vec::new());
-        } else if let Some(current_line) = lines.last_mut() {
-            current_line.push(span);
+            has_line_break = true;
+            render_inline_line(
+                ui,
+                &content.spans[line_start..index],
+                style,
+                theme,
+                zoom_factor,
+                search_highlight,
+                link_actions,
+                render_resources,
+            );
+            line_start = index + 1;
         }
     }
 
-    for line in lines {
-        ui.horizontal_wrapped(|ui| {
-            for span in line {
-                render_inline_span(
-                    ui,
-                    span,
-                    style,
-                    theme,
-                    zoom_factor,
-                    search_highlight,
-                    link_actions,
-                    render_resources,
-                );
-            }
-        });
+    if has_line_break {
+        render_inline_line(
+            ui,
+            &content.spans[line_start..],
+            style,
+            theme,
+            zoom_factor,
+            search_highlight,
+            link_actions,
+            render_resources,
+        );
+        return;
     }
+
+    render_inline_line(
+        ui,
+        &content.spans,
+        style,
+        theme,
+        zoom_factor,
+        search_highlight,
+        link_actions,
+        render_resources,
+    );
+}
+
+fn render_inline_line(
+    ui: &mut Ui,
+    spans: &[InlineSpan],
+    style: InlineStyle,
+    theme: &Theme,
+    zoom_factor: f32,
+    search_highlight: SearchHighlight<'_>,
+    link_actions: &mut LinkActions,
+    render_resources: &mut RenderResources<'_>,
+) {
+    ui.horizontal_wrapped(|ui| {
+        for span in spans {
+            render_inline_span(
+                ui,
+                span,
+                style,
+                theme,
+                zoom_factor,
+                search_highlight,
+                link_actions,
+                render_resources,
+            );
+        }
+    });
 }
 
 #[derive(Clone, Copy)]
