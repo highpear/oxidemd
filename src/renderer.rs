@@ -5,7 +5,7 @@ use eframe::egui::{self, Align, FontFamily, FontId, Frame, RichText, Stroke, Ui,
 use pulldown_cmark::{Alignment, HeadingLevel};
 
 use crate::code_block::render_code_block;
-use crate::i18n::{Language, TranslationKey, tr};
+use crate::i18n::{tr, Language, TranslationKey};
 use crate::image_cache::{ImageCache, ImageLoadState};
 use crate::math::{MathRenderCache, MathRenderMode, PreparedMath};
 use crate::parser::{Block, InlineContent, InlineSpan, MarkdownDocument};
@@ -751,14 +751,9 @@ fn inline_span_width(
             text_width(ui, text, style, SpanKind::Emphasis, theme, zoom_factor)
         }
         InlineSpan::Code(text) => text_width(ui, text, style, SpanKind::Code, theme, zoom_factor),
-        InlineSpan::Math(text) => inline_math_width(
-            ui,
-            text,
-            style,
-            theme,
-            zoom_factor,
-            render_resources,
-        ),
+        InlineSpan::Math(text) => {
+            inline_math_width(ui, text, style, theme, zoom_factor, render_resources)
+        }
         InlineSpan::Link { text, .. } => {
             text_width(ui, text, style, SpanKind::Link, theme, zoom_factor)
         }
@@ -806,8 +801,7 @@ fn highlighted_text_width(
         |segment| {
             width += text_width(ui, segment.text, style, SpanKind::Plain, theme, zoom_factor);
         },
-    )
-    ;
+    );
     width
 }
 
@@ -1102,11 +1096,11 @@ fn render_math_block(
             match prepared {
                 PreparedMath::Svg(svg) => {
                     let max_width = ui.available_width().max(120.0);
+                    let fitted_size = fit_block_math_size(svg.size(), max_width);
                     ui.vertical_centered(|ui| {
                         let response = ui.add(
                             egui::Image::from_bytes(svg.uri().to_owned(), svg.bytes())
-                                .fit_to_exact_size(svg.size())
-                                .max_width(max_width)
+                                .fit_to_exact_size(fitted_size)
                                 .sense(egui::Sense::click()),
                         );
                         if response.clicked() {
@@ -1281,14 +1275,14 @@ fn render_text_label(
         search_highlight.query,
         search_highlight.is_active_block,
         |segment| {
-        let mut rich_text = styled_text(segment.text, style, kind, theme, zoom_factor);
+            let mut rich_text = styled_text(segment.text, style, kind, theme, zoom_factor);
 
-        if segment.is_match {
-            rich_text =
-                rich_text.background_color(search_highlight_color(theme, segment.is_active_match));
-        }
+            if segment.is_match {
+                rich_text = rich_text
+                    .background_color(search_highlight_color(theme, segment.is_active_match));
+            }
 
-        ui.label(rich_text);
+            ui.label(rich_text);
         },
     );
 }
@@ -1359,11 +1353,20 @@ fn fit_inline_math_size(style: InlineStyle, zoom_factor: f32, size: egui::Vec2) 
         return size;
     }
 
-    let target_height = monospace_span_font_size(style, zoom_factor)
-        * INLINE_MATH_TARGET_HEIGHT_MULTIPLIER;
+    let target_height =
+        monospace_span_font_size(style, zoom_factor) * INLINE_MATH_TARGET_HEIGHT_MULTIPLIER;
     let scale = (target_height / size.y).min(1.0);
 
     egui::vec2(size.x * scale, size.y * scale)
+}
+
+fn fit_block_math_size(size: egui::Vec2, max_width: f32) -> egui::Vec2 {
+    if size.x <= 0.0 || size.x <= max_width {
+        return size;
+    }
+
+    let scale = max_width / size.x;
+    egui::vec2(max_width, size.y * scale)
 }
 
 fn render_inline_math_image(
@@ -1379,7 +1382,10 @@ fn render_inline_math_image(
     let baseline_offset =
         monospace_span_font_size(style, zoom_factor) * INLINE_MATH_BASELINE_OFFSET_MULTIPLIER;
     let top_padding = (line_height - fitted_size.y - baseline_offset).max(0.0);
-    let allocated_size = egui::vec2(fitted_size.x, (top_padding + fitted_size.y).max(fitted_size.y));
+    let allocated_size = egui::vec2(
+        fitted_size.x,
+        (top_padding + fitted_size.y).max(fitted_size.y),
+    );
     let (rect, response) = ui.allocate_exact_size(allocated_size, egui::Sense::click());
     let image_rect = egui::Rect::from_min_size(
         egui::pos2(rect.left(), rect.top() + top_padding),
