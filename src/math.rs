@@ -1,8 +1,7 @@
+use eframe::egui::{self};
 use std::collections::HashMap;
 
-use eframe::egui::{self};
-
-use crate::svg::{SvgAsset, apply_current_color};
+use crate::svg::{apply_current_color, SvgAsset};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum MathRenderMode {
@@ -69,8 +68,12 @@ fn prepare_math(
     zoom_factor: f32,
 ) -> PreparedMath {
     match mode {
-        MathRenderMode::Inline => prepare_svg_math(expression, theme_is_dark, zoom_factor, 15.0, mode),
-        MathRenderMode::Block => prepare_svg_math(expression, theme_is_dark, zoom_factor, 18.0, mode),
+        MathRenderMode::Inline => {
+            prepare_svg_math(expression, theme_is_dark, zoom_factor, 15.0, mode)
+        }
+        MathRenderMode::Block => {
+            prepare_svg_math(expression, theme_is_dark, zoom_factor, 18.0, mode)
+        }
     }
 }
 
@@ -81,11 +84,7 @@ fn prepare_svg_math(
     base_font_size: f32,
     mode: MathRenderMode,
 ) -> PreparedMath {
-    let font_size = if theme_is_dark {
-        base_font_size * zoom_factor.max(1.0)
-    } else {
-        base_font_size * zoom_factor
-    };
+    let font_size = base_font_size * zoom_factor;
 
     let svg = match mathjax_svg_rs::render_tex(
         expression,
@@ -107,7 +106,7 @@ fn prepare_svg_math(
             MathRenderMode::Inline => "inline",
             MathRenderMode::Block => "block",
         },
-        expression
+        svg_uri_hash(expression)
     );
 
     match SvgAsset::from_source(uri, svg) {
@@ -128,6 +127,17 @@ fn zoom_bucket(zoom_factor: f32) -> u16 {
     (zoom_factor * 100.0).round().clamp(0.0, u16::MAX as f32) as u16
 }
 
+fn svg_uri_hash(expression: &str) -> String {
+    let mut hash = 0xcbf29ce484222325u64;
+
+    for byte in expression.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+
+    format!("{hash:016x}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::{MathRenderCache, MathRenderMode, PreparedMath};
@@ -141,15 +151,28 @@ mod tests {
         let first = cache.prepare(&ctx, "x^2", MathRenderMode::Inline, false, 1.0);
         let second = cache.prepare(&ctx, "x^2", MathRenderMode::Inline, false, 1.0);
 
-        assert!(matches!(
-            (&first, &second),
-            (PreparedMath::Svg(first_svg), PreparedMath::Svg(second_svg))
-                if first_svg.size() == second_svg.size()
-                && first_svg.uri() == second_svg.uri()
-        ) || matches!(
-            (&first, &second),
-            (PreparedMath::Error(first_error), PreparedMath::Error(second_error))
-                if first_error == second_error
-        ));
+        assert!(
+            matches!(
+                (&first, &second),
+                (PreparedMath::Svg(first_svg), PreparedMath::Svg(second_svg))
+                    if first_svg.size() == second_svg.size()
+                    && first_svg.uri() == second_svg.uri()
+            ) || matches!(
+                (&first, &second),
+                (PreparedMath::Error(first_error), PreparedMath::Error(second_error))
+                    if first_error == second_error
+            )
+        );
+    }
+
+    #[test]
+    fn generated_svg_uri_does_not_embed_tex_source() {
+        let prepared = super::prepare_math(r"\frac{1}{x+y}", MathRenderMode::Inline, false, 1.0);
+
+        if let PreparedMath::Svg(svg) = prepared {
+            assert!(!svg.uri().contains(r"\frac"));
+            assert!(!svg.uri().contains('{'));
+            assert!(svg.uri().starts_with("bytes://math-light-100-inline-"));
+        }
     }
 }
