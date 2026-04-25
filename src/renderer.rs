@@ -817,7 +817,7 @@ fn inline_math_width(
         ui.ctx(),
         text,
         MathRenderMode::Inline,
-        theme.is_dark,
+        theme.text_primary,
         zoom_factor,
     );
 
@@ -1012,7 +1012,7 @@ fn render_inline_span(
                 ui.ctx(),
                 text,
                 MathRenderMode::Inline,
-                theme.is_dark,
+                theme.text_primary,
                 zoom_factor,
             );
 
@@ -1070,7 +1070,7 @@ fn render_math_block(
         ui.ctx(),
         expression,
         MathRenderMode::Block,
-        theme.is_dark,
+        theme.text_primary,
         zoom_factor,
     );
 
