@@ -18,7 +18,7 @@ pub enum PreparedMath {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct MathCacheKey {
     mode: MathRenderMode,
-    theme_is_dark: bool,
+    text_color: [u8; 4],
     zoom_bucket: u16,
 }
 
@@ -42,13 +42,13 @@ impl MathRenderCache {
         _ctx: &egui::Context,
         expression: &str,
         mode: MathRenderMode,
-        theme_is_dark: bool,
+        text_color: egui::Color32,
         zoom_factor: f32,
     ) -> PreparedMath {
         let key = (
             MathCacheKey {
                 mode,
-                theme_is_dark,
+                text_color: text_color.to_array(),
                 zoom_bucket: zoom_bucket(zoom_factor),
             },
             expression.to_owned(),
@@ -56,7 +56,7 @@ impl MathRenderCache {
 
         self.entries
             .entry(key)
-            .or_insert_with(|| prepare_math(expression, mode, theme_is_dark, zoom_factor))
+            .or_insert_with(|| prepare_math(expression, mode, text_color, zoom_factor))
             .clone()
     }
 }
@@ -64,22 +64,18 @@ impl MathRenderCache {
 fn prepare_math(
     expression: &str,
     mode: MathRenderMode,
-    theme_is_dark: bool,
+    text_color: egui::Color32,
     zoom_factor: f32,
 ) -> PreparedMath {
     match mode {
-        MathRenderMode::Inline => {
-            prepare_svg_math(expression, theme_is_dark, zoom_factor, 15.0, mode)
-        }
-        MathRenderMode::Block => {
-            prepare_svg_math(expression, theme_is_dark, zoom_factor, 18.0, mode)
-        }
+        MathRenderMode::Inline => prepare_svg_math(expression, text_color, zoom_factor, 15.0, mode),
+        MathRenderMode::Block => prepare_svg_math(expression, text_color, zoom_factor, 18.0, mode),
     }
 }
 
 fn prepare_svg_math(
     expression: &str,
-    theme_is_dark: bool,
+    text_color: egui::Color32,
     zoom_factor: f32,
     base_font_size: f32,
     mode: MathRenderMode,
@@ -97,10 +93,10 @@ fn prepare_svg_math(
         Err(error) => return PreparedMath::Error(error.to_string()),
     };
 
-    let svg = apply_current_color(&svg, math_text_color(theme_is_dark));
+    let svg = apply_current_color(&svg, text_color);
     let uri = format!(
         "bytes://math-{}-{}-{}-{}.svg",
-        if theme_is_dark { "dark" } else { "light" },
+        color_hash(text_color),
         zoom_bucket(zoom_factor),
         match mode {
             MathRenderMode::Inline => "inline",
@@ -115,16 +111,18 @@ fn prepare_svg_math(
     }
 }
 
-fn math_text_color(theme_is_dark: bool) -> egui::Color32 {
-    if theme_is_dark {
-        egui::Color32::from_rgb(224, 232, 242)
-    } else {
-        egui::Color32::from_rgb(34, 34, 34)
-    }
-}
-
 fn zoom_bucket(zoom_factor: f32) -> u16 {
     (zoom_factor * 100.0).round().clamp(0.0, u16::MAX as f32) as u16
+}
+
+fn color_hash(color: egui::Color32) -> String {
+    format!(
+        "{:02x}{:02x}{:02x}{:02x}",
+        color.r(),
+        color.g(),
+        color.b(),
+        color.a()
+    )
 }
 
 fn svg_uri_hash(expression: &str) -> String {
@@ -141,15 +139,16 @@ fn svg_uri_hash(expression: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{MathRenderCache, MathRenderMode, PreparedMath};
-    use eframe::egui::Context;
+    use eframe::egui::{Color32, Context};
 
     #[test]
     fn reuses_prepared_math_by_key() {
         let mut cache = MathRenderCache::new();
         let ctx = Context::default();
 
-        let first = cache.prepare(&ctx, "x^2", MathRenderMode::Inline, false, 1.0);
-        let second = cache.prepare(&ctx, "x^2", MathRenderMode::Inline, false, 1.0);
+        let text_color = Color32::from_rgb(34, 34, 34);
+        let first = cache.prepare(&ctx, "x^2", MathRenderMode::Inline, text_color, 1.0);
+        let second = cache.prepare(&ctx, "x^2", MathRenderMode::Inline, text_color, 1.0);
 
         assert!(
             matches!(
@@ -167,12 +166,37 @@ mod tests {
 
     #[test]
     fn generated_svg_uri_does_not_embed_tex_source() {
-        let prepared = super::prepare_math(r"\frac{1}{x+y}", MathRenderMode::Inline, false, 1.0);
+        let prepared = super::prepare_math(
+            r"\frac{1}{x+y}",
+            MathRenderMode::Inline,
+            Color32::from_rgb(34, 34, 34),
+            1.0,
+        );
 
         if let PreparedMath::Svg(svg) = prepared {
             assert!(!svg.uri().contains(r"\frac"));
             assert!(!svg.uri().contains('{'));
-            assert!(svg.uri().starts_with("bytes://math-light-100-inline-"));
+            assert!(svg.uri().starts_with("bytes://math-222222ff-100-inline-"));
+        }
+    }
+
+    #[test]
+    fn color_is_part_of_prepared_math_uri() {
+        let dark = super::prepare_math(
+            "x^2",
+            MathRenderMode::Inline,
+            Color32::from_rgb(224, 232, 242),
+            1.0,
+        );
+        let mist = super::prepare_math(
+            "x^2",
+            MathRenderMode::Inline,
+            Color32::from_rgb(28, 40, 46),
+            1.0,
+        );
+
+        if let (PreparedMath::Svg(dark), PreparedMath::Svg(mist)) = (dark, mist) {
+            assert_ne!(dark.uri(), mist.uri());
         }
     }
 }
