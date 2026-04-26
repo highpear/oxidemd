@@ -254,7 +254,7 @@ Goal: consider future extensions without committing too early.
   * [x] Separate SVG display from source-text copy and future selection behavior
   * [x] Introduce a shared render-result type for SVG and fallback errors
   * [x] Generalize math SVG caching into a reusable embedded render cache
-  * [ ] Reuse a common viewer UI for SVG content headers, sizing, and copy actions
+  * [x] Reuse a common viewer UI for SVG content headers, sizing, and copy actions
 * [x] Render math as SVG without rasterization
 * [ ] Support selecting and copying rendered math as text
   * [x] Keep original TeX source attached to rendered math content
