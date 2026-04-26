@@ -4,7 +4,7 @@ use pulldown_cmark::{
     Alignment, CodeBlockKind, Event, HeadingLevel, LinkType, Options, Parser, Tag, TagEnd,
 };
 
-use crate::search::{contains_normalized_query, normalized_query, preview_text, SearchMatch};
+use crate::search::{SearchMatch, contains_normalized_query, normalized_query, preview_text};
 
 #[derive(Clone)]
 pub struct MarkdownDocument {
@@ -613,7 +613,7 @@ fn trim_trailing_normalized_space(buffer: &mut String) {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_markdown, Block, InlineSpan};
+    use super::{Block, InlineSpan, parse_markdown};
 
     #[test]
     fn parses_inline_math_spans() {
@@ -648,9 +648,11 @@ mod tests {
             panic!("expected paragraph");
         };
 
-        assert!(content
-            .spans
-            .iter()
-            .all(|span| !matches!(span, InlineSpan::Math(_))));
+        assert!(
+            content
+                .spans
+                .iter()
+                .all(|span| !matches!(span, InlineSpan::Math(_)))
+        );
     }
 }

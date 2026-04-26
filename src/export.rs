@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use pulldown_cmark::{html, Options, Parser};
+use pulldown_cmark::{Options, Parser, html};
 
 pub fn write_html_export(source_path: &Path, output_path: &Path) -> Result<(), String> {
     let markdown = fs::read_to_string(source_path).map_err(|error| error.to_string())?;

@@ -1,12 +1,12 @@
 use std::path::PathBuf;
-use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::Arc;
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 
 use eframe::egui;
 
 use crate::document_loader::{
-    reload_markdown_document, DocumentFingerprint, FileSnapshot, ReloadDocumentOutcome,
+    DocumentFingerprint, FileSnapshot, ReloadDocumentOutcome, reload_markdown_document,
 };
 use crate::metrics::DocumentTiming;
 use crate::parser::MarkdownDocument;

@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime};
 
 use crate::metrics::DocumentTiming;
-use crate::parser::{parse_markdown, MarkdownDocument};
+use crate::parser::{MarkdownDocument, parse_markdown};
 
 const MAX_PARSED_DOCUMENT_CACHE_ENTRIES: usize = 4;
 

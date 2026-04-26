@@ -5,7 +5,7 @@ use eframe::egui::{
     TextWrapMode, Ui,
 };
 
-use crate::i18n::{tr, Language, TranslationKey};
+use crate::i18n::{Language, TranslationKey, tr};
 use crate::syntax::highlight_code;
 use crate::theme::Theme;
 
