@@ -118,6 +118,17 @@ Use `samples/long-form.md` to test longer reading flows such as heading navigati
 
 Performance measurement notes live in `docs/performance.md`.
 
+## Development Checks
+
+Run formatting before committing Rust changes:
+
+```powershell
+cargo fmt
+cargo fmt --check
+```
+
+The project-wide rustfmt rules live in `rustfmt.toml`.
+
 ## Command Line
 
 Open a Markdown file in the viewer:
