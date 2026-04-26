@@ -9,6 +9,7 @@ pub enum TranslationKey {
     ActionCancel,
     ActionClose,
     ActionCopy,
+    ActionCopySource,
     ActionCopyTex,
     ActionCopyPath,
     ActionClearRecentFiles,
@@ -25,6 +26,7 @@ pub enum TranslationKey {
     LabelExport,
     LabelExternalLinks,
     LabelMath,
+    LabelMermaid,
     LabelNoFile,
     LabelRecentFiles,
     LabelSearch,
@@ -39,6 +41,7 @@ pub enum TranslationKey {
     MessageExternalLinkPrompt,
     MessageImageLoadFailed,
     MessageImageUnsupported,
+    MessageDiagramPreviewUnavailable,
     MessageOpenPrompt,
     MessageNoRecentFiles,
     MessageRecentFileUnavailable,
@@ -92,6 +95,11 @@ const TRANSLATIONS: &[TranslationEntry] = &[
     entry(TranslationKey::ActionCancel, "Cancel", "キャンセル"),
     entry(TranslationKey::ActionClose, "Close", "閉じる"),
     entry(TranslationKey::ActionCopy, "Copy", "コピー"),
+    entry(
+        TranslationKey::ActionCopySource,
+        "Copy Source",
+        "ソースをコピー",
+    ),
     entry(TranslationKey::ActionCopyTex, "Copy TeX", "TeXをコピー"),
     entry(TranslationKey::ActionCopyPath, "Copy Path", "パスをコピー"),
     entry(
@@ -128,6 +136,7 @@ const TRANSLATIONS: &[TranslationEntry] = &[
     entry(TranslationKey::LabelExport, "Export", "エクスポート"),
     entry(TranslationKey::LabelExternalLinks, "Links:", "リンク:"),
     entry(TranslationKey::LabelMath, "Math", "数式"),
+    entry(TranslationKey::LabelMermaid, "Mermaid", "Mermaid"),
     entry(
         TranslationKey::LabelNoFile,
         "No file selected",
@@ -173,6 +182,11 @@ const TRANSLATIONS: &[TranslationEntry] = &[
         TranslationKey::MessageImageUnsupported,
         "Only local image paths are supported:",
         "ローカル画像パスのみ対応しています:",
+    ),
+    entry(
+        TranslationKey::MessageDiagramPreviewUnavailable,
+        "Diagram preview is not available yet.",
+        "図のプレビューはまだ利用できません。",
     ),
     entry(
         TranslationKey::MessageOpenPrompt,

@@ -188,6 +188,17 @@ pub fn render_markdown_document(
                     zoom_factor,
                 );
             }
+            Block::DiagramBlock { language, source } => {
+                render_diagram_block(
+                    ui,
+                    block_index,
+                    language,
+                    source,
+                    theme,
+                    zoom_factor,
+                    &mut render_resources,
+                );
+            }
             Block::MathBlock { expression } => {
                 render_math_block(
                     ui,
@@ -287,6 +298,10 @@ fn estimate_block_height(block: &Block, zoom_factor: f32) -> f32 {
         Block::CodeBlock { code, .. } => {
             let line_count = code.lines().count().max(1) as f32;
             line_count * scale_spacing(20.0, zoom_factor) + scale_spacing(42.0, zoom_factor)
+        }
+        Block::DiagramBlock { source, .. } => {
+            let line_count = source.lines().count().max(1) as f32;
+            line_count * scale_spacing(20.0, zoom_factor) + scale_spacing(72.0, zoom_factor)
         }
         Block::MathBlock { expression } => {
             let line_count = expression.lines().count().max(1) as f32;
@@ -1143,6 +1158,55 @@ fn render_math_block(
     ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
 }
 
+fn render_diagram_block(
+    ui: &mut Ui,
+    block_index: usize,
+    _language: &str,
+    source: &str,
+    theme: &Theme,
+    zoom_factor: f32,
+    render_resources: &mut RenderResources<'_>,
+) {
+    Frame::new()
+        .fill(theme.widget_inactive_background)
+        .stroke(Stroke::new(1.0, theme.content_border))
+        .corner_radius(egui::CornerRadius::same(6))
+        .inner_margin(egui::Margin::symmetric(
+            scale_margin(MATH_BLOCK_PADDING_X, zoom_factor),
+            scale_margin(MATH_BLOCK_PADDING_Y, zoom_factor),
+        ))
+        .show(ui, |ui| {
+            render_embedded_svg_block_header(
+                ui,
+                block_index,
+                EmbeddedSourceAction::new(source),
+                EmbeddedSvgBlockLabels {
+                    title: TranslationKey::LabelMermaid,
+                    copy_action: TranslationKey::ActionCopySource,
+                },
+                "diagram_block_copy_feedback",
+                render_resources.ui_language,
+                theme,
+                zoom_factor,
+            );
+            ui.add_space(scale_spacing(6.0, zoom_factor));
+
+            ui.label(
+                RichText::new(tr(
+                    render_resources.ui_language,
+                    TranslationKey::MessageDiagramPreviewUnavailable,
+                ))
+                .size(QUOTE_TEXT_SIZE * zoom_factor)
+                .color(theme.text_secondary),
+            );
+            ui.add_space(scale_spacing(8.0, zoom_factor));
+
+            render_embedded_source_fallback(ui, block_index, source, theme, zoom_factor);
+        });
+
+    ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
+}
+
 fn render_image_span(
     ui: &mut Ui,
     alt: &str,
@@ -1430,6 +1494,34 @@ fn render_embedded_svg_block_image(
         }
         response.on_hover_text(tr(ui_language, copy_action_key));
     });
+}
+
+fn render_embedded_source_fallback(
+    ui: &mut Ui,
+    block_index: usize,
+    source: &str,
+    theme: &Theme,
+    zoom_factor: f32,
+) {
+    egui::ScrollArea::horizontal()
+        .id_salt(("embedded_source_fallback", block_index))
+        .auto_shrink([false, true])
+        .show(ui, |ui| {
+            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+            ui.add(
+                egui::Label::new(
+                    RichText::new(source)
+                        .size(INLINE_CODE_TEXT_SIZE * zoom_factor)
+                        .color(theme.text_primary)
+                        .family(FontFamily::Monospace)
+                        .font(FontId::new(
+                            INLINE_CODE_TEXT_SIZE * zoom_factor,
+                            FontFamily::Monospace,
+                        )),
+                )
+                .wrap_mode(egui::TextWrapMode::Extend),
+            );
+        });
 }
 
 fn render_math_block_header(

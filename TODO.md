@@ -249,7 +249,7 @@ Goal: consider future extensions without committing too early.
 * [x] Evaluate a lightweight native math rendering approach
 * [x] Render inline math visually
 * [x] Render display math visually
-* [ ] Design shared SVG rendering support for math and diagrams
+* [x] Design shared SVG rendering support for math and diagrams
   * [x] Define a shared embedded-SVG content model for math and diagram blocks
   * [x] Separate SVG display from source-text copy and future selection behavior
   * [x] Introduce a shared render-result type for SVG and fallback errors
@@ -261,11 +261,11 @@ Goal: consider future extensions without committing too early.
   * [x] Improve math copy behavior from block-only actions to a shared embedded-content action model
   * [ ] Decide whether math selection should start with whole-expression selection before partial selection
 * [ ] Evaluate Mermaid SVG rendering integration
-  * [ ] Decide how Mermaid fenced blocks should map into the shared embedded-SVG content model
+  * [x] Decide how Mermaid fenced blocks should map into the shared embedded-SVG content model
   * [ ] Prototype Mermaid SVG rendering behind the same renderer adapter boundary as math
   * [ ] Measure render latency, cache behavior, and failure handling on larger diagrams
-  * [ ] Add an error fallback that keeps Mermaid source readable when SVG rendering fails
-  * [ ] Decide whether Mermaid source copy is sufficient before considering text selection inside diagrams
+  * [x] Add an error fallback that keeps Mermaid source readable when SVG rendering fails
+  * [x] Decide whether Mermaid source copy is sufficient before considering text selection inside diagrams
 * [x] Link clicking
 * [x] External link opening behavior options
 * [x] Drag and drop file open
