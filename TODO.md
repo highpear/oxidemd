@@ -252,12 +252,12 @@ Goal: consider future extensions without committing too early.
 * [ ] Design shared SVG rendering support for math and diagrams
   * [ ] Define a shared embedded-SVG content model for math and diagram blocks
   * [ ] Separate SVG display from source-text copy and future selection behavior
-  * [ ] Introduce a shared render-result type for SVG, pending state, and fallback errors
-  * [ ] Generalize math SVG caching into a reusable embedded render cache
+  * [x] Introduce a shared render-result type for SVG and fallback errors
+  * [x] Generalize math SVG caching into a reusable embedded render cache
   * [ ] Reuse a common viewer UI for SVG content headers, sizing, and copy actions
 * [x] Render math as SVG without rasterization
 * [ ] Support selecting and copying rendered math as text
-  * [ ] Keep original TeX source attached to rendered math content
+  * [x] Keep original TeX source attached to rendered math content
   * [ ] Improve math copy behavior from block-only actions to a shared embedded-content action model
   * [ ] Decide whether math selection should start with whole-expression selection before partial selection
 * [ ] Evaluate Mermaid SVG rendering integration
