@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use eframe::egui::{self, Color32, Frame, Margin, RichText, TopBottomPanel};
 
-use crate::i18n::{Language, TranslationKey, tr};
+use crate::i18n::{tr, Language, TranslationKey};
 use crate::session::ExternalLinkBehavior;
 
 const TOP_BAR_FILE_LABEL_MAX_WIDTH: f32 = 280.0;

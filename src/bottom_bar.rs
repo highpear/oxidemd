@@ -1,6 +1,6 @@
 use eframe::egui::{self, Align, Layout, Slider, TopBottomPanel, Vec2};
 
-use crate::i18n::{Language, TranslationKey, tr};
+use crate::i18n::{tr, Language, TranslationKey};
 
 const ZOOM_STEP_BUTTON_WIDTH: f32 = 28.0;
 

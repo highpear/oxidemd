@@ -1,6 +1,6 @@
 use eframe::egui::{self, Align, Align2, Key, KeyboardShortcut, Layout, Modifiers, Vec2};
 
-use crate::i18n::{Language, TranslationKey, tr};
+use crate::i18n::{tr, Language, TranslationKey};
 
 pub struct ShortcutActions {
     pub open_file: bool,

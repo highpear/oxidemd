@@ -1,6 +1,6 @@
 use eframe::egui::{self, Align, Key, Layout, ScrollArea, TextEdit};
 
-use crate::i18n::{Language, TranslationKey, tr};
+use crate::i18n::{tr, Language, TranslationKey};
 use crate::search::SearchState;
 
 const SEARCH_INPUT_ID: &str = "document_search_input";

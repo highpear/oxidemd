@@ -1,6 +1,6 @@
 use eframe::egui::{self, Align2, Vec2};
 
-use crate::i18n::{Language, TranslationKey, tr};
+use crate::i18n::{tr, Language, TranslationKey};
 use crate::session::ExternalLinkBehavior;
 
 pub fn handle_external_link_click(
