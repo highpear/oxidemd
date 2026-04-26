@@ -32,7 +32,7 @@ use std::time::Instant;
 use app::OxideMdApp;
 use cli::{parse_args, run_cli_action};
 use eframe::egui::{self, FontData, FontDefinitions, FontFamily, Vec2};
-use theme::{apply_theme, theme, DEFAULT_THEME_ID};
+use theme::{DEFAULT_THEME_ID, apply_theme, theme};
 
 const MEIRYO_FONT_NAME: &str = "meiryo";
 const INITIAL_WINDOW_WIDTH: f32 = 1180.0;

@@ -8,27 +8,27 @@ use eframe::egui::{
 };
 use rfd::FileDialog;
 
-use crate::bottom_bar::{render_bottom_bar, BottomBarState};
-use crate::document_loader::{load_markdown_document, DocumentFingerprint, FileSnapshot};
+use crate::bottom_bar::{BottomBarState, render_bottom_bar};
+use crate::document_loader::{DocumentFingerprint, FileSnapshot, load_markdown_document};
 use crate::export::write_html_export;
 use crate::external_links::{handle_external_link_click, render_external_link_confirmation};
-use crate::i18n::{tr, Language, TranslationKey};
+use crate::i18n::{Language, TranslationKey, tr};
 use crate::image_cache::ImageCache;
 use crate::math::MathRenderCache;
 use crate::metrics;
 use crate::parser::MarkdownDocument;
-use crate::reload_worker::{spawn_reload_worker, ReloadResponse, ReloadWorkerHandle};
+use crate::reload_worker::{ReloadResponse, ReloadWorkerHandle, spawn_reload_worker};
 use crate::renderer::{estimate_document_block_heights, render_markdown_document};
 use crate::search::SearchState;
 use crate::search_panel::{render_search_controls, render_search_results};
 use crate::session::{
-    is_markdown_path, remember_recent_file, restore_session as restore_saved_session, save_session,
-    ExternalLinkBehavior, SessionSaveData,
+    ExternalLinkBehavior, SessionSaveData, is_markdown_path, remember_recent_file,
+    restore_session as restore_saved_session, save_session,
 };
 use crate::shortcuts::{consume_shortcuts, render_shortcuts_help};
-use crate::theme::{apply_theme, available_themes, theme, ThemeId, DEFAULT_THEME_ID};
-use crate::top_bar::{render_top_bar, TopBarState};
-use crate::watcher::{watch_file, FileWatchEvent, FileWatcherHandle};
+use crate::theme::{DEFAULT_THEME_ID, ThemeId, apply_theme, available_themes, theme};
+use crate::top_bar::{TopBarState, render_top_bar};
+use crate::watcher::{FileWatchEvent, FileWatcherHandle, watch_file};
 
 #[derive(Clone, Copy)]
 enum ReloadStatus {

@@ -94,7 +94,7 @@ fn help_text() -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_args, CliAction};
+    use super::{CliAction, parse_args};
     use std::ffi::OsString;
     use std::path::PathBuf;
 

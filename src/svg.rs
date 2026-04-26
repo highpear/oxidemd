@@ -1,4 +1,4 @@
-use eframe::egui::{load::Bytes, vec2, Color32, Vec2};
+use eframe::egui::{Color32, Vec2, load::Bytes, vec2};
 
 #[derive(Clone)]
 pub struct SvgAsset {
