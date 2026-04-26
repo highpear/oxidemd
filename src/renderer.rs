@@ -5,8 +5,8 @@ use eframe::egui::{self, Align, FontFamily, FontId, Frame, RichText, Stroke, Ui,
 use pulldown_cmark::{Alignment, HeadingLevel};
 
 use crate::code_block::render_code_block;
-use crate::embedded_svg::EmbeddedSvgContent;
-use crate::i18n::{tr, Language, TranslationKey};
+use crate::embedded_svg::{EmbeddedSourceAction, EmbeddedSvgContent, EmbeddedSvgContentKind};
+use crate::i18n::{Language, TranslationKey, tr};
 use crate::image_cache::{ImageCache, ImageLoadState};
 use crate::math::{MathRenderCache, MathRenderMode, PreparedMath};
 use crate::parser::{Block, InlineContent, InlineSpan, MarkdownDocument};
@@ -1086,10 +1086,15 @@ fn render_math_block(
             scale_margin(MATH_BLOCK_PADDING_Y, zoom_factor),
         ))
         .show(ui, |ui| {
+            let source_action = match &prepared {
+                PreparedMath::Svg(content) => content.source_action(),
+                PreparedMath::Error(_) => EmbeddedSourceAction::new(expression),
+            };
+
             render_math_block_header(
                 ui,
                 block_index,
-                expression,
+                source_action,
                 render_resources.ui_language,
                 theme,
                 zoom_factor,
@@ -1098,6 +1103,7 @@ fn render_math_block(
 
             match prepared {
                 PreparedMath::Svg(content) => {
+                    debug_assert_eq!(content.kind(), EmbeddedSvgContentKind::Math);
                     let max_width = ui.available_width().max(120.0);
                     let fitted_size = fit_block_math_size(content.asset().size(), max_width);
                     ui.vertical_centered(|ui| {
@@ -1110,7 +1116,7 @@ fn render_math_block(
                             .sense(egui::Sense::click()),
                         );
                         if response.clicked() {
-                            ui.ctx().copy_text(content.source_text().to_owned());
+                            copy_embedded_source(ui, content.source_action());
                         }
                         response.on_hover_text(tr(
                             render_resources.ui_language,
@@ -1383,6 +1389,8 @@ fn render_inline_math_image(
     ui_language: Language,
     fitted_size: egui::Vec2,
 ) {
+    debug_assert_eq!(content.kind(), EmbeddedSvgContentKind::Math);
+
     let line_height = inline_math_line_height(style, zoom_factor);
     let baseline_offset =
         monospace_span_font_size(style, zoom_factor) * INLINE_MATH_BASELINE_OFFSET_MULTIPLIER;
@@ -1398,7 +1406,7 @@ fn render_inline_math_image(
     );
 
     if response.clicked() {
-        ui.ctx().copy_text(content.source_text().to_owned());
+        copy_embedded_source(ui, content.source_action());
     }
     response.on_hover_text(tr(ui_language, TranslationKey::ActionCopyTex));
 
@@ -1412,7 +1420,7 @@ fn render_inline_math_image(
 fn render_math_block_header(
     ui: &mut Ui,
     block_index: usize,
-    expression: &str,
+    source_action: EmbeddedSourceAction<'_>,
     ui_language: Language,
     theme: &Theme,
     zoom_factor: f32,
@@ -1446,7 +1454,7 @@ fn render_math_block_header(
                 .clicked()
             {
                 let copied_at = ui.ctx().input(|input| input.time);
-                ui.ctx().copy_text(expression.to_owned());
+                copy_embedded_source(ui, source_action);
                 ui.ctx().data_mut(|data| {
                     data.insert_temp(
                         feedback_id,
@@ -1477,6 +1485,10 @@ fn render_math_block_header(
             );
         });
     });
+}
+
+fn copy_embedded_source(ui: &mut Ui, source_action: EmbeddedSourceAction<'_>) {
+    ui.ctx().copy_text(source_action.source_text().to_owned());
 }
 
 fn inline_math_line_height(style: InlineStyle, zoom_factor: f32) -> f32 {

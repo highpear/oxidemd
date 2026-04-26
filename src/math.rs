@@ -1,7 +1,9 @@
 use eframe::egui::{self};
 
-use crate::embedded_svg::{EmbeddedSvgContent, EmbeddedSvgRenderCache, EmbeddedSvgRenderResult};
-use crate::svg::{apply_current_color, SvgAsset};
+use crate::embedded_svg::{
+    EmbeddedSvgContent, EmbeddedSvgContentKind, EmbeddedSvgRenderCache, EmbeddedSvgRenderResult,
+};
+use crate::svg::{SvgAsset, apply_current_color};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum MathRenderMode {
@@ -98,7 +100,11 @@ fn prepare_svg_math(
     );
 
     match SvgAsset::from_source(uri, svg) {
-        Ok(svg) => PreparedMath::Svg(EmbeddedSvgContent::new(svg, expression.to_owned())),
+        Ok(svg) => PreparedMath::Svg(EmbeddedSvgContent::new(
+            EmbeddedSvgContentKind::Math,
+            svg,
+            expression.to_owned(),
+        )),
         Err(error) => PreparedMath::Error(error),
     }
 }
@@ -148,6 +154,7 @@ mod tests {
                 (PreparedMath::Svg(first_svg), PreparedMath::Svg(second_svg))
                     if first_svg.asset().size() == second_svg.asset().size()
                     && first_svg.asset().uri() == second_svg.asset().uri()
+                    && first_svg.kind() == super::EmbeddedSvgContentKind::Math
                     && first_svg.source_text() == "x^2"
                     && second_svg.source_text() == "x^2"
             ) || matches!(
@@ -170,10 +177,11 @@ mod tests {
         if let PreparedMath::Svg(svg) = prepared {
             assert!(!svg.asset().uri().contains(r"\frac"));
             assert!(!svg.asset().uri().contains('{'));
-            assert!(svg
-                .asset()
-                .uri()
-                .starts_with("bytes://math-222222ff-100-inline-"));
+            assert!(
+                svg.asset()
+                    .uri()
+                    .starts_with("bytes://math-222222ff-100-inline-")
+            );
             assert_eq!(svg.source_text(), r"\frac{1}{x+y}");
         }
     }
