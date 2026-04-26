@@ -1,6 +1,6 @@
 use eframe::egui::{self};
-use std::collections::HashMap;
 
+use crate::embedded_svg::{EmbeddedSvgContent, EmbeddedSvgRenderCache, EmbeddedSvgRenderResult};
 use crate::svg::{apply_current_color, SvgAsset};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -9,11 +9,7 @@ pub enum MathRenderMode {
     Block,
 }
 
-#[derive(Clone)]
-pub enum PreparedMath {
-    Svg(SvgAsset),
-    Error(String),
-}
+pub type PreparedMath = EmbeddedSvgRenderResult;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct MathCacheKey {
@@ -23,18 +19,18 @@ struct MathCacheKey {
 }
 
 pub struct MathRenderCache {
-    entries: HashMap<(MathCacheKey, String), PreparedMath>,
+    cache: EmbeddedSvgRenderCache<MathCacheKey>,
 }
 
 impl MathRenderCache {
     pub fn new() -> Self {
         Self {
-            entries: HashMap::new(),
+            cache: EmbeddedSvgRenderCache::new(),
         }
     }
 
     pub fn clear(&mut self) {
-        self.entries.clear();
+        self.cache.clear();
     }
 
     pub fn prepare(
@@ -45,19 +41,15 @@ impl MathRenderCache {
         text_color: egui::Color32,
         zoom_factor: f32,
     ) -> PreparedMath {
-        let key = (
-            MathCacheKey {
-                mode,
-                text_color: text_color.to_array(),
-                zoom_bucket: zoom_bucket(zoom_factor),
-            },
-            expression.to_owned(),
-        );
+        let key = MathCacheKey {
+            mode,
+            text_color: text_color.to_array(),
+            zoom_bucket: zoom_bucket(zoom_factor),
+        };
 
-        self.entries
-            .entry(key)
-            .or_insert_with(|| prepare_math(expression, mode, text_color, zoom_factor))
-            .clone()
+        self.cache.prepare_with(key, expression, |expression| {
+            prepare_math(expression, mode, text_color, zoom_factor)
+        })
     }
 }
 
@@ -106,7 +98,7 @@ fn prepare_svg_math(
     );
 
     match SvgAsset::from_source(uri, svg) {
-        Ok(svg) => PreparedMath::Svg(svg),
+        Ok(svg) => PreparedMath::Svg(EmbeddedSvgContent::new(svg, expression.to_owned())),
         Err(error) => PreparedMath::Error(error),
     }
 }
@@ -154,8 +146,10 @@ mod tests {
             matches!(
                 (&first, &second),
                 (PreparedMath::Svg(first_svg), PreparedMath::Svg(second_svg))
-                    if first_svg.size() == second_svg.size()
-                    && first_svg.uri() == second_svg.uri()
+                    if first_svg.asset().size() == second_svg.asset().size()
+                    && first_svg.asset().uri() == second_svg.asset().uri()
+                    && first_svg.source_text() == "x^2"
+                    && second_svg.source_text() == "x^2"
             ) || matches!(
                 (&first, &second),
                 (PreparedMath::Error(first_error), PreparedMath::Error(second_error))
@@ -174,9 +168,13 @@ mod tests {
         );
 
         if let PreparedMath::Svg(svg) = prepared {
-            assert!(!svg.uri().contains(r"\frac"));
-            assert!(!svg.uri().contains('{'));
-            assert!(svg.uri().starts_with("bytes://math-222222ff-100-inline-"));
+            assert!(!svg.asset().uri().contains(r"\frac"));
+            assert!(!svg.asset().uri().contains('{'));
+            assert!(svg
+                .asset()
+                .uri()
+                .starts_with("bytes://math-222222ff-100-inline-"));
+            assert_eq!(svg.source_text(), r"\frac{1}{x+y}");
         }
     }
 
@@ -196,7 +194,7 @@ mod tests {
         );
 
         if let (PreparedMath::Svg(dark), PreparedMath::Svg(mist)) = (dark, mist) {
-            assert_ne!(dark.uri(), mist.uri());
+            assert_ne!(dark.asset().uri(), mist.asset().uri());
         }
     }
 }

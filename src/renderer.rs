@@ -5,6 +5,7 @@ use eframe::egui::{self, Align, FontFamily, FontId, Frame, RichText, Stroke, Ui,
 use pulldown_cmark::{Alignment, HeadingLevel};
 
 use crate::code_block::render_code_block;
+use crate::embedded_svg::EmbeddedSvgContent;
 use crate::i18n::{tr, Language, TranslationKey};
 use crate::image_cache::{ImageCache, ImageLoadState};
 use crate::math::{MathRenderCache, MathRenderMode, PreparedMath};
@@ -822,7 +823,9 @@ fn inline_math_width(
     );
 
     match prepared {
-        PreparedMath::Svg(svg) => fit_inline_math_size(style, zoom_factor, svg.size()).x,
+        PreparedMath::Svg(content) => {
+            fit_inline_math_size(style, zoom_factor, content.asset().size()).x
+        }
         PreparedMath::Error(_) => text_width(ui, text, style, SpanKind::Math, theme, zoom_factor),
     }
 }
@@ -1017,12 +1020,12 @@ fn render_inline_span(
             );
 
             match prepared {
-                PreparedMath::Svg(svg) => {
-                    let fitted_size = fit_inline_math_size(style, zoom_factor, svg.size());
+                PreparedMath::Svg(content) => {
+                    let fitted_size =
+                        fit_inline_math_size(style, zoom_factor, content.asset().size());
                     render_inline_math_image(
                         ui,
-                        &svg,
-                        text,
+                        &content,
                         style,
                         zoom_factor,
                         render_resources.ui_language,
@@ -1094,17 +1097,20 @@ fn render_math_block(
             ui.add_space(scale_spacing(6.0, zoom_factor));
 
             match prepared {
-                PreparedMath::Svg(svg) => {
+                PreparedMath::Svg(content) => {
                     let max_width = ui.available_width().max(120.0);
-                    let fitted_size = fit_block_math_size(svg.size(), max_width);
+                    let fitted_size = fit_block_math_size(content.asset().size(), max_width);
                     ui.vertical_centered(|ui| {
                         let response = ui.add(
-                            egui::Image::from_bytes(svg.uri().to_owned(), svg.bytes())
-                                .fit_to_exact_size(fitted_size)
-                                .sense(egui::Sense::click()),
+                            egui::Image::from_bytes(
+                                content.asset().uri().to_owned(),
+                                content.asset().bytes(),
+                            )
+                            .fit_to_exact_size(fitted_size)
+                            .sense(egui::Sense::click()),
                         );
                         if response.clicked() {
-                            ui.ctx().copy_text(expression.to_owned());
+                            ui.ctx().copy_text(content.source_text().to_owned());
                         }
                         response.on_hover_text(tr(
                             render_resources.ui_language,
@@ -1371,8 +1377,7 @@ fn fit_block_math_size(size: egui::Vec2, max_width: f32) -> egui::Vec2 {
 
 fn render_inline_math_image(
     ui: &mut Ui,
-    svg: &crate::svg::SvgAsset,
-    expression: &str,
+    content: &EmbeddedSvgContent,
     style: InlineStyle,
     zoom_factor: f32,
     ui_language: Language,
@@ -1393,13 +1398,14 @@ fn render_inline_math_image(
     );
 
     if response.clicked() {
-        ui.ctx().copy_text(expression.to_owned());
+        ui.ctx().copy_text(content.source_text().to_owned());
     }
     response.on_hover_text(tr(ui_language, TranslationKey::ActionCopyTex));
 
     ui.put(
         image_rect,
-        egui::Image::from_bytes(svg.uri().to_owned(), svg.bytes()).fit_to_exact_size(fitted_size),
+        egui::Image::from_bytes(content.asset().uri().to_owned(), content.asset().bytes())
+            .fit_to_exact_size(fitted_size),
     );
 }
 
