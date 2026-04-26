@@ -126,6 +126,9 @@ When modifying this project:
 * Ensure the project builds at all times
 * Prefer readability over cleverness
 * If unsure, propose changes instead of implementing blindly
+* Before committing Rust changes, run `cargo fmt` and verify with `cargo fmt --check`
+* Before committing behavior changes, run relevant tests; prefer `cargo test` for normal code changes
+* Before committing build-sensitive changes, run `cargo build`
 
 ---
 
