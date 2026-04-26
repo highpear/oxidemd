@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
-use eframe::egui::{Color32, FontFamily, FontId, text::LayoutJob, text::TextFormat};
+use eframe::egui::{text::LayoutJob, text::TextFormat, Color32, FontFamily, FontId};
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Style, Theme, ThemeSet};
 use syntect::parsing::SyntaxSet;

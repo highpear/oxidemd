@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::i18n::{Language, TranslationKey, tr};
+use crate::i18n::{tr, Language, TranslationKey};
 use crate::theme::ThemeId;
 
 const MAX_RECENT_FILES: usize = 8;

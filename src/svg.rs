@@ -1,4 +1,4 @@
-use eframe::egui::{Color32, Vec2, load::Bytes, vec2};
+use eframe::egui::{load::Bytes, vec2, Color32, Vec2};
 
 #[derive(Clone)]
 pub struct SvgAsset {
@@ -38,12 +38,7 @@ pub fn apply_current_color(svg: &str, color: Color32) -> String {
         return svg.to_owned();
     };
     let tag_end = start + end;
-    let color_value = format!(
-        "#{:02x}{:02x}{:02x}",
-        color.r(),
-        color.g(),
-        color.b()
-    );
+    let color_value = format!("#{:02x}{:02x}{:02x}", color.r(), color.g(), color.b());
     let svg_tag = &svg[start..=tag_end];
 
     if let Some(style_index) = svg_tag.find(" style=\"") {
@@ -75,8 +70,8 @@ pub fn apply_current_color(svg: &str, color: Color32) -> String {
 }
 
 fn svg_size(svg: &str) -> Result<Vec2, String> {
-    let tree =
-        resvg::usvg::Tree::from_str(svg, &resvg::usvg::Options::default()).map_err(|e| e.to_string())?;
+    let tree = resvg::usvg::Tree::from_str(svg, &resvg::usvg::Options::default())
+        .map_err(|e| e.to_string())?;
     let size = tree.size();
     Ok(vec2(size.width(), size.height()))
 }
