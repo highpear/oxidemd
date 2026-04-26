@@ -262,6 +262,7 @@ Goal: consider future extensions without committing too early.
   * [ ] Decide whether math selection should start with whole-expression selection before partial selection
 * [ ] Evaluate Mermaid SVG rendering integration
   * [x] Decide how Mermaid fenced blocks should map into the shared embedded-SVG content model
+  * [x] Document Mermaid renderer candidates, constraints, and evaluation criteria
   * [ ] Prototype Mermaid SVG rendering behind the same renderer adapter boundary as math
   * [ ] Measure render latency, cache behavior, and failure handling on larger diagrams
   * [x] Add an error fallback that keeps Mermaid source readable when SVG rendering fails
