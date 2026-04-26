@@ -29,7 +29,7 @@ const LARGE_DOCUMENT_BLOCK_THRESHOLD: usize = 2_000;
 const VIRTUAL_RENDER_OVERSCAN: f32 = 1_200.0;
 const ESTIMATED_CHARS_PER_LINE: usize = 90;
 const COPY_FEEDBACK_DURATION_SECONDS: f64 = 1.2;
-const MATH_COPY_FEEDBACK_SLOT_WIDTH: f32 = 88.0;
+const EMBEDDED_COPY_FEEDBACK_SLOT_WIDTH: f32 = 88.0;
 
 pub fn render_markdown_document(
     ui: &mut Ui,
@@ -379,9 +379,15 @@ struct HeadingRenderState {
 }
 
 #[derive(Clone, Copy)]
-struct MathCopyFeedbackState {
+struct EmbeddedCopyFeedbackState {
     block_index: usize,
     copied_at: f64,
+}
+
+#[derive(Clone, Copy)]
+struct EmbeddedSvgBlockLabels {
+    title: TranslationKey,
+    copy_action: TranslationKey,
 }
 
 fn render_heading(
@@ -1104,25 +1110,12 @@ fn render_math_block(
             match prepared {
                 PreparedMath::Svg(content) => {
                     debug_assert_eq!(content.kind(), EmbeddedSvgContentKind::Math);
-                    let max_width = ui.available_width().max(120.0);
-                    let fitted_size = fit_block_math_size(content.asset().size(), max_width);
-                    ui.vertical_centered(|ui| {
-                        let response = ui.add(
-                            egui::Image::from_bytes(
-                                content.asset().uri().to_owned(),
-                                content.asset().bytes(),
-                            )
-                            .fit_to_exact_size(fitted_size)
-                            .sense(egui::Sense::click()),
-                        );
-                        if response.clicked() {
-                            copy_embedded_source(ui, content.source_action());
-                        }
-                        response.on_hover_text(tr(
-                            render_resources.ui_language,
-                            TranslationKey::ActionCopyTex,
-                        ));
-                    });
+                    render_embedded_svg_block_image(
+                        ui,
+                        &content,
+                        render_resources.ui_language,
+                        TranslationKey::ActionCopyTex,
+                    );
                 }
                 PreparedMath::Error(error) => {
                     ui.label(
@@ -1372,7 +1365,7 @@ fn fit_inline_math_size(style: InlineStyle, zoom_factor: f32, size: egui::Vec2) 
     egui::vec2(size.x * scale, size.y * scale)
 }
 
-fn fit_block_math_size(size: egui::Vec2, max_width: f32) -> egui::Vec2 {
+fn fit_embedded_block_svg_size(size: egui::Vec2, max_width: f32) -> egui::Vec2 {
     if size.x <= 0.0 || size.x <= max_width {
         return size;
     }
@@ -1417,6 +1410,28 @@ fn render_inline_math_image(
     );
 }
 
+fn render_embedded_svg_block_image(
+    ui: &mut Ui,
+    content: &EmbeddedSvgContent,
+    ui_language: Language,
+    copy_action_key: TranslationKey,
+) {
+    let max_width = ui.available_width().max(120.0);
+    let fitted_size = fit_embedded_block_svg_size(content.asset().size(), max_width);
+
+    ui.vertical_centered(|ui| {
+        let response = ui.add(
+            egui::Image::from_bytes(content.asset().uri().to_owned(), content.asset().bytes())
+                .fit_to_exact_size(fitted_size)
+                .sense(egui::Sense::click()),
+        );
+        if response.clicked() {
+            copy_embedded_source(ui, content.source_action());
+        }
+        response.on_hover_text(tr(ui_language, copy_action_key));
+    });
+}
+
 fn render_math_block_header(
     ui: &mut Ui,
     block_index: usize,
@@ -1425,10 +1440,35 @@ fn render_math_block_header(
     theme: &Theme,
     zoom_factor: f32,
 ) {
-    let feedback_id = ui.make_persistent_id("math_block_copy_feedback");
+    render_embedded_svg_block_header(
+        ui,
+        block_index,
+        source_action,
+        EmbeddedSvgBlockLabels {
+            title: TranslationKey::LabelMath,
+            copy_action: TranslationKey::ActionCopyTex,
+        },
+        "math_block_copy_feedback",
+        ui_language,
+        theme,
+        zoom_factor,
+    );
+}
+
+fn render_embedded_svg_block_header(
+    ui: &mut Ui,
+    block_index: usize,
+    source_action: EmbeddedSourceAction<'_>,
+    labels: EmbeddedSvgBlockLabels,
+    feedback_id_salt: &'static str,
+    ui_language: Language,
+    theme: &Theme,
+    zoom_factor: f32,
+) {
+    let feedback_id = ui.make_persistent_id(feedback_id_salt);
     let copied = ui
         .ctx()
-        .data(|data| data.get_temp::<MathCopyFeedbackState>(feedback_id));
+        .data(|data| data.get_temp::<EmbeddedCopyFeedbackState>(feedback_id));
     let now = ui.ctx().input(|input| input.time);
     let show_copied = copied
         .filter(|copied| copied.block_index == block_index)
@@ -1442,23 +1482,20 @@ fn render_math_block_header(
 
     ui.horizontal(|ui| {
         ui.label(
-            RichText::new(tr(ui_language, TranslationKey::LabelMath))
+            RichText::new(tr(ui_language, labels.title))
                 .size(QUOTE_TEXT_SIZE * zoom_factor)
                 .strong()
                 .color(theme.text_secondary),
         );
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui
-                .button(tr(ui_language, TranslationKey::ActionCopyTex))
-                .clicked()
-            {
+            if ui.button(tr(ui_language, labels.copy_action)).clicked() {
                 let copied_at = ui.ctx().input(|input| input.time);
                 copy_embedded_source(ui, source_action);
                 ui.ctx().data_mut(|data| {
                     data.insert_temp(
                         feedback_id,
-                        MathCopyFeedbackState {
+                        EmbeddedCopyFeedbackState {
                             block_index,
                             copied_at,
                         },
@@ -1471,7 +1508,7 @@ fn render_math_block_header(
             ui.add_space(scale_spacing(8.0, zoom_factor));
 
             ui.allocate_ui_with_layout(
-                egui::vec2(MATH_COPY_FEEDBACK_SLOT_WIDTH * zoom_factor, 0.0),
+                egui::vec2(EMBEDDED_COPY_FEEDBACK_SLOT_WIDTH * zoom_factor, 0.0),
                 egui::Layout::right_to_left(egui::Align::Center),
                 |ui| {
                     if show_copied {
