@@ -39,6 +39,7 @@ Current capabilities:
 - Keyboard shortcut help
 - Syntax highlighting for fenced code blocks
 - Copy fenced code block contents
+- Show Mermaid fenced blocks with readable fallback and source copy
 - Copy the current file path
 - Export the current Markdown file as HTML
 - Export Markdown as HTML from the command line
@@ -60,6 +61,7 @@ Currently supported Markdown elements:
 - Links
 - Images (local PNG/JPEG)
 - Inline and display math (`$...$`, `$$...$$`)
+- Mermaid fenced blocks as readable source fallback
 
 ---
 

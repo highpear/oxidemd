@@ -54,6 +54,10 @@ pub enum Block {
         language: Option<String>,
         code: String,
     },
+    DiagramBlock {
+        language: String,
+        source: String,
+    },
     MathBlock {
         expression: String,
     },
@@ -121,7 +125,17 @@ pub fn parse_markdown(input: &str) -> MarkdownDocument {
                 };
 
                 let code = collect_text_until(&mut parser, TagEnd::CodeBlock);
-                blocks.push(Block::CodeBlock { language, code });
+                if let Some(language) = language
+                    .as_deref()
+                    .filter(|language| is_mermaid_language(language))
+                {
+                    blocks.push(Block::DiagramBlock {
+                        language: language.to_owned(),
+                        source: code,
+                    });
+                } else {
+                    blocks.push(Block::CodeBlock { language, code });
+                }
             }
             Event::Start(Tag::Table(alignments)) => {
                 let (headers, rows) = collect_table(&mut parser);
@@ -406,6 +420,17 @@ fn standalone_math_block(content: &InlineContent) -> Option<String> {
     expression
 }
 
+fn is_mermaid_language(language: &str) -> bool {
+    let normalized = language
+        .split_whitespace()
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+
+    matches!(normalized.as_str(), "mermaid" | "mmd")
+}
+
 fn unique_anchor(title: &str, used_anchors: &mut HashMap<String, usize>) -> String {
     let base = anchor_slug(title);
     let count = used_anchors.entry(base.clone()).or_insert(0);
@@ -491,6 +516,7 @@ impl Block {
             Block::OrderedList { items, .. } => join_inline_items(items),
             Block::BlockQuote(lines) => join_inline_items(lines),
             Block::CodeBlock { code, .. } => normalized_text(code),
+            Block::DiagramBlock { source, .. } => normalized_text(source),
             Block::MathBlock { expression } => normalized_text(expression),
             Block::Table { headers, rows, .. } => {
                 let mut text = String::new();
@@ -637,6 +663,28 @@ mod tests {
         assert!(matches!(
             &document.blocks[0],
             Block::MathBlock { expression } if expression == "a^2 + b^2 = c^2"
+        ));
+    }
+
+    #[test]
+    fn parses_mermaid_fenced_code_as_diagram_block() {
+        let document = parse_markdown("```mermaid\ngraph TD\n  A --> B\n```");
+
+        assert!(matches!(
+            &document.blocks[0],
+            Block::DiagramBlock { language, source }
+                if language == "mermaid" && source == "graph TD\n  A --> B"
+        ));
+    }
+
+    #[test]
+    fn parses_mmd_fenced_code_as_diagram_block() {
+        let document = parse_markdown("```mmd\ngraph LR\n  A --> B\n```");
+
+        assert!(matches!(
+            &document.blocks[0],
+            Block::DiagramBlock { language, source }
+                if language == "mmd" && source == "graph LR\n  A --> B"
         ));
     }
 
