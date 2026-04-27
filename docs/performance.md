@@ -115,6 +115,21 @@ Record representative measurements here before optimizing large file behavior.
 - Render: 24 ms, outcome `ok`
 - Notes: This measures the renderer path in isolation through the background worker test. Manual GUI checks should use `samples/mermaid-evaluation.md` to compare common diagram types, cache behavior, and failure fallback.
 
+### Mermaid Evaluation Sample Render Check
+
+- Date: 2026-04-28
+- Build: release
+- Command: `cargo test --release diagram::tests::renders_common_mermaid_evaluation_diagrams -- --nocapture`
+- Flowchart: 28 ms, 264 source bytes, outcome `ok`
+- Sequence diagram: 0 ms, 231 source bytes, outcome `ok`
+- Class diagram: 0 ms, 202 source bytes, outcome `ok`
+- State diagram: 0 ms, 129 source bytes, outcome `ok`
+- Larger flowchart: 2 ms, 496 source bytes, outcome `ok`
+- Invalid diagram: 0 ms, 27 source bytes, outcome `error`
+- Cache behavior command: `cargo test --release diagram::tests::reuses_finished_diagram_result_from_cache -- --nocapture`
+- Cache behavior result: first worker render logged 22 ms for an 18-byte flowchart; the following prepare call returned the finished result from cache without starting another worker job.
+- Notes: This is an isolated renderer and cache check, not a full GUI timing run. GUI validation should still open `samples/mermaid-evaluation.md` to inspect layout quality, fallback presentation, and repaint behavior.
+
 ### 1 MiB Markdown
 
 - Date: 2026-04-21

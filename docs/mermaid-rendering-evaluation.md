@@ -306,9 +306,13 @@ The UI should keep using the shared embedded SVG block rendering functions.
 `mermaid-rs-renderer` is now added as the first measured SVG backend candidate
 with default features disabled.
 
-The next useful implementation step is measurement: render latency, cache
-behavior, failure handling, and visual comparison against Mermaid CLI on common
-diagram types.
+Release-test measurement for the evaluation sample now covers flowchart,
+sequence, class, state, a larger flowchart, invalid input fallback, and finished
+result cache reuse. Results are recorded in `docs/performance.md`.
+
+The next useful implementation step is visual comparison against Mermaid CLI on
+common diagram types, followed by documenting known syntax limitations and
+fallback behavior.
 
 ## Sources
 
