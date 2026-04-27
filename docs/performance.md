@@ -185,6 +185,24 @@ Record representative measurements here before optimizing large file behavior.
 - 5 MiB skipped reload: 2 ms total
 - Notes: Baseline timings remain in the same range as the virtualized rendering and scroll stabilization results. No code change is indicated by this verification run.
 
+### 2026-04-28 Baseline Verification
+
+- Build: release
+- Command: `.\tools\run-performance-baseline.ps1 -SkipBuild`
+- 1 MiB size: 1.00 MiB / 1,048,771 bytes
+- 1 MiB initial load: 18 ms total, 18 ms parse
+- 1 MiB first render after load: 21 ms, 11945 blocks, 2389 headings
+- 1 MiB reload after edit: 18 ms total, 17 ms parse
+- 1 MiB first render after reload: 1 ms, 11947 blocks, 2390 headings
+- 1 MiB skipped reload: 0 ms total
+- 5 MiB size: 5.00 MiB / 5,242,977 bytes
+- 5 MiB initial load: 95 ms total, 93 ms parse
+- 5 MiB first render after load: 23 ms, 59715 blocks, 11943 headings
+- 5 MiB reload after edit: 90 ms total, 88 ms parse
+- 5 MiB first render after reload: 4 ms, 59717 blocks, 11944 headings
+- 5 MiB skipped reload: 2 ms total
+- Notes: Timings remain in the same range as the previous baseline verification. Initial load and reload are still dominated by parse time, while virtualized first render remains low for both fixture sizes.
+
 ## Optimization Notes
 
 ### 2026-04-21: Avoid Empty Search Highlight Work
