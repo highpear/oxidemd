@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
+use std::time::Instant;
 
 use eframe::egui;
 
 use crate::embedded_svg::{EmbeddedSvgContent, EmbeddedSvgContentKind, EmbeddedSvgRenderResult};
+use crate::metrics;
 use crate::svg::{SvgAsset, apply_current_color};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -26,6 +28,7 @@ enum DiagramRenderState {
 }
 
 struct DiagramWorkerResult {
+    generation: u64,
     key: DiagramCacheKey,
     source: String,
     result: PreparedDiagram,
@@ -35,6 +38,7 @@ pub struct DiagramRenderCache {
     entries: HashMap<(DiagramCacheKey, String), DiagramRenderState>,
     result_sender: Sender<DiagramWorkerResult>,
     result_receiver: Receiver<DiagramWorkerResult>,
+    generation: u64,
 }
 
 impl DiagramRenderCache {
@@ -45,11 +49,13 @@ impl DiagramRenderCache {
             entries: HashMap::new(),
             result_sender,
             result_receiver,
+            generation: 0,
         }
     }
 
     pub fn clear(&mut self) {
         self.entries.clear();
+        self.generation = self.generation.wrapping_add(1);
         self.drain_finished_jobs();
     }
 
@@ -76,7 +82,7 @@ impl DiagramRenderCache {
         }
 
         self.entries.insert(entry_key, DiagramRenderState::Pending);
-        self.spawn_render_job(ctx, key, source.to_owned(), text_color);
+        self.spawn_render_job(ctx, self.generation, key, source.to_owned(), text_color);
 
         PreparedDiagram::Pending
     }
@@ -84,6 +90,7 @@ impl DiagramRenderCache {
     fn spawn_render_job(
         &self,
         ctx: egui::Context,
+        generation: u64,
         key: DiagramCacheKey,
         source: String,
         text_color: egui::Color32,
@@ -91,8 +98,16 @@ impl DiagramRenderCache {
         let sender = self.result_sender.clone();
 
         thread::spawn(move || {
+            let started = Instant::now();
             let result = prepare_diagram(&key.language, &source, text_color);
+            let outcome = match &result {
+                PreparedDiagram::Pending => "pending",
+                PreparedDiagram::Svg(_) => "ok",
+                PreparedDiagram::Error(_) => "error",
+            };
+            metrics::log_diagram_render(&key.language, source.len(), started.elapsed(), outcome);
             let _ = sender.send(DiagramWorkerResult {
+                generation,
                 key,
                 source,
                 result,
@@ -103,6 +118,10 @@ impl DiagramRenderCache {
 
     fn drain_finished_jobs(&mut self) {
         while let Ok(result) = self.result_receiver.try_recv() {
+            if result.generation != self.generation {
+                continue;
+            }
+
             self.entries.insert(
                 (result.key, result.source),
                 DiagramRenderState::Ready(result.result),
@@ -112,6 +131,10 @@ impl DiagramRenderCache {
 }
 
 fn prepare_diagram(_language: &str, source: &str, text_color: egui::Color32) -> PreparedDiagram {
+    if let Err(error) = validate_diagram_source(source) {
+        return PreparedDiagram::Error(error);
+    }
+
     let svg = match mermaid_rs_renderer::render(source) {
         Ok(svg) => apply_current_color(&svg, text_color),
         Err(error) => return PreparedDiagram::Error(error.to_string()),
@@ -130,6 +153,52 @@ fn prepare_diagram(_language: &str, source: &str, text_color: egui::Color32) -> 
         )),
         Err(error) => PreparedDiagram::Error(error),
     }
+}
+
+fn validate_diagram_source(source: &str) -> Result<(), String> {
+    for line in source.lines() {
+        let trimmed = strip_mermaid_comment(line).trim();
+        if trimmed.is_empty() || is_mermaid_header(trimmed) {
+            continue;
+        }
+
+        if has_dangling_arrow_operator(trimmed) {
+            return Err("Mermaid diagram has an incomplete arrow.".to_owned());
+        }
+    }
+
+    Ok(())
+}
+
+fn strip_mermaid_comment(line: &str) -> &str {
+    line.split_once("%%")
+        .map(|(before_comment, _)| before_comment)
+        .unwrap_or(line)
+}
+
+fn is_mermaid_header(line: &str) -> bool {
+    let lower = line.to_ascii_lowercase();
+    lower.starts_with("flowchart ")
+        || lower.starts_with("graph ")
+        || lower == "sequencediagram"
+        || lower == "classdiagram"
+        || lower == "statediagram-v2"
+}
+
+fn has_dangling_arrow_operator(line: &str) -> bool {
+    let Some(last_token) = line.split_whitespace().last() else {
+        return false;
+    };
+
+    last_token.len() >= 2
+        && last_token.chars().all(is_arrow_operator_char)
+        && last_token
+            .chars()
+            .any(|character| matches!(character, '-' | '='))
+}
+
+fn is_arrow_operator_char(character: char) -> bool {
+    matches!(character, '<' | '>' | '-' | '.' | '=' | 'o' | 'x')
 }
 
 impl From<EmbeddedSvgRenderResult> for PreparedDiagram {
@@ -211,6 +280,51 @@ mod tests {
         let prepared = cache.prepare(ctx, "mermaid", source, color);
 
         assert!(matches!(prepared, PreparedDiagram::Pending));
+    }
+
+    #[test]
+    fn ignores_finished_work_from_before_clear() {
+        let mut cache = DiagramRenderCache::new();
+        let ctx = Context::default();
+        let color = Color32::from_rgb(34, 34, 34);
+        let source = "graph TD\n  A --> B";
+
+        let _ = cache.prepare(ctx, "mermaid", source, color);
+        cache.clear();
+
+        thread::sleep(Duration::from_millis(50));
+        cache.drain_finished_jobs();
+
+        assert!(cache.entries.is_empty());
+    }
+
+    #[test]
+    fn rejects_dangling_flowchart_arrow_before_rendering() {
+        let prepared = super::prepare_diagram(
+            "mermaid",
+            "flowchart TD\n    Broken -->",
+            Color32::from_rgb(34, 34, 34),
+        );
+
+        assert!(
+            matches!(prepared, PreparedDiagram::Error(error) if error.contains("incomplete arrow"))
+        );
+    }
+
+    #[test]
+    fn rendered_flowchart_svg_keeps_text_nodes() {
+        let prepared = super::prepare_diagram(
+            "mermaid",
+            "flowchart LR\n    Open[Open Markdown] --> Parse[Parse document]",
+            Color32::from_rgb(34, 34, 34),
+        );
+
+        assert!(matches!(
+            prepared,
+            PreparedDiagram::Svg(content)
+                if std::str::from_utf8(content.asset().bytes().as_ref())
+                    .is_ok_and(|svg| svg.contains("<text") && svg.contains("Open Markdown"))
+        ));
     }
 
     fn wait_for_finished_diagram(

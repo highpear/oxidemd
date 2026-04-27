@@ -3,6 +3,15 @@
 OxideMD prints lightweight performance logs to stderr during startup, initial
 file load, reload, and skipped reloads.
 
+Mermaid diagram rendering also logs each background SVG render:
+
+```text
+[perf] diagram_render: 4 ms, mermaid, 128 source bytes, ok
+```
+
+The final field is `ok` or `error`. Cache hits do not log a new render because
+no worker job is started.
+
 Use these logs before making performance changes. Prefer measuring with a
 release build because debug builds include extra overhead.
 
@@ -88,6 +97,7 @@ Example log shape:
 - UI responsiveness while scrolling
 - Search responsiveness on common terms
 - TOC usability with many headings
+- Mermaid diagram render logs when opening `samples/mermaid-evaluation.md`
 
 Record the file size, build profile, and observed log lines when comparing
 changes.
@@ -95,6 +105,15 @@ changes.
 ## Baseline Results
 
 Record representative measurements here before optimizing large file behavior.
+
+### Mermaid SVG Rendering Prototype
+
+- Date: 2026-04-27
+- Build: release
+- Command: `cargo test --release diagram::tests::stores_finished_diagram_result -- --nocapture`
+- Diagram: small flowchart, 18 source bytes
+- Render: 24 ms, outcome `ok`
+- Notes: This measures the renderer path in isolation through the background worker test. Manual GUI checks should use `samples/mermaid-evaluation.md` to compare common diagram types, cache behavior, and failure fallback.
 
 ### 1 MiB Markdown
 

@@ -57,6 +57,16 @@ pub fn log_document_render(
     );
 }
 
+pub fn log_diagram_render(language: &str, source_len: usize, duration: Duration, outcome: &str) {
+    eprintln!(
+        "[perf] diagram_render: {} ms, {}, {} source bytes, {}",
+        duration.as_millis(),
+        language,
+        source_len,
+        outcome
+    );
+}
+
 fn format_byte_len(byte_len: usize) -> String {
     const KIB: f64 = 1024.0;
     const MIB: f64 = KIB * 1024.0;
