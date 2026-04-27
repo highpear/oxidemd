@@ -267,6 +267,8 @@ Goal: consider future extensions without committing too early.
   * [x] Measure render latency, cache behavior, and failure handling on larger diagrams
   * [ ] Compare Mermaid rendering quality against Mermaid CLI for common diagram types
     * [x] Add a helper script to generate Mermaid CLI reference SVGs
+    * [x] Add an OxideMD SVG export path for side-by-side comparison
+    * [x] Generate a local HTML comparison report
     * [ ] Run visual comparison with Mermaid CLI available
   * [ ] Document known Mermaid syntax limitations and fallback behavior
   * [ ] Decide whether strict syntax validation should stay local or rely on renderer errors

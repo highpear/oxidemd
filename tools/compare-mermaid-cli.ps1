@@ -1,6 +1,7 @@
 param(
     [string]$SamplePath = "samples/mermaid-evaluation.md",
     [string]$OutputPath = "$env:TEMP\oxidemd-mermaid-cli-comparison",
+    [string]$NativeOutputPath = "$env:TEMP\oxidemd-mermaid-native-comparison",
     [string]$MermaidCliCommand = "mmdc"
 )
 
@@ -30,6 +31,7 @@ function Resolve-MermaidCli {
 
 $resolvedSamplePath = Resolve-Path -Path $SamplePath
 $resolvedOutputPath = [System.IO.Path]::GetFullPath($OutputPath)
+$resolvedNativeOutputPath = [System.IO.Path]::GetFullPath($NativeOutputPath)
 $resolvedTempPath = [System.IO.Path]::GetFullPath($env:TEMP)
 
 if ([string]::IsNullOrWhiteSpace($resolvedOutputPath) -or $resolvedOutputPath.Length -le 3) {
@@ -93,15 +95,37 @@ if (-not $mmdcPath) {
 }
 
 $reportPath = Join-Path $resolvedOutputPath "comparison-report.md"
+$htmlReportPath = Join-Path $resolvedOutputPath "visual-comparison.html"
 $report = New-Object System.Collections.Generic.List[string]
+$html = New-Object System.Collections.Generic.List[string]
 $report.Add("# Mermaid CLI Comparison Report")
 $report.Add("")
 $report.Add("- Sample: $resolvedSamplePath")
 $report.Add("- Mermaid CLI: $mmdcPath")
 $report.Add("- Output: $resolvedOutputPath")
+$report.Add("- Native SVG output: $resolvedNativeOutputPath")
 $report.Add("")
-$report.Add("| Diagram | Source | Mermaid CLI SVG | CLI Result | Manual Notes |")
-$report.Add("| --- | --- | --- | --- | --- |")
+$report.Add("| Diagram | Source | OxideMD SVG | Mermaid CLI SVG | CLI Result | Manual Notes |")
+$report.Add("| --- | --- | --- | --- | --- | --- |")
+
+$html.Add("<!doctype html>")
+$html.Add("<html lang=""en"">")
+$html.Add("<head>")
+$html.Add("<meta charset=""utf-8"">")
+$html.Add("<title>OxideMD Mermaid CLI Comparison</title>")
+$html.Add("<style>")
+$html.Add("body { font-family: system-ui, sans-serif; margin: 24px; color: #20242a; }")
+$html.Add("section { margin: 0 0 32px; }")
+$html.Add(".pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }")
+$html.Add(".panel { border: 1px solid #d4d8df; border-radius: 6px; padding: 12px; overflow: auto; }")
+$html.Add(".panel h3 { font-size: 14px; margin: 0 0 8px; }")
+$html.Add("img { max-width: 100%; height: auto; background: white; }")
+$html.Add("code { font-family: ui-monospace, Consolas, monospace; }")
+$html.Add("</style>")
+$html.Add("</head>")
+$html.Add("<body>")
+$html.Add("<h1>OxideMD Mermaid CLI Comparison</h1>")
+$html.Add("<p>Left: OxideMD native SVG output. Right: Mermaid CLI SVG output.</p>")
 
 for ($index = 0; $index -lt $blocks.Count; $index++) {
     $block = $blocks[$index]
@@ -131,11 +155,43 @@ for ($index = 0; $index -lt $blocks.Count; $index++) {
     if (-not (Test-Path -LiteralPath $svgPath)) {
         $svgName = "-"
     }
+    $nativeName = "{0:D2}-{1}.svg" -f ($index + 1), $safeName
+    $nativePath = Join-Path $resolvedNativeOutputPath $nativeName
+    if (-not (Test-Path -LiteralPath $nativePath)) {
+        $nativeName = "-"
+    }
 
-    $report.Add("| $($block.Title) | ``$sourceName`` | ``$svgName`` | $status |  |")
+    $report.Add("| $($block.Title) | ``$sourceName`` | ``$nativeName`` | ``$svgName`` | $status |  |")
+
+    $html.Add("<section>")
+    $html.Add("<h2>$($block.Title)</h2>")
+    $html.Add("<p>Source: <code>$sourceName</code>; CLI result: <code>$status</code></p>")
+    $html.Add("<div class=""pair"">")
+    $html.Add("<div class=""panel""><h3>OxideMD</h3>")
+    if ($nativeName -eq "-") {
+        $html.Add("<p>No OxideMD SVG found.</p>")
+    } else {
+        $nativeRelativePath = [System.IO.Path]::GetRelativePath($resolvedOutputPath, $nativePath).Replace("\", "/")
+        $html.Add("<img src=""$nativeRelativePath"" alt=""OxideMD $($block.Title)"">")
+    }
+    $html.Add("</div>")
+    $html.Add("<div class=""panel""><h3>Mermaid CLI</h3>")
+    if ($svgName -eq "-") {
+        $html.Add("<p>No Mermaid CLI SVG generated.</p>")
+    } else {
+        $html.Add("<img src=""$svgName"" alt=""Mermaid CLI $($block.Title)"">")
+    }
+    $html.Add("</div>")
+    $html.Add("</div>")
+    $html.Add("</section>")
 }
 
+$html.Add("</body>")
+$html.Add("</html>")
+
 Set-Content -LiteralPath $reportPath -Value $report -Encoding UTF8
+Set-Content -LiteralPath $htmlReportPath -Value $html -Encoding UTF8
 
 Write-Host "Wrote Mermaid CLI comparison files to $resolvedOutputPath"
 Write-Host "Report: $reportPath"
+Write-Host "Visual report: $htmlReportPath"
