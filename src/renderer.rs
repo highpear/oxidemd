@@ -5,6 +5,7 @@ use eframe::egui::{self, Align, FontFamily, FontId, Frame, RichText, Stroke, Ui,
 use pulldown_cmark::{Alignment, HeadingLevel};
 
 use crate::code_block::render_code_block;
+use crate::diagram::{DiagramRenderCache, PreparedDiagram};
 use crate::embedded_svg::{EmbeddedSourceAction, EmbeddedSvgContent, EmbeddedSvgContentKind};
 use crate::i18n::{Language, TranslationKey, tr};
 use crate::image_cache::{ImageCache, ImageLoadState};
@@ -40,6 +41,7 @@ pub fn render_markdown_document(
     document_base_dir: Option<&Path>,
     image_cache: &mut ImageCache,
     math_render_cache: &mut MathRenderCache,
+    diagram_render_cache: &mut DiagramRenderCache,
     block_heights: &mut [Option<f32>],
     estimated_block_heights: &[f32],
     scroll_to_block: Option<usize>,
@@ -57,6 +59,7 @@ pub fn render_markdown_document(
         document_base_dir,
         image_cache,
         math_render_cache,
+        diagram_render_cache,
     };
 
     for (block_index, block) in document.blocks.iter().enumerate() {
@@ -380,6 +383,7 @@ struct RenderResources<'a> {
     document_base_dir: Option<&'a Path>,
     image_cache: &'a mut ImageCache,
     math_render_cache: &'a mut MathRenderCache,
+    diagram_render_cache: &'a mut DiagramRenderCache,
 }
 
 #[derive(Default)]
@@ -1161,12 +1165,17 @@ fn render_math_block(
 fn render_diagram_block(
     ui: &mut Ui,
     block_index: usize,
-    _language: &str,
+    language: &str,
     source: &str,
     theme: &Theme,
     zoom_factor: f32,
     render_resources: &mut RenderResources<'_>,
 ) {
+    let prepared =
+        render_resources
+            .diagram_render_cache
+            .prepare(language, source, theme.text_primary);
+
     Frame::new()
         .fill(theme.widget_inactive_background)
         .stroke(Stroke::new(1.0, theme.content_border))
@@ -1176,10 +1185,15 @@ fn render_diagram_block(
             scale_margin(MATH_BLOCK_PADDING_Y, zoom_factor),
         ))
         .show(ui, |ui| {
+            let source_action = match &prepared {
+                PreparedDiagram::Svg(content) => content.source_action(),
+                PreparedDiagram::Error(_) => EmbeddedSourceAction::new(source),
+            };
+
             render_embedded_svg_block_header(
                 ui,
                 block_index,
-                EmbeddedSourceAction::new(source),
+                source_action,
                 EmbeddedSvgBlockLabels {
                     title: TranslationKey::LabelMermaid,
                     copy_action: TranslationKey::ActionCopySource,
@@ -1191,17 +1205,30 @@ fn render_diagram_block(
             );
             ui.add_space(scale_spacing(6.0, zoom_factor));
 
-            ui.label(
-                RichText::new(tr(
-                    render_resources.ui_language,
-                    TranslationKey::MessageDiagramPreviewUnavailable,
-                ))
-                .size(QUOTE_TEXT_SIZE * zoom_factor)
-                .color(theme.text_secondary),
-            );
-            ui.add_space(scale_spacing(8.0, zoom_factor));
+            match prepared {
+                PreparedDiagram::Svg(content) => {
+                    debug_assert_eq!(content.kind(), EmbeddedSvgContentKind::Diagram);
+                    render_embedded_svg_block_image(
+                        ui,
+                        &content,
+                        render_resources.ui_language,
+                        TranslationKey::ActionCopySource,
+                    );
+                }
+                PreparedDiagram::Error(_) => {
+                    ui.label(
+                        RichText::new(tr(
+                            render_resources.ui_language,
+                            TranslationKey::MessageDiagramPreviewUnavailable,
+                        ))
+                        .size(QUOTE_TEXT_SIZE * zoom_factor)
+                        .color(theme.text_secondary),
+                    );
+                    ui.add_space(scale_spacing(8.0, zoom_factor));
 
-            render_embedded_source_fallback(ui, block_index, source, theme, zoom_factor);
+                    render_embedded_source_fallback(ui, block_index, source, theme, zoom_factor);
+                }
+            }
         });
 
     ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));

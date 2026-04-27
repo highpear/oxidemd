@@ -6,7 +6,6 @@ use crate::svg::SvgAsset;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EmbeddedSvgContentKind {
     Math,
-    #[allow(dead_code)]
     Diagram,
 }
 
