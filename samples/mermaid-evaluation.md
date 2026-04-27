@@ -5,13 +5,13 @@ Use this file for manual Mermaid rendering checks and perf log sampling.
 ## Flowchart
 
 ```mermaid
-flowchart LR
+flowchart TD
     Open[Open Markdown] --> Parse[Parse document]
     Parse --> Render[Render Mermaid SVG]
     Render --> Cache{Cache hit?}
     Cache -->|Yes| Show[Show cached SVG]
     Cache -->|No| Worker[Background worker]
-    Worker --> Show
+    Worker --> Rendered[Show rendered SVG]
 ```
 
 ## Sequence
@@ -47,10 +47,10 @@ classDiagram
 ```mermaid
 stateDiagram-v2
     [*] --> Pending
-    Pending --> Ready: render finished
-    Pending --> Error: render failed
+    Pending --> Ready: done
+    Pending --> Failed: fail
     Ready --> [*]
-    Error --> [*]
+    Failed --> [*]
 ```
 
 ## Invalid

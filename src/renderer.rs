@@ -31,6 +31,7 @@ const VIRTUAL_RENDER_OVERSCAN: f32 = 1_200.0;
 const ESTIMATED_CHARS_PER_LINE: usize = 90;
 const COPY_FEEDBACK_DURATION_SECONDS: f64 = 1.2;
 const EMBEDDED_COPY_FEEDBACK_SLOT_WIDTH: f32 = 88.0;
+const DIAGRAM_BLOCK_MIN_SCALE: f32 = 0.9;
 
 pub fn render_markdown_document(
     ui: &mut Ui,
@@ -1176,6 +1177,7 @@ fn render_diagram_block(
         language,
         source,
         theme.text_primary,
+        theme.widget_inactive_background,
     );
 
     Frame::new()
@@ -1482,6 +1484,15 @@ fn fit_embedded_block_svg_size(size: egui::Vec2, max_width: f32) -> egui::Vec2 {
     egui::vec2(max_width, size.y * scale)
 }
 
+fn fit_diagram_block_svg_size(size: egui::Vec2, max_width: f32) -> egui::Vec2 {
+    if size.x <= 0.0 || size.x <= max_width {
+        return size;
+    }
+
+    let scale = (max_width / size.x).max(DIAGRAM_BLOCK_MIN_SCALE);
+    egui::vec2(size.x * scale, size.y * scale)
+}
+
 fn render_inline_math_image(
     ui: &mut Ui,
     content: &EmbeddedSvgContent,
@@ -1525,19 +1536,46 @@ fn render_embedded_svg_block_image(
     copy_action_key: TranslationKey,
 ) {
     let max_width = ui.available_width().max(120.0);
-    let fitted_size = fit_embedded_block_svg_size(content.asset().size(), max_width);
+    let fitted_size = match content.kind() {
+        EmbeddedSvgContentKind::Diagram => {
+            fit_diagram_block_svg_size(content.asset().size(), max_width)
+        }
+        EmbeddedSvgContentKind::Math => {
+            fit_embedded_block_svg_size(content.asset().size(), max_width)
+        }
+    };
+
+    if content.kind() == EmbeddedSvgContentKind::Diagram && fitted_size.x > max_width {
+        egui::ScrollArea::horizontal()
+            .id_salt(("embedded_svg_block_image", content.asset().uri()))
+            .auto_shrink([false, true])
+            .show(ui, |ui| {
+                render_embedded_svg_image(ui, content, ui_language, copy_action_key, fitted_size);
+            });
+        return;
+    }
 
     ui.vertical_centered(|ui| {
-        let response = ui.add(
-            egui::Image::from_bytes(content.asset().uri().to_owned(), content.asset().bytes())
-                .fit_to_exact_size(fitted_size)
-                .sense(egui::Sense::click()),
-        );
-        if response.clicked() {
-            copy_embedded_source(ui, content.source_action());
-        }
-        response.on_hover_text(tr(ui_language, copy_action_key));
+        render_embedded_svg_image(ui, content, ui_language, copy_action_key, fitted_size);
     });
+}
+
+fn render_embedded_svg_image(
+    ui: &mut Ui,
+    content: &EmbeddedSvgContent,
+    ui_language: Language,
+    copy_action_key: TranslationKey,
+    fitted_size: egui::Vec2,
+) {
+    let response = ui.add(
+        egui::Image::from_bytes(content.asset().uri().to_owned(), content.asset().bytes())
+            .fit_to_exact_size(fitted_size)
+            .sense(egui::Sense::click()),
+    );
+    if response.clicked() {
+        copy_embedded_source(ui, content.source_action());
+    }
+    response.on_hover_text(tr(ui_language, copy_action_key));
 }
 
 fn render_embedded_source_fallback(
