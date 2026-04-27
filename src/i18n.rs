@@ -41,6 +41,7 @@ pub enum TranslationKey {
     MessageExternalLinkPrompt,
     MessageImageLoadFailed,
     MessageImageUnsupported,
+    MessageDiagramPreviewPending,
     MessageDiagramPreviewUnavailable,
     MessageOpenPrompt,
     MessageNoRecentFiles,
@@ -182,6 +183,11 @@ const TRANSLATIONS: &[TranslationEntry] = &[
         TranslationKey::MessageImageUnsupported,
         "Only local image paths are supported:",
         "ローカル画像パスのみ対応しています:",
+    ),
+    entry(
+        TranslationKey::MessageDiagramPreviewPending,
+        "Rendering diagram...",
+        "図を描画しています...",
     ),
     entry(
         TranslationKey::MessageDiagramPreviewUnavailable,
