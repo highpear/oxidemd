@@ -288,6 +288,19 @@ The UI should keep using the shared embedded SVG block rendering functions.
   - class diagram
   - state diagram
 
+## Known Prototype Limitations
+
+- State diagram edge labels can overlap when several labeled transitions leave
+  the same state. Keep evaluation labels short until renderer-side label
+  placement is improved or a workaround is chosen.
+- Flowchart edge routing can look awkward in dense left-to-right diagrams with
+  nearby branches and joins. Prefer top-down evaluation diagrams for now and
+  compare layout quality against Mermaid CLI before treating this backend as
+  final.
+- OxideMD adds a narrow local validation guard for clearly incomplete arrows
+  such as `Broken -->` because the Rust renderer can otherwise interpret some
+  incomplete input as a renderable diagram.
+
 ## Current Decision
 
 `mermaid-rs-renderer` is now added as the first measured SVG backend candidate

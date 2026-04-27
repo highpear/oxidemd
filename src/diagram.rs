@@ -13,6 +13,7 @@ use crate::svg::{SvgAsset, apply_current_color};
 struct DiagramCacheKey {
     language: String,
     text_color: [u8; 4],
+    background_color: [u8; 4],
 }
 
 #[derive(Clone)]
@@ -65,12 +66,14 @@ impl DiagramRenderCache {
         language: &str,
         source: &str,
         text_color: egui::Color32,
+        background_color: egui::Color32,
     ) -> PreparedDiagram {
         self.drain_finished_jobs();
 
         let key = DiagramCacheKey {
             language: language.to_owned(),
             text_color: text_color.to_array(),
+            background_color: background_color.to_array(),
         };
         let entry_key = (key.clone(), source.to_owned());
 
@@ -82,7 +85,14 @@ impl DiagramRenderCache {
         }
 
         self.entries.insert(entry_key, DiagramRenderState::Pending);
-        self.spawn_render_job(ctx, self.generation, key, source.to_owned(), text_color);
+        self.spawn_render_job(
+            ctx,
+            self.generation,
+            key,
+            source.to_owned(),
+            text_color,
+            background_color,
+        );
 
         PreparedDiagram::Pending
     }
@@ -94,12 +104,13 @@ impl DiagramRenderCache {
         key: DiagramCacheKey,
         source: String,
         text_color: egui::Color32,
+        background_color: egui::Color32,
     ) {
         let sender = self.result_sender.clone();
 
         thread::spawn(move || {
             let started = Instant::now();
-            let result = prepare_diagram(&key.language, &source, text_color);
+            let result = prepare_diagram(&key.language, &source, text_color, background_color);
             let outcome = match &result {
                 PreparedDiagram::Pending => "pending",
                 PreparedDiagram::Svg(_) => "ok",
@@ -130,18 +141,30 @@ impl DiagramRenderCache {
     }
 }
 
-fn prepare_diagram(_language: &str, source: &str, text_color: egui::Color32) -> PreparedDiagram {
+fn prepare_diagram(
+    _language: &str,
+    source: &str,
+    text_color: egui::Color32,
+    background_color: egui::Color32,
+) -> PreparedDiagram {
     if let Err(error) = validate_diagram_source(source) {
         return PreparedDiagram::Error(error);
     }
 
-    let svg = match mermaid_rs_renderer::render(source) {
+    let svg = match mermaid_rs_renderer::render_with_options(
+        source,
+        mermaid_rs_renderer::RenderOptions {
+            theme: mermaid_theme(text_color, background_color),
+            layout: mermaid_rs_renderer::LayoutConfig::default(),
+        },
+    ) {
         Ok(svg) => apply_current_color(&svg, text_color),
         Err(error) => return PreparedDiagram::Error(error.to_string()),
     };
     let uri = format!(
-        "bytes://diagram-{}-{}.svg",
+        "bytes://diagram-{}-{}-{}.svg",
         color_hash(text_color),
+        color_hash(background_color),
         svg_uri_hash(source)
     );
 
@@ -153,6 +176,47 @@ fn prepare_diagram(_language: &str, source: &str, text_color: egui::Color32) -> 
         )),
         Err(error) => PreparedDiagram::Error(error),
     }
+}
+
+fn mermaid_theme(
+    text_color: egui::Color32,
+    background_color: egui::Color32,
+) -> mermaid_rs_renderer::Theme {
+    let text = color_to_hex(text_color);
+    let background = color_to_hex(background_color);
+    let mut theme = mermaid_rs_renderer::Theme::modern();
+
+    theme.background = background.clone();
+    theme.primary_color = background.clone();
+    theme.secondary_color = background.clone();
+    theme.tertiary_color = background.clone();
+    theme.edge_label_background = background.clone();
+    theme.cluster_background = background.clone();
+    theme.sequence_actor_fill = background.clone();
+    theme.sequence_note_fill = background.clone();
+    theme.sequence_activation_fill = background.clone();
+
+    theme.primary_text_color = text.clone();
+    theme.text_color = text.clone();
+    theme.pie_title_text_color = text.clone();
+    theme.pie_section_text_color = text.clone();
+    theme.pie_legend_text_color = text.clone();
+
+    theme.primary_border_color = text.clone();
+    theme.line_color = text.clone();
+    theme.cluster_border = text.clone();
+    theme.sequence_actor_border = text.clone();
+    theme.sequence_actor_line = text.clone();
+    theme.sequence_note_border = text.clone();
+    theme.sequence_activation_border = text.clone();
+    theme.pie_stroke_color = text.clone();
+    theme.pie_outer_stroke_color = text;
+
+    theme
+}
+
+fn color_to_hex(color: egui::Color32) -> String {
+    format!("#{:02x}{:02x}{:02x}", color.r(), color.g(), color.b())
 }
 
 fn validate_diagram_source(source: &str) -> Result<(), String> {
@@ -244,8 +308,9 @@ mod tests {
         let mut cache = DiagramRenderCache::new();
         let ctx = Context::default();
         let color = Color32::from_rgb(34, 34, 34);
+        let background = Color32::from_rgb(250, 250, 250);
 
-        let prepared = cache.prepare(ctx, "mermaid", "graph TD\n  A --> B", color);
+        let prepared = cache.prepare(ctx, "mermaid", "graph TD\n  A --> B", color, background);
 
         assert!(matches!(prepared, PreparedDiagram::Pending));
     }
@@ -255,12 +320,14 @@ mod tests {
         let mut cache = DiagramRenderCache::new();
         let ctx = Context::default();
         let color = Color32::from_rgb(34, 34, 34);
+        let background = Color32::from_rgb(250, 250, 250);
         let source = "graph TD\n  A --> B";
 
-        let first = cache.prepare(ctx.clone(), "mermaid", source, color);
+        let first = cache.prepare(ctx.clone(), "mermaid", source, color, background);
         assert!(matches!(first, PreparedDiagram::Pending));
 
-        let finished = wait_for_finished_diagram(&mut cache, ctx, "mermaid", source, color);
+        let finished =
+            wait_for_finished_diagram(&mut cache, ctx, "mermaid", source, color, background);
 
         assert!(matches!(
             finished,
@@ -273,11 +340,12 @@ mod tests {
         let mut cache = DiagramRenderCache::new();
         let ctx = Context::default();
         let color = Color32::from_rgb(34, 34, 34);
+        let background = Color32::from_rgb(250, 250, 250);
         let source = "graph TD\n  A --> B";
 
-        let _ = cache.prepare(ctx.clone(), "mermaid", source, color);
+        let _ = cache.prepare(ctx.clone(), "mermaid", source, color, background);
         cache.clear();
-        let prepared = cache.prepare(ctx, "mermaid", source, color);
+        let prepared = cache.prepare(ctx, "mermaid", source, color, background);
 
         assert!(matches!(prepared, PreparedDiagram::Pending));
     }
@@ -287,9 +355,10 @@ mod tests {
         let mut cache = DiagramRenderCache::new();
         let ctx = Context::default();
         let color = Color32::from_rgb(34, 34, 34);
+        let background = Color32::from_rgb(250, 250, 250);
         let source = "graph TD\n  A --> B";
 
-        let _ = cache.prepare(ctx, "mermaid", source, color);
+        let _ = cache.prepare(ctx, "mermaid", source, color, background);
         cache.clear();
 
         thread::sleep(Duration::from_millis(50));
@@ -304,6 +373,7 @@ mod tests {
             "mermaid",
             "flowchart TD\n    Broken -->",
             Color32::from_rgb(34, 34, 34),
+            Color32::from_rgb(250, 250, 250),
         );
 
         assert!(
@@ -317,6 +387,7 @@ mod tests {
             "mermaid",
             "flowchart LR\n    Open[Open Markdown] --> Parse[Parse document]",
             Color32::from_rgb(34, 34, 34),
+            Color32::from_rgb(250, 250, 250),
         );
 
         assert!(matches!(
@@ -327,17 +398,36 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn rendered_svg_uses_requested_theme_colors() {
+        let prepared = super::prepare_diagram(
+            "mermaid",
+            "flowchart LR\n    A --> B",
+            Color32::from_rgb(224, 232, 242),
+            Color32::from_rgb(29, 39, 52),
+        );
+
+        assert!(matches!(
+            prepared,
+            PreparedDiagram::Svg(content)
+                if std::str::from_utf8(content.asset().bytes().as_ref()).is_ok_and(|svg| {
+                    svg.contains("#e0e8f2") && svg.contains("#1d2734")
+                })
+        ));
+    }
+
     fn wait_for_finished_diagram(
         cache: &mut DiagramRenderCache,
         ctx: Context,
         language: &str,
         source: &str,
         color: Color32,
+        background: Color32,
     ) -> PreparedDiagram {
         let started = Instant::now();
 
         while started.elapsed() < Duration::from_secs(5) {
-            let prepared = cache.prepare(ctx.clone(), language, source, color);
+            let prepared = cache.prepare(ctx.clone(), language, source, color, background);
             if !matches!(prepared, PreparedDiagram::Pending) {
                 return prepared;
             }
