@@ -270,7 +270,7 @@ Goal: consider future extensions without committing too early.
     * [x] Add an OxideMD SVG export path for side-by-side comparison
     * [x] Generate a local HTML comparison report
     * [x] Run visual comparison with Mermaid CLI available
-  * [ ] Document known Mermaid syntax limitations and fallback behavior
+  * [x] Document known Mermaid syntax limitations and fallback behavior
   * [ ] Decide whether strict syntax validation should stay local or rely on renderer errors
   * [ ] Check Mermaid SVG text rendering on clean Windows environments
   * [x] Add an error fallback that keeps Mermaid source readable when SVG rendering fails
