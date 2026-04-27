@@ -297,9 +297,35 @@ The UI should keep using the shared embedded SVG block rendering functions.
   nearby branches and joins. Prefer top-down evaluation diagrams for now and
   compare layout quality against Mermaid CLI before treating this backend as
   final.
+- In side-by-side comparison, Mermaid CLI output appears much larger than the
+  Rust renderer output, especially for flowcharts. Some of the difference is
+  visible in the SVG dimensions: the evaluation flowchart is about 448x656 from
+  the Rust renderer and about 450x688 from Mermaid CLI, while the larger
+  flowchart is about 133x1835 from the Rust renderer and about 134x2046 from
+  Mermaid CLI. Before changing the app's diagram sizing, decide whether to
+  preserve the Rust renderer's compact layout or add display scaling to better
+  match Mermaid CLI's apparent size.
 - OxideMD adds a narrow local validation guard for clearly incomplete arrows
   such as `Broken -->` because the Rust renderer can otherwise interpret some
   incomplete input as a renderable diagram.
+
+## Visual Comparison Notes
+
+Date: 2026-04-28
+
+Compared OxideMD native SVG output against Mermaid CLI output using
+`visual-comparison.html`.
+
+- Flowchart: Mermaid CLI appears substantially larger; this is the most visible
+  size difference in the evaluation set.
+- Sequence diagram: overall dimensions are similar, so this is a better
+  baseline for checking text placement and arrow styling.
+- Class and state diagrams: Mermaid CLI output is taller, with more vertical
+  spacing.
+- Larger flowchart: Mermaid CLI output is taller and reinforces the flowchart
+  sizing difference.
+- Invalid diagram: both paths fail as expected; OxideMD keeps the readable
+  fallback source, while Mermaid CLI reports a parse error.
 
 ## Current Decision
 
@@ -346,9 +372,9 @@ Compare each CLI SVG against OxideMD's in-app render for:
 - theme readability in light and dark modes
 - invalid input failure behavior
 
-The next useful implementation step is running that visual comparison on a
-machine with Mermaid CLI installed, then documenting known syntax limitations
-and fallback behavior.
+The next useful implementation step is documenting known syntax limitations and
+fallback behavior, then deciding whether Mermaid diagrams should keep the Rust
+renderer's compact layout or adjust display sizing toward Mermaid CLI output.
 
 ## Sources
 
