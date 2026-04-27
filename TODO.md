@@ -264,7 +264,7 @@ Goal: consider future extensions without committing too early.
   * [x] Decide how Mermaid fenced blocks should map into the shared embedded-SVG content model
   * [x] Document Mermaid renderer candidates, constraints, and evaluation criteria
   * [x] Prototype Mermaid SVG rendering behind the same renderer adapter boundary as math
-  * [ ] Measure render latency, cache behavior, and failure handling on larger diagrams
+  * [x] Measure render latency, cache behavior, and failure handling on larger diagrams
   * [ ] Compare Mermaid rendering quality against Mermaid CLI for common diagram types
   * [ ] Document known Mermaid syntax limitations and fallback behavior
   * [ ] Decide whether strict syntax validation should stay local or rely on renderer errors

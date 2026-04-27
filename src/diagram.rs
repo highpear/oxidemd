@@ -336,6 +336,34 @@ mod tests {
     }
 
     #[test]
+    fn reuses_finished_diagram_result_from_cache() {
+        let mut cache = DiagramRenderCache::new();
+        let ctx = Context::default();
+        let color = Color32::from_rgb(34, 34, 34);
+        let background = Color32::from_rgb(250, 250, 250);
+        let source = "graph TD\n  A --> B";
+
+        let finished = wait_for_finished_diagram(
+            &mut cache,
+            ctx.clone(),
+            "mermaid",
+            source,
+            color,
+            background,
+        );
+        assert!(matches!(
+            finished,
+            PreparedDiagram::Svg(_) | PreparedDiagram::Error(_)
+        ));
+
+        let cached = cache.prepare(ctx, "mermaid", source, color, background);
+        assert!(matches!(
+            cached,
+            PreparedDiagram::Svg(_) | PreparedDiagram::Error(_)
+        ));
+    }
+
+    #[test]
     fn clears_pending_and_finished_diagram_results() {
         let mut cache = DiagramRenderCache::new();
         let ctx = Context::default();
@@ -379,6 +407,67 @@ mod tests {
         assert!(
             matches!(prepared, PreparedDiagram::Error(error) if error.contains("incomplete arrow"))
         );
+    }
+
+    #[test]
+    fn renders_common_mermaid_evaluation_diagrams() {
+        let cases = [
+            (
+                "flowchart",
+                "flowchart TD\n    Open[Open Markdown] --> Parse[Parse document]\n    Parse --> Render[Render Mermaid SVG]\n    Render --> Cache{Cache hit?}\n    Cache -->|Yes| Show[Show cached SVG]\n    Cache -->|No| Worker[Background worker]\n    Worker --> Rendered[Show rendered SVG]",
+            ),
+            (
+                "sequence",
+                "sequenceDiagram\n    participant User\n    participant OxideMD\n    participant Worker\n    User->>OxideMD: Open document\n    OxideMD->>Worker: Queue diagram render\n    Worker-->>OxideMD: SVG result\n    OxideMD-->>User: Repaint diagram",
+            ),
+            (
+                "class",
+                "classDiagram\n    class DiagramRenderCache {\n        +prepare()\n        +clear()\n    }\n    class DiagramWorkerResult {\n        +source\n        +result\n    }\n    DiagramRenderCache --> DiagramWorkerResult",
+            ),
+            (
+                "state",
+                "stateDiagram-v2\n    [*] --> Pending\n    Pending --> Ready: done\n    Pending --> Failed: fail\n    Ready --> [*]\n    Failed --> [*]",
+            ),
+            (
+                "larger-flowchart",
+                "flowchart TD\n    N01[Node 01] --> N02[Node 02]\n    N02 --> N03[Node 03]\n    N03 --> N04[Node 04]\n    N04 --> N05[Node 05]\n    N05 --> N06[Node 06]\n    N06 --> N07[Node 07]\n    N07 --> N08[Node 08]\n    N08 --> N09[Node 09]\n    N09 --> N10[Node 10]\n    N10 --> N11[Node 11]\n    N11 --> N12[Node 12]\n    N12 --> N13[Node 13]\n    N13 --> N14[Node 14]\n    N14 --> N15[Node 15]\n    N15 --> N16[Node 16]\n    N16 --> N17[Node 17]\n    N17 --> N18[Node 18]\n    N18 --> N19[Node 19]\n    N19 --> N20[Node 20]",
+            ),
+        ];
+
+        for (name, source) in cases {
+            let started = Instant::now();
+            let prepared = super::prepare_diagram(
+                "mermaid",
+                source,
+                Color32::from_rgb(34, 34, 34),
+                Color32::from_rgb(250, 250, 250),
+            );
+            eprintln!(
+                "[perf] diagram_eval: {} ms, {name}, {} source bytes",
+                started.elapsed().as_millis(),
+                source.len()
+            );
+
+            assert!(
+                matches!(prepared, PreparedDiagram::Svg(_)),
+                "{name} should render as SVG"
+            );
+        }
+
+        let invalid_source = "flowchart TD\n    Broken -->";
+        let started = Instant::now();
+        let invalid = super::prepare_diagram(
+            "mermaid",
+            invalid_source,
+            Color32::from_rgb(34, 34, 34),
+            Color32::from_rgb(250, 250, 250),
+        );
+        eprintln!(
+            "[perf] diagram_eval: {} ms, invalid, {} source bytes",
+            started.elapsed().as_millis(),
+            invalid_source.len()
+        );
+        assert!(matches!(invalid, PreparedDiagram::Error(_)));
     }
 
     #[test]
