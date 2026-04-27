@@ -327,6 +327,42 @@ Compared OxideMD native SVG output against Mermaid CLI output using
 - Invalid diagram: both paths fail as expected; OxideMD keeps the readable
   fallback source, while Mermaid CLI reports a parse error.
 
+## Known Syntax and Fallback Behavior
+
+OxideMD currently treats fenced code blocks with `mermaid` or `mmd` info strings
+as diagram blocks. Other fenced code blocks continue through the normal code
+block rendering path.
+
+The measured evaluation set confirms SVG output for:
+
+- flowchart
+- sequence diagram
+- class diagram
+- state diagram
+- larger top-down flowchart
+
+This is not a claim of full Mermaid syntax compatibility. The active renderer is
+`mermaid-rs-renderer`, so unsupported Mermaid syntax, syntax that differs from
+the official JavaScript renderer, or renderer-side layout limitations should be
+expected until verified with the CLI comparison flow.
+
+Fallback behavior is intentionally stable:
+
+- Pending render work shows a "rendering diagram" message and keeps the Mermaid
+  source visible.
+- Failed render work shows an unavailable preview message and keeps the Mermaid
+  source visible.
+- The render error is exposed as hover text on the unavailable preview message.
+- The diagram block header keeps source-copy behavior available for pending,
+  failed, and successful renders.
+- Render failures are logged as `error` in `[perf] diagram_render` output.
+
+Local syntax validation should stay narrow. OxideMD currently rejects clearly
+incomplete arrow lines such as `Broken -->` before calling the renderer because
+the Rust renderer can otherwise accept some incomplete input. Broader Mermaid
+syntax validation should normally be left to the renderer unless a small guard
+protects a documented user-facing fallback problem.
+
 ## Current Decision
 
 `mermaid-rs-renderer` is now added as the first measured SVG backend candidate
@@ -372,9 +408,9 @@ Compare each CLI SVG against OxideMD's in-app render for:
 - theme readability in light and dark modes
 - invalid input failure behavior
 
-The next useful implementation step is documenting known syntax limitations and
-fallback behavior, then deciding whether Mermaid diagrams should keep the Rust
-renderer's compact layout or adjust display sizing toward Mermaid CLI output.
+The next useful implementation step is deciding whether Mermaid diagrams should
+keep the Rust renderer's compact layout or adjust display sizing toward Mermaid
+CLI output, then checking SVG text rendering on clean Windows environments.
 
 ## Sources
 
