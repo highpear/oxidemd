@@ -10,6 +10,7 @@ eframe = { version = "0.33", features = ["persistence"] }
 egui_extras = { version = "0.33", features = ["image", "svg"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 mathjax-svg-rs = "0.4"
+mermaid-rs-renderer = { version = "0.2.2", default-features = false }
 notify = "8"
 pulldown-cmark = "0.13"
 resvg = "0.47"

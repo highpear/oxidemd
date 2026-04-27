@@ -14,11 +14,11 @@ Those blocks are parsed as diagram blocks and rendered with:
 - source copy
 - a readable source fallback
 
-SVG rendering is not enabled yet.
+SVG rendering is now prototyped through `mermaid-rs-renderer`.
 
-The codebase now has a fallback-only diagram renderer adapter and cache. This
-keeps the UI path ready for a real SVG backend while preserving the current
-readable source fallback.
+The codebase has a diagram renderer adapter and cache. It starts Mermaid SVG
+rendering on a background thread, returns a pending state during rendering, and
+keeps the readable source fallback visible for pending and failed renders.
 
 ## Goals
 
@@ -217,7 +217,7 @@ Use this order:
 1. Keep the current Mermaid source fallback as the stable baseline.
 2. Add a narrow diagram renderer adapter API. Done as a fallback-only adapter.
 3. Prototype `mermaid-rs-renderer` behind that adapter with SVG-only output if
-   possible.
+   possible. Done.
 4. Use Mermaid CLI as an external reference path for manual quality comparison.
 5. Only prototype an embedded JS or browser-like renderer if the Rust-native
    path fails and measurement justifies the dependency.
@@ -290,11 +290,12 @@ The UI should keep using the shared embedded SVG block rendering functions.
 
 ## Current Decision
 
-Do not add a Mermaid rendering dependency yet.
+`mermaid-rs-renderer` is now added as the first measured SVG backend candidate
+with default features disabled.
 
-The next useful implementation step is an adapter boundary and cache shape that
-can return the existing readable fallback while leaving room for
-`mermaid-rs-renderer` as the first measured SVG backend.
+The next useful implementation step is measurement: render latency, cache
+behavior, failure handling, and visual comparison against Mermaid CLI on common
+diagram types.
 
 ## Sources
 

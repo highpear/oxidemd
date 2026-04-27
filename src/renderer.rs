@@ -1171,10 +1171,12 @@ fn render_diagram_block(
     zoom_factor: f32,
     render_resources: &mut RenderResources<'_>,
 ) {
-    let prepared =
-        render_resources
-            .diagram_render_cache
-            .prepare(language, source, theme.text_primary);
+    let prepared = render_resources.diagram_render_cache.prepare(
+        ui.ctx().clone(),
+        language,
+        source,
+        theme.text_primary,
+    );
 
     Frame::new()
         .fill(theme.widget_inactive_background)
@@ -1187,6 +1189,7 @@ fn render_diagram_block(
         .show(ui, |ui| {
             let source_action = match &prepared {
                 PreparedDiagram::Svg(content) => content.source_action(),
+                PreparedDiagram::Pending => EmbeddedSourceAction::new(source),
                 PreparedDiagram::Error(_) => EmbeddedSourceAction::new(source),
             };
 
@@ -1215,7 +1218,20 @@ fn render_diagram_block(
                         TranslationKey::ActionCopySource,
                     );
                 }
-                PreparedDiagram::Error(_) => {
+                PreparedDiagram::Pending => {
+                    ui.label(
+                        RichText::new(tr(
+                            render_resources.ui_language,
+                            TranslationKey::MessageDiagramPreviewPending,
+                        ))
+                        .size(QUOTE_TEXT_SIZE * zoom_factor)
+                        .color(theme.text_secondary),
+                    );
+                    ui.add_space(scale_spacing(8.0, zoom_factor));
+
+                    render_embedded_source_fallback(ui, block_index, source, theme, zoom_factor);
+                }
+                PreparedDiagram::Error(error) => {
                     ui.label(
                         RichText::new(tr(
                             render_resources.ui_language,
@@ -1223,7 +1239,8 @@ fn render_diagram_block(
                         ))
                         .size(QUOTE_TEXT_SIZE * zoom_factor)
                         .color(theme.text_secondary),
-                    );
+                    )
+                    .on_hover_text(error);
                     ui.add_space(scale_spacing(8.0, zoom_factor));
 
                     render_embedded_source_fallback(ui, block_index, source, theme, zoom_factor);
