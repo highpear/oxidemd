@@ -23,6 +23,7 @@ const LIST_ITEM_SPACING: f32 = 8.0;
 const TABLE_CELL_MIN_WIDTH: f32 = 120.0;
 const MATH_BLOCK_PADDING_X: i8 = 18;
 const MATH_BLOCK_PADDING_Y: i8 = 16;
+const MATH_BLOCK_DISPLAY_SCALE: f32 = 1.35;
 const INLINE_MATH_TARGET_HEIGHT_MULTIPLIER: f32 = 1.35;
 const INLINE_MATH_LINE_HEIGHT_MULTIPLIER: f32 = 1.45;
 const INLINE_MATH_BASELINE_OFFSET_MULTIPLIER: f32 = 0.18;
@@ -1475,13 +1476,13 @@ fn fit_inline_math_size(style: InlineStyle, zoom_factor: f32, size: egui::Vec2) 
     egui::vec2(size.x * scale, size.y * scale)
 }
 
-fn fit_embedded_block_svg_size(size: egui::Vec2, max_width: f32) -> egui::Vec2 {
-    if size.x <= 0.0 || size.x <= max_width {
+fn fit_math_block_svg_size(size: egui::Vec2, max_width: f32) -> egui::Vec2 {
+    if size.x <= 0.0 || size.y <= 0.0 {
         return size;
     }
 
-    let scale = max_width / size.x;
-    egui::vec2(max_width, size.y * scale)
+    let scale = MATH_BLOCK_DISPLAY_SCALE.min(max_width / size.x);
+    egui::vec2(size.x * scale, size.y * scale)
 }
 
 fn fit_diagram_block_svg_size(size: egui::Vec2, max_width: f32) -> egui::Vec2 {
@@ -1540,9 +1541,7 @@ fn render_embedded_svg_block_image(
         EmbeddedSvgContentKind::Diagram => {
             fit_diagram_block_svg_size(content.asset().size(), max_width)
         }
-        EmbeddedSvgContentKind::Math => {
-            fit_embedded_block_svg_size(content.asset().size(), max_width)
-        }
+        EmbeddedSvgContentKind::Math => fit_math_block_svg_size(content.asset().size(), max_width),
     };
 
     if content.kind() == EmbeddedSvgContentKind::Diagram && fitted_size.x > max_width {

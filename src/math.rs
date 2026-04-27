@@ -5,6 +5,9 @@ use crate::embedded_svg::{
 };
 use crate::svg::{SvgAsset, apply_current_color};
 
+const INLINE_MATH_BASE_FONT_SIZE: f32 = 15.0;
+const BLOCK_MATH_BASE_FONT_SIZE: f32 = 24.0;
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum MathRenderMode {
     Inline,
@@ -62,8 +65,20 @@ fn prepare_math(
     zoom_factor: f32,
 ) -> PreparedMath {
     match mode {
-        MathRenderMode::Inline => prepare_svg_math(expression, text_color, zoom_factor, 15.0, mode),
-        MathRenderMode::Block => prepare_svg_math(expression, text_color, zoom_factor, 18.0, mode),
+        MathRenderMode::Inline => prepare_svg_math(
+            expression,
+            text_color,
+            zoom_factor,
+            INLINE_MATH_BASE_FONT_SIZE,
+            mode,
+        ),
+        MathRenderMode::Block => prepare_svg_math(
+            expression,
+            text_color,
+            zoom_factor,
+            BLOCK_MATH_BASE_FONT_SIZE,
+            mode,
+        ),
     }
 }
 
