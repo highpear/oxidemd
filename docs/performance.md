@@ -98,6 +98,8 @@ Example log shape:
 - Search responsiveness on common terms
 - TOC usability with many headings
 - Mermaid diagram render logs when opening `samples/mermaid-evaluation.md`
+- Mermaid CLI visual comparison with `tools/compare-mermaid-cli.ps1` when
+  `mmdc` is available
 
 Record the file size, build profile, and observed log lines when comparing
 changes.
