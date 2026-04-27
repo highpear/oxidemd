@@ -16,6 +16,10 @@ Those blocks are parsed as diagram blocks and rendered with:
 
 SVG rendering is not enabled yet.
 
+The codebase now has a fallback-only diagram renderer adapter and cache. This
+keeps the UI path ready for a real SVG backend while preserving the current
+readable source fallback.
+
 ## Goals
 
 - Keep the app local and native.
@@ -33,6 +37,15 @@ SVG rendering is not enabled yet.
 - Do not block the core Markdown viewer on diagram rendering.
 - Do not prioritize perfect Mermaid coverage over app simplicity.
 
+## Starting Assumption
+
+The first prototype should prefer a Rust-native renderer if it can produce usable
+SVG for common diagrams without hurting startup, binary size, or reload
+responsiveness.
+
+Mermaid CLI should be treated as the compatibility reference, not the default
+runtime path.
+
 ## Parser and UI Direction
 
 Mermaid fenced blocks should stay mapped to the shared embedded-SVG content model.
@@ -46,7 +59,39 @@ The parser should keep distinguishing diagram blocks from ordinary code blocks s
 
 ## Candidates
 
-### 1. Mermaid CLI (`mmdc`, `@mermaid-js/mermaid-cli`)
+### 1. Rust-native renderer (`mermaid-rs-renderer`)
+
+Summary:
+
+- Renders Mermaid-like source to SVG in Rust.
+- Does not require Node.js, Chromium, or a WebView.
+- Advertises support for common diagram types such as flowchart, sequence,
+  class, state, ER, pie, Gantt, timeline, mindmap, and git graph.
+
+Pros:
+
+- Best current architectural fit for OxideMD's local native direction.
+- SVG output matches the shared embedded SVG model already used by math.
+- Avoids process spawning and external runtime setup.
+- Likely easier to cache and run behind a narrow adapter boundary.
+- Can be tested with default features disabled to avoid PNG or CLI extras if
+  SVG-only rendering is enough.
+
+Cons:
+
+- Mermaid compatibility may lag the official JavaScript implementation.
+- Layout quality needs visual comparison against Mermaid CLI.
+- The crate is young enough that API stability and maintenance risk should be
+  checked before making it a hard dependency.
+- Dependency size, compile time, and transitive crates still need measurement.
+
+Fit:
+
+- Strongest first prototype candidate.
+- Should stay behind an adapter so it can be replaced or disabled if it fails
+  compatibility, size, or reliability checks.
+
+### 2. Mermaid CLI (`mmdc`, `@mermaid-js/mermaid-cli`)
 
 Summary:
 
@@ -72,7 +117,7 @@ Fit:
 - Good reference and optional developer tool.
 - Not a good default runtime dependency.
 
-### 2. Embedded JavaScript Engine
+### 3. Embedded JavaScript Engine
 
 Summary:
 
@@ -97,7 +142,7 @@ Fit:
 - Technically plausible, but high risk for the current project stage.
 - Worth evaluating only behind a narrow adapter boundary.
 
-### 3. WebView or Headless Browser
+### 4. WebView or Headless Browser
 
 Summary:
 
@@ -119,7 +164,7 @@ Fit:
 
 - Poor fit for OxideMD's current goals.
 
-### 4. Rust-Native or Compatible Renderer
+### 5. Other Rust-Native or Compatible Renderer
 
 Summary:
 
@@ -142,7 +187,7 @@ Fit:
 - Good to watch and evaluate.
 - Not enough evidence yet for a direct dependency.
 
-### 5. Keep Source Fallback Only
+### 6. Keep Source Fallback Only
 
 Summary:
 
@@ -170,16 +215,42 @@ Fit:
 Use this order:
 
 1. Keep the current Mermaid source fallback as the stable baseline.
-2. Add a narrow diagram renderer adapter API without choosing a heavy backend yet.
-3. Use Mermaid CLI as an external reference path for manual quality comparison.
-4. Only prototype an embedded JS or other renderer if measurement justifies the dependency.
+2. Add a narrow diagram renderer adapter API. Done as a fallback-only adapter.
+3. Prototype `mermaid-rs-renderer` behind that adapter with SVG-only output if
+   possible.
+4. Use Mermaid CLI as an external reference path for manual quality comparison.
+5. Only prototype an embedded JS or browser-like renderer if the Rust-native
+   path fails and measurement justifies the dependency.
 
 ## Why This Order
 
 - The fallback path is already useful and low risk.
-- Mermaid rendering can easily pull OxideMD toward heavy runtime dependencies.
+- Mermaid rendering can easily pull OxideMD toward heavy runtime dependencies,
+  so the first prototype should avoid Node.js, Chromium, and WebView paths.
 - An adapter boundary lets the app keep parsing, caching, fallback, and UI behavior stable.
 - Manual comparison against Mermaid CLI can validate output expectations before committing to a backend.
+
+## First Prototype Scope
+
+The first prototype should be intentionally narrow:
+
+- Add a diagram renderer module with a cache shape similar to math rendering.
+- Accept only Mermaid source, language, theme, and zoom-independent render
+  options.
+- Return the shared embedded SVG result type.
+- Render only block diagrams, not inline content.
+- Keep the current readable source fallback for pending, unsupported, and failed
+  renders.
+- Run rendering off the UI thread before enabling it for normal viewing.
+
+The first supported sample set should include:
+
+- one small flowchart
+- one sequence diagram
+- one class diagram
+- one state diagram
+- one intentionally invalid diagram
+- one larger flowchart for timeout and cache behavior
 
 ## Suggested Adapter Shape
 
@@ -221,7 +292,9 @@ The UI should keep using the shared embedded SVG block rendering functions.
 
 Do not add a Mermaid rendering dependency yet.
 
-The next useful implementation step is an adapter boundary and cache shape that can return the existing readable fallback while leaving room for a real SVG renderer.
+The next useful implementation step is an adapter boundary and cache shape that
+can return the existing readable fallback while leaving room for
+`mermaid-rs-renderer` as the first measured SVG backend.
 
 ## Sources
 
@@ -229,5 +302,7 @@ The next useful implementation step is an adapter boundary and cache shape that 
   - https://mermaid.js.org/
 - Mermaid CLI:
   - https://github.com/mermaid-js/mermaid-cli
+- `mermaid-rs-renderer`:
+  - https://docs.rs/mermaid-rs-renderer/latest/mermaid_rs_renderer/
 - Existing OxideMD math rendering evaluation:
   - `docs/math-rendering-evaluation.md`

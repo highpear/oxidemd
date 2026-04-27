@@ -2,6 +2,7 @@ mod app;
 mod bottom_bar;
 mod cli;
 mod code_block;
+mod diagram;
 mod document_loader;
 mod embedded_svg;
 mod export;

@@ -9,6 +9,7 @@ use eframe::egui::{
 use rfd::FileDialog;
 
 use crate::bottom_bar::{BottomBarState, render_bottom_bar};
+use crate::diagram::DiagramRenderCache;
 use crate::document_loader::{DocumentFingerprint, FileSnapshot, load_markdown_document};
 use crate::export::write_html_export;
 use crate::external_links::{handle_external_link_click, render_external_link_confirmation};
@@ -152,6 +153,7 @@ pub struct OxideMdApp {
     document_file_snapshot: Option<FileSnapshot>,
     image_cache: ImageCache,
     math_render_cache: MathRenderCache,
+    diagram_render_cache: DiagramRenderCache,
     status_message: String,
     status_hover_message: Option<String>,
     reload_status: ReloadStatus,
@@ -195,6 +197,7 @@ impl OxideMdApp {
             document_file_snapshot: None,
             image_cache: ImageCache::new(),
             math_render_cache: MathRenderCache::new(),
+            diagram_render_cache: DiagramRenderCache::new(),
             status_message: tr(language, TranslationKey::StatusNoFile).to_owned(),
             status_hover_message: None,
             reload_status: ReloadStatus::Idle,
@@ -413,6 +416,7 @@ impl OxideMdApp {
                 self.document_file_snapshot = loaded.file_snapshot;
                 self.image_cache.clear();
                 self.math_render_cache.clear();
+                self.diagram_render_cache.clear();
                 self.block_height_cache.clear();
                 self.pending_reload_at = None;
                 self.in_flight_reload_id = None;
@@ -436,6 +440,7 @@ impl OxideMdApp {
                 self.document_file_snapshot = None;
                 self.image_cache.clear();
                 self.math_render_cache.clear();
+                self.diagram_render_cache.clear();
                 self.block_height_cache.clear();
                 self.current_file = None;
                 self.watcher = None;
@@ -664,6 +669,7 @@ impl OxideMdApp {
         self.document_file_snapshot = file_snapshot;
         self.image_cache.clear();
         self.math_render_cache.clear();
+        self.diagram_render_cache.clear();
         self.block_height_cache.clear();
         self.refresh_search_matches();
         self.pending_render_measurement = Some(PendingRenderMeasurement {
@@ -1099,6 +1105,7 @@ impl OxideMdApp {
                     document_base_dir,
                     &mut self.image_cache,
                     &mut self.math_render_cache,
+                    &mut self.diagram_render_cache,
                     block_heights,
                     estimated_block_heights,
                     self.pending_block_scroll,
