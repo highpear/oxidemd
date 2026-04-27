@@ -310,9 +310,35 @@ Release-test measurement for the evaluation sample now covers flowchart,
 sequence, class, state, a larger flowchart, invalid input fallback, and finished
 result cache reuse. Results are recorded in `docs/performance.md`.
 
-The next useful implementation step is visual comparison against Mermaid CLI on
-common diagram types, followed by documenting known syntax limitations and
-fallback behavior.
+Use `tools/compare-mermaid-cli.ps1` on a machine with Mermaid CLI available to
+generate reference SVG output from `samples/mermaid-evaluation.md`:
+
+```powershell
+.\tools\compare-mermaid-cli.ps1
+```
+
+The script writes extracted `.mmd` files, Mermaid CLI SVG output, and a
+comparison report under `%TEMP%\oxidemd-mermaid-cli-comparison` by default.
+Generated comparison files should not be committed.
+
+If `mmdc` is installed through `fnm` but is not visible in a non-interactive
+PowerShell session, the script also searches `%APPDATA%\fnm\node-versions` for
+`mmdc.cmd`.
+
+In sandboxed automation, Mermaid CLI may also need permission to launch its
+headless browser; otherwise Puppeteer can fail with `spawn EPERM`.
+
+Compare each CLI SVG against OxideMD's in-app render for:
+
+- text placement and clipping
+- edge routing and arrowheads
+- node shape fidelity
+- theme readability in light and dark modes
+- invalid input failure behavior
+
+The next useful implementation step is running that visual comparison on a
+machine with Mermaid CLI installed, then documenting known syntax limitations
+and fallback behavior.
 
 ## Sources
 
