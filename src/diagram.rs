@@ -297,6 +297,8 @@ fn svg_uri_hash(source: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+    use std::path::PathBuf;
     use std::thread;
     use std::time::{Duration, Instant};
 
@@ -411,30 +413,7 @@ mod tests {
 
     #[test]
     fn renders_common_mermaid_evaluation_diagrams() {
-        let cases = [
-            (
-                "flowchart",
-                "flowchart TD\n    Open[Open Markdown] --> Parse[Parse document]\n    Parse --> Render[Render Mermaid SVG]\n    Render --> Cache{Cache hit?}\n    Cache -->|Yes| Show[Show cached SVG]\n    Cache -->|No| Worker[Background worker]\n    Worker --> Rendered[Show rendered SVG]",
-            ),
-            (
-                "sequence",
-                "sequenceDiagram\n    participant User\n    participant OxideMD\n    participant Worker\n    User->>OxideMD: Open document\n    OxideMD->>Worker: Queue diagram render\n    Worker-->>OxideMD: SVG result\n    OxideMD-->>User: Repaint diagram",
-            ),
-            (
-                "class",
-                "classDiagram\n    class DiagramRenderCache {\n        +prepare()\n        +clear()\n    }\n    class DiagramWorkerResult {\n        +source\n        +result\n    }\n    DiagramRenderCache --> DiagramWorkerResult",
-            ),
-            (
-                "state",
-                "stateDiagram-v2\n    [*] --> Pending\n    Pending --> Ready: done\n    Pending --> Failed: fail\n    Ready --> [*]\n    Failed --> [*]",
-            ),
-            (
-                "larger-flowchart",
-                "flowchart TD\n    N01[Node 01] --> N02[Node 02]\n    N02 --> N03[Node 03]\n    N03 --> N04[Node 04]\n    N04 --> N05[Node 05]\n    N05 --> N06[Node 06]\n    N06 --> N07[Node 07]\n    N07 --> N08[Node 08]\n    N08 --> N09[Node 09]\n    N09 --> N10[Node 10]\n    N10 --> N11[Node 11]\n    N11 --> N12[Node 12]\n    N12 --> N13[Node 13]\n    N13 --> N14[Node 14]\n    N14 --> N15[Node 15]\n    N15 --> N16[Node 16]\n    N16 --> N17[Node 17]\n    N17 --> N18[Node 18]\n    N18 --> N19[Node 19]\n    N19 --> N20[Node 20]",
-            ),
-        ];
-
-        for (name, source) in cases {
+        for (name, source) in mermaid_evaluation_cases() {
             let started = Instant::now();
             let prepared = super::prepare_diagram(
                 "mermaid",
@@ -468,6 +447,62 @@ mod tests {
             invalid_source.len()
         );
         assert!(matches!(invalid, PreparedDiagram::Error(_)));
+    }
+
+    #[test]
+    #[ignore = "writes OxideMD Mermaid SVG comparison artifacts"]
+    fn exports_mermaid_evaluation_svgs_for_cli_comparison() {
+        let output_dir = std::env::var_os("OXIDEMD_MERMAID_OUTPUT_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| std::env::temp_dir().join("oxidemd-mermaid-native-comparison"));
+
+        if output_dir.exists() {
+            fs::remove_dir_all(&output_dir).expect("remove old comparison output");
+        }
+        fs::create_dir_all(&output_dir).expect("create comparison output directory");
+
+        for (index, (name, source)) in mermaid_evaluation_cases().into_iter().enumerate() {
+            let prepared = super::prepare_diagram(
+                "mermaid",
+                source,
+                Color32::from_rgb(34, 34, 34),
+                Color32::from_rgb(250, 250, 250),
+            );
+            let output_index = if name == "larger-flowchart" {
+                6
+            } else {
+                index + 1
+            };
+            let output_path = output_dir.join(format!("{output_index:02}-{name}.svg"));
+
+            match prepared {
+                PreparedDiagram::Svg(content) => {
+                    fs::write(output_path, content.asset().bytes().as_ref())
+                        .expect("write OxideMD SVG output");
+                }
+                PreparedDiagram::Error(error) => {
+                    panic!("{name} should render as SVG, got error: {error}");
+                }
+                PreparedDiagram::Pending => {
+                    panic!("{name} should render synchronously in the export test");
+                }
+            }
+        }
+
+        let invalid_source = "flowchart TD\n    Broken -->";
+        let invalid = super::prepare_diagram(
+            "mermaid",
+            invalid_source,
+            Color32::from_rgb(34, 34, 34),
+            Color32::from_rgb(250, 250, 250),
+        );
+        let PreparedDiagram::Error(error) = invalid else {
+            panic!("invalid diagram should produce an error");
+        };
+        fs::write(output_dir.join("05-invalid-error.txt"), error)
+            .expect("write OxideMD invalid diagram error");
+
+        eprintln!("Wrote OxideMD Mermaid SVG comparison files to {output_dir:?}");
     }
 
     #[test]
@@ -524,5 +559,30 @@ mod tests {
         }
 
         panic!("diagram render did not finish");
+    }
+
+    fn mermaid_evaluation_cases() -> [(&'static str, &'static str); 5] {
+        [
+            (
+                "flowchart",
+                "flowchart TD\n    Open[Open Markdown] --> Parse[Parse document]\n    Parse --> Render[Render Mermaid SVG]\n    Render --> Cache{Cache hit?}\n    Cache -->|Yes| Show[Show cached SVG]\n    Cache -->|No| Worker[Background worker]\n    Worker --> Rendered[Show rendered SVG]",
+            ),
+            (
+                "sequence",
+                "sequenceDiagram\n    participant User\n    participant OxideMD\n    participant Worker\n    User->>OxideMD: Open document\n    OxideMD->>Worker: Queue diagram render\n    Worker-->>OxideMD: SVG result\n    OxideMD-->>User: Repaint diagram",
+            ),
+            (
+                "class",
+                "classDiagram\n    class DiagramRenderCache {\n        +prepare()\n        +clear()\n    }\n    class DiagramWorkerResult {\n        +source\n        +result\n    }\n    DiagramRenderCache --> DiagramWorkerResult",
+            ),
+            (
+                "state",
+                "stateDiagram-v2\n    [*] --> Pending\n    Pending --> Ready: done\n    Pending --> Failed: fail\n    Ready --> [*]\n    Failed --> [*]",
+            ),
+            (
+                "larger-flowchart",
+                "flowchart TD\n    N01[Node 01] --> N02[Node 02]\n    N02 --> N03[Node 03]\n    N03 --> N04[Node 04]\n    N04 --> N05[Node 05]\n    N05 --> N06[Node 06]\n    N06 --> N07[Node 07]\n    N07 --> N08[Node 08]\n    N08 --> N09[Node 09]\n    N09 --> N10[Node 10]\n    N10 --> N11[Node 11]\n    N11 --> N12[Node 12]\n    N12 --> N13[Node 13]\n    N13 --> N14[Node 14]\n    N14 --> N15[Node 15]\n    N15 --> N16[Node 16]\n    N16 --> N17[Node 17]\n    N17 --> N18[Node 18]\n    N18 --> N19[Node 19]\n    N19 --> N20[Node 20]",
+            ),
+        ]
     }
 }

@@ -99,7 +99,8 @@ Example log shape:
 - TOC usability with many headings
 - Mermaid diagram render logs when opening `samples/mermaid-evaluation.md`
 - Mermaid CLI visual comparison with `tools/compare-mermaid-cli.ps1` when
-  `mmdc` is available
+  `mmdc` is available; export OxideMD reference SVGs first with
+  `cargo test --release diagram::tests::exports_mermaid_evaluation_svgs_for_cli_comparison -- --ignored --nocapture`
 
 Record the file size, build profile, and observed log lines when comparing
 changes.

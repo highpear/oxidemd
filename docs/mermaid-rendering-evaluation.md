@@ -317,9 +317,19 @@ generate reference SVG output from `samples/mermaid-evaluation.md`:
 .\tools\compare-mermaid-cli.ps1
 ```
 
+OxideMD's SVG output can be exported from the same sample set with an ignored
+test:
+
+```powershell
+$env:OXIDEMD_MERMAID_OUTPUT_DIR = "$env:TEMP\oxidemd-mermaid-native-comparison"
+cargo test --release diagram::tests::exports_mermaid_evaluation_svgs_for_cli_comparison -- --ignored --nocapture
+```
+
 The script writes extracted `.mmd` files, Mermaid CLI SVG output, and a
-comparison report under `%TEMP%\oxidemd-mermaid-cli-comparison` by default.
-Generated comparison files should not be committed.
+Markdown comparison report under `%TEMP%\oxidemd-mermaid-cli-comparison` by
+default. If the OxideMD SVG output directory exists, it also writes
+`visual-comparison.html` with side-by-side native and CLI SVGs. Generated
+comparison files should not be committed.
 
 If `mmdc` is installed through `fnm` but is not visible in a non-interactive
 PowerShell session, the script also searches `%APPDATA%\fnm\node-versions` for
