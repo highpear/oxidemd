@@ -265,6 +265,10 @@ Goal: consider future extensions without committing too early.
   * [x] Document Mermaid renderer candidates, constraints, and evaluation criteria
   * [x] Prototype Mermaid SVG rendering behind the same renderer adapter boundary as math
   * [ ] Measure render latency, cache behavior, and failure handling on larger diagrams
+  * [ ] Compare Mermaid rendering quality against Mermaid CLI for common diagram types
+  * [ ] Document known Mermaid syntax limitations and fallback behavior
+  * [ ] Decide whether strict syntax validation should stay local or rely on renderer errors
+  * [ ] Check Mermaid SVG text rendering on clean Windows environments
   * [x] Add an error fallback that keeps Mermaid source readable when SVG rendering fails
   * [x] Decide whether Mermaid source copy is sufficient before considering text selection inside diagrams
 * [x] Link clicking
