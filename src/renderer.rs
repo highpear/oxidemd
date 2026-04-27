@@ -24,9 +24,10 @@ const TABLE_CELL_MIN_WIDTH: f32 = 120.0;
 const MATH_BLOCK_PADDING_X: i8 = 18;
 const MATH_BLOCK_PADDING_Y: i8 = 16;
 const MATH_BLOCK_DISPLAY_SCALE: f32 = 1.35;
-const INLINE_MATH_TARGET_HEIGHT_MULTIPLIER: f32 = 1.35;
-const INLINE_MATH_LINE_HEIGHT_MULTIPLIER: f32 = 1.45;
-const INLINE_MATH_BASELINE_OFFSET_MULTIPLIER: f32 = 0.18;
+const INLINE_MATH_TARGET_HEIGHT_MULTIPLIER: f32 = 1.3;
+const TALL_INLINE_MATH_TARGET_HEIGHT_MULTIPLIER: f32 = 2.15;
+const INLINE_MATH_LINE_HEIGHT_MULTIPLIER: f32 = 1.7;
+const INLINE_MATH_BASELINE_OFFSET_MULTIPLIER: f32 = 0.16;
 const LARGE_DOCUMENT_BLOCK_THRESHOLD: usize = 2_000;
 const VIRTUAL_RENDER_OVERSCAN: f32 = 1_200.0;
 const ESTIMATED_CHARS_PER_LINE: usize = 90;
@@ -851,7 +852,7 @@ fn inline_math_width(
 
     match prepared {
         PreparedMath::Svg(content) => {
-            fit_inline_math_size(style, zoom_factor, content.asset().size()).x
+            fit_inline_math_size(text, style, zoom_factor, content.asset().size()).x
         }
         PreparedMath::Error(_) => text_width(ui, text, style, SpanKind::Math, theme, zoom_factor),
     }
@@ -1049,7 +1050,7 @@ fn render_inline_span(
             match prepared {
                 PreparedMath::Svg(content) => {
                     let fitted_size =
-                        fit_inline_math_size(style, zoom_factor, content.asset().size());
+                        fit_inline_math_size(text, style, zoom_factor, content.asset().size());
                     render_inline_math_image(
                         ui,
                         &content,
@@ -1464,16 +1465,32 @@ fn styled_text(
     }
 }
 
-fn fit_inline_math_size(style: InlineStyle, zoom_factor: f32, size: egui::Vec2) -> egui::Vec2 {
+fn fit_inline_math_size(
+    expression: &str,
+    style: InlineStyle,
+    zoom_factor: f32,
+    size: egui::Vec2,
+) -> egui::Vec2 {
     if size.y <= 0.0 {
         return size;
     }
 
-    let target_height =
-        monospace_span_font_size(style, zoom_factor) * INLINE_MATH_TARGET_HEIGHT_MULTIPLIER;
-    let scale = (target_height / size.y).min(1.0);
+    let target_multiplier = if is_tall_inline_math(expression) {
+        TALL_INLINE_MATH_TARGET_HEIGHT_MULTIPLIER
+    } else {
+        INLINE_MATH_TARGET_HEIGHT_MULTIPLIER
+    };
+    let target_height = monospace_span_font_size(style, zoom_factor) * target_multiplier;
+    let scale = target_height / size.y;
 
     egui::vec2(size.x * scale, size.y * scale)
+}
+
+fn is_tall_inline_math(expression: &str) -> bool {
+    expression.contains("\\frac")
+        || expression.contains("\\dfrac")
+        || expression.contains("\\tfrac")
+        || expression.contains("\\genfrac")
 }
 
 fn fit_math_block_svg_size(size: egui::Vec2, max_width: f32) -> egui::Vec2 {

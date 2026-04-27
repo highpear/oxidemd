@@ -5,7 +5,7 @@ use crate::embedded_svg::{
 };
 use crate::svg::{SvgAsset, apply_current_color};
 
-const INLINE_MATH_BASE_FONT_SIZE: f32 = 15.0;
+const INLINE_MATH_BASE_FONT_SIZE: f32 = 16.0;
 const BLOCK_MATH_BASE_FONT_SIZE: f32 = 24.0;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -90,9 +90,15 @@ fn prepare_svg_math(
     mode: MathRenderMode,
 ) -> PreparedMath {
     let font_size = base_font_size * zoom_factor;
+    let use_display_style = mode == MathRenderMode::Inline && is_fraction_inline_math(expression);
+    let render_expression = if use_display_style {
+        format!("\\displaystyle {expression}")
+    } else {
+        expression.to_owned()
+    };
 
     let svg = match mathjax_svg_rs::render_tex(
-        expression,
+        &render_expression,
         &mathjax_svg_rs::Options {
             font_size: font_size.into(),
             ..Default::default()
@@ -104,13 +110,15 @@ fn prepare_svg_math(
 
     let svg = apply_current_color(&svg, text_color);
     let uri = format!(
-        "bytes://math-{}-{}-{}-{}.svg",
+        "bytes://math-{}-{}-{}-{}-{}-{}.svg",
         color_hash(text_color),
         zoom_bucket(zoom_factor),
         match mode {
             MathRenderMode::Inline => "inline",
             MathRenderMode::Block => "block",
         },
+        if use_display_style { "display" } else { "text" },
+        font_size_bucket(font_size),
         svg_uri_hash(expression)
     );
 
@@ -126,6 +134,17 @@ fn prepare_svg_math(
 
 fn zoom_bucket(zoom_factor: f32) -> u16 {
     (zoom_factor * 100.0).round().clamp(0.0, u16::MAX as f32) as u16
+}
+
+fn font_size_bucket(font_size: f32) -> u16 {
+    (font_size * 10.0).round().clamp(0.0, u16::MAX as f32) as u16
+}
+
+fn is_fraction_inline_math(expression: &str) -> bool {
+    expression.contains("\\frac")
+        || expression.contains("\\dfrac")
+        || expression.contains("\\tfrac")
+        || expression.contains("\\genfrac")
 }
 
 fn color_hash(color: egui::Color32) -> String {
@@ -195,7 +214,7 @@ mod tests {
             assert!(
                 svg.asset()
                     .uri()
-                    .starts_with("bytes://math-222222ff-100-inline-")
+                    .starts_with("bytes://math-222222ff-100-inline-display-160-")
             );
             assert_eq!(svg.source_text(), r"\frac{1}{x+y}");
         }
