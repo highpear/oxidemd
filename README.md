@@ -145,6 +145,12 @@ Start without reopening the previous file:
 oxidemd --no-restore-file
 ```
 
+Reset saved session settings and recent files:
+
+```powershell
+oxidemd --reset-session
+```
+
 Export Markdown as a standalone HTML file without opening the GUI:
 
 ```powershell
