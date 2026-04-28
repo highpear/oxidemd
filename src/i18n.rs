@@ -145,7 +145,7 @@ const TRANSLATIONS: &[TranslationEntry] = &[
         "日本語 / English",
         "日本語 / English",
     ),
-    entry(TranslationKey::ActionSwitchTheme, "Theme:", "テーマ:"),
+    entry(TranslationKey::ActionSwitchTheme, "Theme", "テーマ"),
     entry(
         TranslationKey::LabelCurrentFile,
         "Current file:",

@@ -4,6 +4,7 @@ use eframe::egui::{self, Color32, Frame, Margin, RichText, TopBottomPanel};
 
 use crate::i18n::{Language, TranslationKey, tr};
 use crate::session::ExternalLinkBehavior;
+use crate::theme::ThemeId;
 
 const TOP_BAR_FILE_LABEL_MAX_WIDTH: f32 = 280.0;
 
@@ -14,7 +15,7 @@ pub struct TopBarAction {
     pub clear_recent_files: bool,
     pub export_html: bool,
     pub switch_language: bool,
-    pub switch_theme: bool,
+    pub select_theme: Option<ThemeId>,
     pub switch_external_links: bool,
     pub toggle_heading_panel: bool,
     pub show_shortcuts_help: bool,
@@ -23,7 +24,8 @@ pub struct TopBarAction {
 
 pub struct TopBarState<'a> {
     pub language: Language,
-    pub current_theme_label: &'a str,
+    pub current_theme_id: ThemeId,
+    pub theme_options: &'a [(ThemeId, &'a str)],
     pub external_link_behavior: ExternalLinkBehavior,
     pub is_heading_panel_visible: bool,
     pub current_file: Option<&'a Path>,
@@ -103,17 +105,20 @@ pub fn render_top_bar(ctx: &egui::Context, state: TopBarState<'_>) -> TopBarActi
             });
 
             ui.menu_button(tr(state.language, TranslationKey::LabelView), |ui| {
-                if ui
-                    .button(format!(
-                        "{} {}",
-                        tr(state.language, TranslationKey::ActionSwitchTheme),
-                        state.current_theme_label
-                    ))
-                    .clicked()
-                {
-                    action.switch_theme = true;
-                    ui.close();
-                }
+                ui.menu_button(
+                    tr(state.language, TranslationKey::ActionSwitchTheme),
+                    |ui| {
+                        for (theme_id, label) in state.theme_options {
+                            if ui
+                                .selectable_label(state.current_theme_id == *theme_id, *label)
+                                .clicked()
+                            {
+                                action.select_theme = Some(*theme_id);
+                                ui.close();
+                            }
+                        }
+                    },
+                );
 
                 if ui
                     .button(format!(
