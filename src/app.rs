@@ -850,8 +850,6 @@ impl OxideMdApp {
                 reload_status_label: self.reload_status_label(),
                 reload_status_background,
                 reload_status_text,
-                status_message: self.status_message.as_str(),
-                status_hover_message: self.status_hover_message.as_deref(),
             },
         );
 
@@ -905,6 +903,8 @@ impl OxideMdApp {
                 min_zoom_factor: MIN_ZOOM_FACTOR,
                 max_zoom_factor: MAX_ZOOM_FACTOR,
                 zoom_step: ZOOM_STEP,
+                status_message: self.status_message.as_str(),
+                status_hover_message: self.status_hover_message.as_deref(),
             },
             &mut self.zoom_factor,
         );
