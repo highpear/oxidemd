@@ -84,6 +84,7 @@ fn run_gui(launch_options: cli::GuiLaunchOptions) -> eframe::Result<()> {
                 startup_started,
                 launch_options.initial_file,
                 launch_options.restore_file,
+                launch_options.reset_session,
             )))
         }),
     )

@@ -184,6 +184,7 @@ impl OxideMdApp {
         startup_started: Instant,
         initial_file: Option<PathBuf>,
         restore_file: bool,
+        reset_session: bool,
     ) -> Self {
         let language = Language::En;
         debug_assert!(available_themes().contains(&DEFAULT_THEME_ID));
@@ -222,7 +223,11 @@ impl OxideMdApp {
             startup_started: Some(startup_started),
         };
 
-        let restored_file = app.restore_session(storage, restore_file);
+        let restored_file = if reset_session {
+            None
+        } else {
+            app.restore_session(storage, restore_file)
+        };
         apply_theme(&app.ui_context, &theme(app.theme_id));
 
         if let Some(path) = initial_file.or(restored_file) {

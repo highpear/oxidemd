@@ -8,6 +8,7 @@ pub enum CliAction {
     RunGui {
         initial_file: Option<PathBuf>,
         restore_file: bool,
+        reset_session: bool,
     },
     PrintHelp,
     PrintVersion,
@@ -20,6 +21,7 @@ pub enum CliAction {
 pub struct GuiLaunchOptions {
     pub initial_file: Option<PathBuf>,
     pub restore_file: bool,
+    pub reset_session: bool,
 }
 
 pub fn parse_args<I>(args: I) -> Result<CliAction, String>
@@ -32,6 +34,7 @@ where
         [] => Ok(CliAction::RunGui {
             initial_file: None,
             restore_file: true,
+            reset_session: false,
         }),
         [flag] if flag == OsStr::new("--help") || flag == OsStr::new("-h") => {
             Ok(CliAction::PrintHelp)
@@ -42,6 +45,12 @@ where
         [flag] if flag == OsStr::new("--no-restore-file") => Ok(CliAction::RunGui {
             initial_file: None,
             restore_file: false,
+            reset_session: false,
+        }),
+        [flag] if flag == OsStr::new("--reset-session") => Ok(CliAction::RunGui {
+            initial_file: None,
+            restore_file: false,
+            reset_session: true,
         }),
         [flag, initial_file]
             if flag == OsStr::new("--no-restore-file") && !looks_like_flag(initial_file) =>
@@ -49,6 +58,16 @@ where
             Ok(CliAction::RunGui {
                 initial_file: Some(PathBuf::from(initial_file)),
                 restore_file: false,
+                reset_session: false,
+            })
+        }
+        [flag, initial_file]
+            if flag == OsStr::new("--reset-session") && !looks_like_flag(initial_file) =>
+        {
+            Ok(CliAction::RunGui {
+                initial_file: Some(PathBuf::from(initial_file)),
+                restore_file: false,
+                reset_session: true,
             })
         }
         [flag, input, output] if flag == OsStr::new("--export-html") => {
@@ -61,6 +80,7 @@ where
             Ok(CliAction::RunGui {
                 initial_file: Some(PathBuf::from(initial_file)),
                 restore_file: true,
+                reset_session: false,
             })
         }
         [flag] if flag == OsStr::new("--export-html") => Err(
@@ -80,9 +100,11 @@ pub fn run_cli_action(action: CliAction) -> Result<GuiLaunchOptions, i32> {
         CliAction::RunGui {
             initial_file,
             restore_file,
+            reset_session,
         } => Ok(GuiLaunchOptions {
             initial_file,
             restore_file,
+            reset_session,
         }),
         CliAction::PrintHelp => {
             println!("{}", help_text());
@@ -118,14 +140,16 @@ fn help_text() -> &'static str {
         "Usage:\n",
         "  oxidemd [file.md]\n",
         "  oxidemd --no-restore-file [file.md]\n",
+        "  oxidemd --reset-session [file.md]\n",
         "  oxidemd --export-html <input.md> <output.html>\n",
         "  oxidemd --help\n",
         "  oxidemd --version\n\n",
         "Options:\n",
         "  --no-restore-file  Start without reopening the previous file.\n",
-        "  --export-html    Export a Markdown file as HTML without opening the GUI.\n",
-        "  -h, --help       Show this help text.\n",
-        "  -V, --version    Show the OxideMD version.\n"
+        "  --reset-session    Start with default settings and clear saved recent files.\n",
+        "  --export-html      Export a Markdown file as HTML without opening the GUI.\n",
+        "  -h, --help         Show this help text.\n",
+        "  -V, --version      Show the OxideMD version.\n"
     )
 }
 
@@ -147,7 +171,8 @@ mod tests {
             action,
             CliAction::RunGui {
                 initial_file: None,
-                restore_file: true
+                restore_file: true,
+                reset_session: false
             }
         ));
     }
@@ -157,7 +182,7 @@ mod tests {
         let action = parse_args(args(&["sample.md"])).expect("args should parse");
 
         assert!(
-            matches!(action, CliAction::RunGui { initial_file: Some(path), restore_file: true } if path == PathBuf::from("sample.md"))
+            matches!(action, CliAction::RunGui { initial_file: Some(path), restore_file: true, reset_session: false } if path == PathBuf::from("sample.md"))
         );
     }
 
@@ -169,7 +194,8 @@ mod tests {
             action,
             CliAction::RunGui {
                 initial_file: None,
-                restore_file: false
+                restore_file: false,
+                reset_session: false
             }
         ));
     }
@@ -180,7 +206,31 @@ mod tests {
             parse_args(args(&["--no-restore-file", "sample.md"])).expect("args should parse");
 
         assert!(
-            matches!(action, CliAction::RunGui { initial_file: Some(path), restore_file: false } if path == PathBuf::from("sample.md"))
+            matches!(action, CliAction::RunGui { initial_file: Some(path), restore_file: false, reset_session: false } if path == PathBuf::from("sample.md"))
+        );
+    }
+
+    #[test]
+    fn parses_gui_with_reset_session() {
+        let action = parse_args(args(&["--reset-session"])).expect("args should parse");
+
+        assert!(matches!(
+            action,
+            CliAction::RunGui {
+                initial_file: None,
+                restore_file: false,
+                reset_session: true
+            }
+        ));
+    }
+
+    #[test]
+    fn parses_gui_with_file_and_reset_session() {
+        let action =
+            parse_args(args(&["--reset-session", "sample.md"])).expect("args should parse");
+
+        assert!(
+            matches!(action, CliAction::RunGui { initial_file: Some(path), restore_file: false, reset_session: true } if path == PathBuf::from("sample.md"))
         );
     }
 
