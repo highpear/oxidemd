@@ -8,6 +8,7 @@ const STORAGE_KEY_LANGUAGE: &str = "oxidemd.language";
 const STORAGE_KEY_THEME: &str = "oxidemd.theme";
 const STORAGE_KEY_ZOOM: &str = "oxidemd.zoom";
 const STORAGE_KEY_EXTERNAL_LINKS: &str = "oxidemd.external_links";
+const STORAGE_KEY_HEADING_PANEL: &str = "oxidemd.heading_panel";
 const STORAGE_KEY_CURRENT_FILE: &str = "oxidemd.current_file";
 const STORAGE_KEY_RECENT_FILES: &str = "oxidemd.recent_files";
 
@@ -22,6 +23,7 @@ pub struct RestoredSession {
     pub theme_id: Option<ThemeId>,
     pub zoom_factor: Option<f32>,
     pub external_link_behavior: Option<ExternalLinkBehavior>,
+    pub is_heading_panel_visible: Option<bool>,
     pub recent_files: Option<Vec<PathBuf>>,
     pub current_file: Option<PathBuf>,
     pub unavailable_current_file: Option<PathBuf>,
@@ -32,6 +34,7 @@ pub struct SessionSaveData<'a> {
     pub theme_id: ThemeId,
     pub zoom_factor: f32,
     pub external_link_behavior: ExternalLinkBehavior,
+    pub is_heading_panel_visible: bool,
     pub current_file: Option<&'a Path>,
     pub recent_files: &'a [PathBuf],
 }
@@ -89,6 +92,9 @@ pub fn restore_session(
     let external_link_behavior = storage
         .get_string(STORAGE_KEY_EXTERNAL_LINKS)
         .and_then(|value| ExternalLinkBehavior::from_storage_value(&value));
+    let is_heading_panel_visible = storage
+        .get_string(STORAGE_KEY_HEADING_PANEL)
+        .and_then(|value| bool_from_storage_value(&value));
     let recent_files = storage
         .get_string(STORAGE_KEY_RECENT_FILES)
         .map(|value| recent_files_from_storage_value(&value));
@@ -101,6 +107,7 @@ pub fn restore_session(
         theme_id,
         zoom_factor,
         external_link_behavior,
+        is_heading_panel_visible,
         recent_files,
         current_file,
         unavailable_current_file,
@@ -120,6 +127,10 @@ pub fn save_session(storage: &mut dyn eframe::Storage, data: SessionSaveData<'_>
     storage.set_string(
         STORAGE_KEY_EXTERNAL_LINKS,
         data.external_link_behavior.storage_value().to_owned(),
+    );
+    storage.set_string(
+        STORAGE_KEY_HEADING_PANEL,
+        bool_storage_value(data.is_heading_panel_visible).to_owned(),
     );
 
     if let Some(path) = data.current_file {
@@ -157,10 +168,23 @@ impl RestoredSession {
             theme_id: None,
             zoom_factor: None,
             external_link_behavior: None,
+            is_heading_panel_visible: None,
             recent_files: None,
             current_file: None,
             unavailable_current_file: None,
         }
+    }
+}
+
+fn bool_storage_value(value: bool) -> &'static str {
+    if value { "true" } else { "false" }
+}
+
+fn bool_from_storage_value(value: &str) -> Option<bool> {
+    match value {
+        "true" => Some(true),
+        "false" => Some(false),
+        _ => None,
     }
 }
 

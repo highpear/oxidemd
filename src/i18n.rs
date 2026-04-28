@@ -14,11 +14,13 @@ pub enum TranslationKey {
     ActionCopyPath,
     ActionClearRecentFiles,
     ActionExportHtml,
+    ActionHideSections,
     ActionOpenExternalLink,
     ActionOpen,
     ActionSearchNext,
     ActionSearchPrevious,
     ActionSearchClear,
+    ActionShowSections,
     ActionResetZoom,
     ActionSwitchLanguage,
     ActionSwitchTheme,
@@ -113,6 +115,11 @@ const TRANSLATIONS: &[TranslationEntry] = &[
     ),
     entry(TranslationKey::ActionExportHtml, "HTML...", "HTML..."),
     entry(
+        TranslationKey::ActionHideSections,
+        "Hide Sections",
+        "見出しを隠す",
+    ),
+    entry(
         TranslationKey::ActionOpenExternalLink,
         "Open link",
         "リンクを開く",
@@ -125,6 +132,11 @@ const TRANSLATIONS: &[TranslationEntry] = &[
     entry(TranslationKey::ActionSearchNext, "Next", "次へ"),
     entry(TranslationKey::ActionSearchPrevious, "Previous", "前へ"),
     entry(TranslationKey::ActionSearchClear, "Clear", "クリア"),
+    entry(
+        TranslationKey::ActionShowSections,
+        "Show Sections",
+        "見出しを表示",
+    ),
     entry(TranslationKey::ActionResetZoom, "Reset", "リセット"),
     entry(
         TranslationKey::ActionSwitchLanguage,
