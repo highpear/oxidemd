@@ -25,6 +25,8 @@ pub enum TranslationKey {
     LabelCurrentFile,
     LabelExport,
     LabelExternalLinks,
+    LabelFile,
+    LabelHelp,
     LabelMath,
     LabelMermaid,
     LabelNoFile,
@@ -34,6 +36,7 @@ pub enum TranslationKey {
     LabelShortcut,
     LabelShortcutAction,
     LabelShortcuts,
+    LabelView,
     LabelZoom,
     MessageCopied,
     MessageDropMarkdown,
@@ -136,6 +139,8 @@ const TRANSLATIONS: &[TranslationEntry] = &[
     ),
     entry(TranslationKey::LabelExport, "Export", "エクスポート"),
     entry(TranslationKey::LabelExternalLinks, "Links:", "リンク:"),
+    entry(TranslationKey::LabelFile, "File", "ファイル"),
+    entry(TranslationKey::LabelHelp, "Help", "ヘルプ"),
     entry(TranslationKey::LabelMath, "Math", "数式"),
     entry(TranslationKey::LabelMermaid, "Mermaid", "Mermaid"),
     entry(
@@ -157,6 +162,7 @@ const TRANSLATIONS: &[TranslationEntry] = &[
         "Shortcuts",
         "ショートカット",
     ),
+    entry(TranslationKey::LabelView, "View", "表示"),
     entry(TranslationKey::LabelZoom, "Zoom:", "ズーム:"),
     entry(TranslationKey::MessageCopied, "Copied", "コピーしました"),
     entry(

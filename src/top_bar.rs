@@ -38,90 +38,114 @@ pub fn render_top_bar(ctx: &egui::Context, state: TopBarState<'_>) -> TopBarActi
 
     TopBottomPanel::top("top_bar").show(ctx, |ui| {
         ui.horizontal(|ui| {
-            if ui
-                .button(tr(state.language, TranslationKey::ActionOpen))
-                .clicked()
-            {
-                action.open_file = true;
-            }
+            ui.menu_button(tr(state.language, TranslationKey::LabelFile), |ui| {
+                if ui
+                    .button(tr(state.language, TranslationKey::ActionOpen))
+                    .clicked()
+                {
+                    action.open_file = true;
+                    ui.close();
+                }
 
-            ui.menu_button(tr(state.language, TranslationKey::LabelRecentFiles), |ui| {
-                if state.recent_files.is_empty() {
-                    ui.add_enabled(
-                        false,
-                        egui::Button::new(tr(state.language, TranslationKey::MessageNoRecentFiles)),
-                    );
-                } else {
-                    for path in state.recent_files.iter().cloned() {
-                        let label = recent_file_label(&path);
+                ui.menu_button(tr(state.language, TranslationKey::LabelRecentFiles), |ui| {
+                    if state.recent_files.is_empty() {
+                        ui.add_enabled(
+                            false,
+                            egui::Button::new(tr(
+                                state.language,
+                                TranslationKey::MessageNoRecentFiles,
+                            )),
+                        );
+                    } else {
+                        for path in state.recent_files.iter().cloned() {
+                            let label = recent_file_label(&path);
+                            if ui
+                                .button(label)
+                                .on_hover_text(path.display().to_string())
+                                .clicked()
+                            {
+                                action.open_recent_file = Some(path);
+                                ui.close();
+                            }
+                        }
+
+                        ui.separator();
                         if ui
-                            .button(label)
-                            .on_hover_text(path.display().to_string())
+                            .button(tr(state.language, TranslationKey::ActionClearRecentFiles))
                             .clicked()
                         {
-                            action.open_recent_file = Some(path);
+                            action.clear_recent_files = true;
                             ui.close();
                         }
                     }
+                });
 
-                    ui.separator();
+                ui.separator();
+                ui.add_enabled_ui(state.current_file.is_some(), |ui| {
+                    ui.menu_button(tr(state.language, TranslationKey::LabelExport), |ui| {
+                        if ui
+                            .button(tr(state.language, TranslationKey::ActionExportHtml))
+                            .clicked()
+                        {
+                            action.export_html = true;
+                            ui.close();
+                        }
+                    });
+
                     if ui
-                        .button(tr(state.language, TranslationKey::ActionClearRecentFiles))
+                        .button(tr(state.language, TranslationKey::ActionCopyPath))
                         .clicked()
                     {
-                        action.clear_recent_files = true;
-                        ui.close();
-                    }
-                }
-            });
-
-            ui.add_enabled_ui(state.current_file.is_some(), |ui| {
-                ui.menu_button(tr(state.language, TranslationKey::LabelExport), |ui| {
-                    if ui
-                        .button(tr(state.language, TranslationKey::ActionExportHtml))
-                        .clicked()
-                    {
-                        action.export_html = true;
+                        action.copy_path = true;
                         ui.close();
                     }
                 });
             });
 
-            if ui
-                .button(tr(state.language, TranslationKey::ActionSwitchLanguage))
-                .clicked()
-            {
-                action.switch_language = true;
-            }
+            ui.menu_button(tr(state.language, TranslationKey::LabelView), |ui| {
+                if ui
+                    .button(format!(
+                        "{} {}",
+                        tr(state.language, TranslationKey::ActionSwitchTheme),
+                        state.current_theme_label
+                    ))
+                    .clicked()
+                {
+                    action.switch_theme = true;
+                    ui.close();
+                }
 
-            if ui
-                .button(format!(
-                    "{} {}",
-                    tr(state.language, TranslationKey::ActionSwitchTheme),
-                    state.current_theme_label
-                ))
-                .clicked()
-            {
-                action.switch_theme = true;
-            }
+                if ui
+                    .button(format!(
+                        "{} {}",
+                        tr(state.language, TranslationKey::LabelExternalLinks),
+                        state.external_link_behavior.label(state.language)
+                    ))
+                    .clicked()
+                {
+                    action.switch_external_links = true;
+                    ui.close();
+                }
 
-            if ui
-                .button(format!(
-                    "{} {}",
-                    tr(state.language, TranslationKey::LabelExternalLinks),
-                    state.external_link_behavior.label(state.language)
-                ))
-                .clicked()
-            {
-                action.switch_external_links = true;
-            }
+                ui.separator();
+                if ui
+                    .button(tr(state.language, TranslationKey::ActionSwitchLanguage))
+                    .clicked()
+                {
+                    action.switch_language = true;
+                    ui.close();
+                }
+            });
 
-            if ui
-                .button(tr(state.language, TranslationKey::LabelShortcuts))
-                .clicked()
-            {
-                action.show_shortcuts_help = true;
-            }
+            ui.menu_button(tr(state.language, TranslationKey::LabelHelp), |ui| {
+                if ui
+                    .button(tr(state.language, TranslationKey::LabelShortcuts))
+                    .clicked()
+                {
+                    action.show_shortcuts_help = true;
+                    ui.close();
+                }
+            });
 
             ui.separator();
             let current_file_label = format!(
@@ -136,16 +160,6 @@ pub fn render_top_bar(ctx: &egui::Context, state: TopBarState<'_>) -> TopBarActi
 
             if let Some(path) = state.current_file {
                 file_label_response.on_hover_text(path.display().to_string());
-            }
-
-            if ui
-                .add_enabled(
-                    state.current_file.is_some(),
-                    egui::Button::new(tr(state.language, TranslationKey::ActionCopyPath)),
-                )
-                .clicked()
-            {
-                action.copy_path = true;
             }
 
             ui.separator();
