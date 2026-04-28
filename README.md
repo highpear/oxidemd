@@ -139,6 +139,12 @@ Open a Markdown file in the viewer:
 oxidemd path\to\file.md
 ```
 
+Start without reopening the previous file:
+
+```powershell
+oxidemd --no-restore-file
+```
+
 Export Markdown as a standalone HTML file without opening the GUI:
 
 ```powershell

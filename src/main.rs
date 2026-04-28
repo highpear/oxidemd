@@ -48,12 +48,12 @@ fn main() -> ExitCode {
         }
     };
 
-    let initial_file = match run_cli_action(action) {
-        Ok(initial_file) => initial_file,
+    let launch_options = match run_cli_action(action) {
+        Ok(launch_options) => launch_options,
         Err(code) => return ExitCode::from(code as u8),
     };
 
-    match run_gui(initial_file) {
+    match run_gui(launch_options) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("Failed to start OxideMD: {}", error);
@@ -62,7 +62,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn run_gui(initial_file: Option<PathBuf>) -> eframe::Result<()> {
+fn run_gui(launch_options: cli::GuiLaunchOptions) -> eframe::Result<()> {
     let startup_started = Instant::now();
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -82,7 +82,8 @@ fn run_gui(initial_file: Option<PathBuf>) -> eframe::Result<()> {
                 cc.egui_ctx.clone(),
                 cc.storage,
                 startup_started,
-                initial_file,
+                launch_options.initial_file,
+                launch_options.restore_file,
             )))
         }),
     )

@@ -5,10 +5,21 @@ use crate::export::write_html_export;
 
 #[derive(Debug)]
 pub enum CliAction {
-    RunGui { initial_file: Option<PathBuf> },
+    RunGui {
+        initial_file: Option<PathBuf>,
+        restore_file: bool,
+    },
     PrintHelp,
     PrintVersion,
-    ExportHtml { input: PathBuf, output: PathBuf },
+    ExportHtml {
+        input: PathBuf,
+        output: PathBuf,
+    },
+}
+
+pub struct GuiLaunchOptions {
+    pub initial_file: Option<PathBuf>,
+    pub restore_file: bool,
 }
 
 pub fn parse_args<I>(args: I) -> Result<CliAction, String>
@@ -18,12 +29,27 @@ where
     let args = args.into_iter().collect::<Vec<_>>();
 
     match args.as_slice() {
-        [] => Ok(CliAction::RunGui { initial_file: None }),
+        [] => Ok(CliAction::RunGui {
+            initial_file: None,
+            restore_file: true,
+        }),
         [flag] if flag == OsStr::new("--help") || flag == OsStr::new("-h") => {
             Ok(CliAction::PrintHelp)
         }
         [flag] if flag == OsStr::new("--version") || flag == OsStr::new("-V") => {
             Ok(CliAction::PrintVersion)
+        }
+        [flag] if flag == OsStr::new("--no-restore-file") => Ok(CliAction::RunGui {
+            initial_file: None,
+            restore_file: false,
+        }),
+        [flag, initial_file]
+            if flag == OsStr::new("--no-restore-file") && !looks_like_flag(initial_file) =>
+        {
+            Ok(CliAction::RunGui {
+                initial_file: Some(PathBuf::from(initial_file)),
+                restore_file: false,
+            })
         }
         [flag, input, output] if flag == OsStr::new("--export-html") => {
             Ok(CliAction::ExportHtml {
@@ -31,9 +57,12 @@ where
                 output: PathBuf::from(output),
             })
         }
-        [initial_file] if !looks_like_flag(initial_file) => Ok(CliAction::RunGui {
-            initial_file: Some(PathBuf::from(initial_file)),
-        }),
+        [initial_file] if !looks_like_flag(initial_file) => {
+            Ok(CliAction::RunGui {
+                initial_file: Some(PathBuf::from(initial_file)),
+                restore_file: true,
+            })
+        }
         [flag] if flag == OsStr::new("--export-html") => Err(
             "Missing arguments for --export-html. Usage: oxidemd --export-html <input.md> <output.html>"
                 .to_owned(),
@@ -46,9 +75,15 @@ where
     }
 }
 
-pub fn run_cli_action(action: CliAction) -> Result<Option<PathBuf>, i32> {
+pub fn run_cli_action(action: CliAction) -> Result<GuiLaunchOptions, i32> {
     match action {
-        CliAction::RunGui { initial_file } => Ok(initial_file),
+        CliAction::RunGui {
+            initial_file,
+            restore_file,
+        } => Ok(GuiLaunchOptions {
+            initial_file,
+            restore_file,
+        }),
         CliAction::PrintHelp => {
             println!("{}", help_text());
             Err(0)
@@ -82,10 +117,12 @@ fn help_text() -> &'static str {
         "OxideMD\n\n",
         "Usage:\n",
         "  oxidemd [file.md]\n",
+        "  oxidemd --no-restore-file [file.md]\n",
         "  oxidemd --export-html <input.md> <output.html>\n",
         "  oxidemd --help\n",
         "  oxidemd --version\n\n",
         "Options:\n",
+        "  --no-restore-file  Start without reopening the previous file.\n",
         "  --export-html    Export a Markdown file as HTML without opening the GUI.\n",
         "  -h, --help       Show this help text.\n",
         "  -V, --version    Show the OxideMD version.\n"
@@ -106,7 +143,13 @@ mod tests {
     fn parses_gui_without_file() {
         let action = parse_args(args(&[])).expect("args should parse");
 
-        assert!(matches!(action, CliAction::RunGui { initial_file: None }));
+        assert!(matches!(
+            action,
+            CliAction::RunGui {
+                initial_file: None,
+                restore_file: true
+            }
+        ));
     }
 
     #[test]
@@ -114,7 +157,30 @@ mod tests {
         let action = parse_args(args(&["sample.md"])).expect("args should parse");
 
         assert!(
-            matches!(action, CliAction::RunGui { initial_file: Some(path) } if path == PathBuf::from("sample.md"))
+            matches!(action, CliAction::RunGui { initial_file: Some(path), restore_file: true } if path == PathBuf::from("sample.md"))
+        );
+    }
+
+    #[test]
+    fn parses_gui_without_restored_file() {
+        let action = parse_args(args(&["--no-restore-file"])).expect("args should parse");
+
+        assert!(matches!(
+            action,
+            CliAction::RunGui {
+                initial_file: None,
+                restore_file: false
+            }
+        ));
+    }
+
+    #[test]
+    fn parses_gui_with_file_without_restored_file() {
+        let action =
+            parse_args(args(&["--no-restore-file", "sample.md"])).expect("args should parse");
+
+        assert!(
+            matches!(action, CliAction::RunGui { initial_file: Some(path), restore_file: false } if path == PathBuf::from("sample.md"))
         );
     }
 
