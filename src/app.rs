@@ -27,7 +27,7 @@ use crate::session::{
     restore_session as restore_saved_session, save_session,
 };
 use crate::shortcuts::{consume_shortcuts, render_shortcuts_help};
-use crate::theme::{DEFAULT_THEME_ID, ThemeId, apply_theme, available_themes, theme};
+use crate::theme::{DEFAULT_THEME_ID, Theme, ThemeId, apply_theme, available_themes, theme};
 use crate::top_bar::{TopBarState, render_top_bar};
 use crate::watcher::{FileWatchEvent, FileWatcherHandle, watch_file};
 
@@ -141,6 +141,8 @@ const HEADING_NAV_ITEM_INDENT: f32 = 10.0;
 const PREVIEW_WINDOW_SIDE_PADDING: f32 = 32.0;
 const PREVIEW_WINDOW_FALLBACK_HEIGHT: f32 = 720.0;
 const PREVIEW_WINDOW_MONITOR_MARGIN: f32 = 80.0;
+const HOME_PANEL_MAX_WIDTH: f32 = 520.0;
+const HOME_RECENT_FILE_LIMIT: usize = 6;
 pub struct OxideMdApp {
     ui_context: egui::Context,
     language: Language,
@@ -181,6 +183,7 @@ impl OxideMdApp {
         storage: Option<&dyn eframe::Storage>,
         startup_started: Instant,
         initial_file: Option<PathBuf>,
+        restore_file: bool,
     ) -> Self {
         let language = Language::En;
         debug_assert!(available_themes().contains(&DEFAULT_THEME_ID));
@@ -219,7 +222,7 @@ impl OxideMdApp {
             startup_started: Some(startup_started),
         };
 
-        let restored_file = app.restore_session(storage);
+        let restored_file = app.restore_session(storage, restore_file);
         apply_theme(&app.ui_context, &theme(app.theme_id));
 
         if let Some(path) = initial_file.or(restored_file) {
@@ -229,7 +232,11 @@ impl OxideMdApp {
         app
     }
 
-    fn restore_session(&mut self, storage: Option<&dyn eframe::Storage>) -> Option<PathBuf> {
+    fn restore_session(
+        &mut self,
+        storage: Option<&dyn eframe::Storage>,
+        restore_file: bool,
+    ) -> Option<PathBuf> {
         let restored = restore_saved_session(storage, MIN_ZOOM_FACTOR, MAX_ZOOM_FACTOR);
 
         if let Some(language) = restored.language {
@@ -256,14 +263,14 @@ impl OxideMdApp {
             self.recent_files = recent_files;
         }
 
-        if let Some(path) = restored.unavailable_current_file {
+        if restore_file && let Some(path) = restored.unavailable_current_file {
             self.set_reload_error(
                 TranslationKey::StatusLastFileUnavailable,
                 path.display().to_string(),
             );
         }
 
-        restored.current_file
+        restore_file.then_some(restored.current_file).flatten()
     }
 
     fn load_initial_file(&mut self, path: PathBuf) {
@@ -1026,21 +1033,9 @@ impl OxideMdApp {
 
         CentralPanel::default().show(ctx, |ui| {
             let Some(document) = self.document.clone() else {
-                ui.vertical_centered(|ui| {
-                    ui.add_space(48.0);
-                    ui.label(
-                        RichText::new(tr(self.language, TranslationKey::MessageEmpty)).heading(),
-                    );
-                    ui.add_space(12.0);
-                    ui.label(tr(self.language, TranslationKey::MessageOpenPrompt));
-                    ui.add_space(16.0);
-                    if ui
-                        .button(tr(self.language, TranslationKey::ActionOpen))
-                        .clicked()
-                    {
-                        self.open_markdown_file();
-                    }
-                });
+                if let Some(path) = self.render_home_panel(ui, &theme) {
+                    self.open_recent_file(path);
+                }
                 return;
             };
             let active_search_block = self.active_search_block();
@@ -1186,6 +1181,71 @@ impl OxideMdApp {
         });
     }
 
+    fn render_home_panel(&mut self, ui: &mut egui::Ui, theme: &Theme) -> Option<PathBuf> {
+        let mut selected_recent_file = None;
+
+        ui.vertical_centered(|ui| {
+            ui.add_space(48.0);
+
+            let panel_width = ui.available_width().min(HOME_PANEL_MAX_WIDTH);
+            Frame::new()
+                .fill(theme.content_background)
+                .stroke(egui::Stroke::new(1.0, theme.content_border))
+                .corner_radius(egui::CornerRadius::same(10))
+                .inner_margin(Margin::symmetric(24, 22))
+                .show(ui, |ui| {
+                    ui.set_width(panel_width);
+                    ui.heading(tr(self.language, TranslationKey::LabelStart));
+                    ui.add_space(8.0);
+                    ui.label(
+                        RichText::new(tr(self.language, TranslationKey::MessageRecentFilesPrompt))
+                            .color(theme.text_secondary),
+                    );
+
+                    ui.add_space(16.0);
+                    if ui
+                        .button(tr(self.language, TranslationKey::ActionOpen))
+                        .clicked()
+                    {
+                        self.open_markdown_file();
+                    }
+
+                    ui.add_space(18.0);
+                    ui.separator();
+                    ui.add_space(12.0);
+                    ui.strong(tr(self.language, TranslationKey::LabelRecentFiles));
+                    ui.add_space(8.0);
+
+                    if self.recent_files.is_empty() {
+                        ui.label(
+                            RichText::new(tr(self.language, TranslationKey::MessageNoRecentFiles))
+                                .color(theme.text_secondary),
+                        );
+                    } else {
+                        for path in self.recent_files.iter().take(HOME_RECENT_FILE_LIMIT) {
+                            let label = home_recent_file_label(path);
+                            let response = ui.add_sized(
+                                [ui.available_width(), ui.spacing().interact_size.y],
+                                egui::Button::new(label).truncate(),
+                            );
+
+                            if response.on_hover_text(path.display().to_string()).clicked() {
+                                selected_recent_file = Some(path.clone());
+                            }
+                        }
+                    }
+
+                    ui.add_space(12.0);
+                    ui.label(
+                        RichText::new(tr(self.language, TranslationKey::MessageDropMarkdown))
+                            .color(theme.text_secondary),
+                    );
+                });
+        });
+
+        selected_recent_file
+    }
+
     fn render_drop_overlay(&self, ctx: &egui::Context) {
         let is_dragging_file = ctx.input(|input| !input.raw.hovered_files.is_empty());
         if !is_dragging_file {
@@ -1275,6 +1335,19 @@ fn status_path_label(path: &Path) -> String {
         .and_then(|name| name.to_str())
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| path.display().to_string())
+}
+
+fn home_recent_file_label(path: &Path) -> String {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| path.display().to_string());
+    let Some(parent) = path.parent().and_then(|parent| parent.to_str()) else {
+        return file_name;
+    };
+
+    format!("{file_name}  {parent}")
 }
 
 fn export_file_name(path: &Path) -> String {

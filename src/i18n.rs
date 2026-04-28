@@ -35,6 +35,7 @@ pub enum TranslationKey {
     LabelRecentFiles,
     LabelSearch,
     LabelSearchResults,
+    LabelStart,
     LabelShortcut,
     LabelShortcutAction,
     LabelShortcuts,
@@ -51,6 +52,7 @@ pub enum TranslationKey {
     MessageOpenPrompt,
     MessageNoRecentFiles,
     MessageRecentFileUnavailable,
+    MessageRecentFilesPrompt,
     MessageSearchNoResults,
     NavJumpToHeading,
     NavNoSections,
@@ -167,6 +169,7 @@ const TRANSLATIONS: &[TranslationEntry] = &[
     ),
     entry(TranslationKey::LabelSearch, "Search:", "検索:"),
     entry(TranslationKey::LabelSearchResults, "Matches:", "一致:"),
+    entry(TranslationKey::LabelStart, "Start", "開始"),
     entry(TranslationKey::LabelShortcut, "Shortcut", "ショートカット"),
     entry(TranslationKey::LabelShortcutAction, "Action", "操作"),
     entry(
@@ -226,6 +229,11 @@ const TRANSLATIONS: &[TranslationEntry] = &[
         TranslationKey::MessageRecentFileUnavailable,
         "Recent file is unavailable:",
         "最近使ったファイルを開けません:",
+    ),
+    entry(
+        TranslationKey::MessageRecentFilesPrompt,
+        "Open a recent file or choose a Markdown file.",
+        "最近使ったファイルを開くか、Markdownファイルを選択します。",
     ),
     entry(
         TranslationKey::MessageSearchNoResults,
