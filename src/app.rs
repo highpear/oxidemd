@@ -305,20 +305,16 @@ impl OxideMdApp {
         self.theme_id = self.theme_id.next();
     }
 
+    fn select_theme(&mut self, theme_id: ThemeId) {
+        self.theme_id = theme_id;
+    }
+
     fn switch_external_link_behavior(&mut self) {
         self.external_link_behavior = self.external_link_behavior.next();
     }
 
     fn toggle_heading_panel(&mut self) {
         self.is_heading_panel_visible = !self.is_heading_panel_visible;
-    }
-
-    fn current_theme_label(&self) -> &'static str {
-        match self.theme_id {
-            ThemeId::WarmPaper => tr(self.language, TranslationKey::ThemeWarmPaper),
-            ThemeId::Mist => tr(self.language, TranslationKey::ThemeMist),
-            ThemeId::NightOwl => tr(self.language, TranslationKey::ThemeNightOwl),
-        }
     }
 
     fn zoom_in(&mut self) {
@@ -848,13 +844,24 @@ impl OxideMdApp {
             ReloadStatus::Reloading => (theme.status_loading_background, theme.status_loading_text),
             ReloadStatus::Error => (theme.status_error_background, theme.status_error_text),
         };
-        let current_theme_label = self.current_theme_label();
+        let theme_options = [
+            (
+                ThemeId::WarmPaper,
+                tr(self.language, TranslationKey::ThemeWarmPaper),
+            ),
+            (ThemeId::Mist, tr(self.language, TranslationKey::ThemeMist)),
+            (
+                ThemeId::NightOwl,
+                tr(self.language, TranslationKey::ThemeNightOwl),
+            ),
+        ];
 
         let action = render_top_bar(
             ctx,
             TopBarState {
                 language: self.language,
-                current_theme_label,
+                current_theme_id: self.theme_id,
+                theme_options: &theme_options,
                 external_link_behavior: self.external_link_behavior,
                 is_heading_panel_visible: self.is_heading_panel_visible,
                 current_file: self.current_file.as_deref(),
@@ -885,8 +892,8 @@ impl OxideMdApp {
             self.switch_language();
         }
 
-        if action.switch_theme {
-            self.switch_theme();
+        if let Some(theme_id) = action.select_theme {
+            self.select_theme(theme_id);
         }
 
         if action.switch_external_links {
