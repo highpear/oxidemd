@@ -31,8 +31,6 @@ pub struct TopBarState<'a> {
     pub reload_status_label: &'a str,
     pub reload_status_background: Color32,
     pub reload_status_text: Color32,
-    pub status_message: &'a str,
-    pub status_hover_message: Option<&'a str>,
 }
 
 pub fn render_top_bar(ctx: &egui::Context, state: TopBarState<'_>) -> TopBarAction {
@@ -190,11 +188,6 @@ pub fn render_top_bar(ctx: &egui::Context, state: TopBarState<'_>) -> TopBarActi
                     );
                 });
         });
-
-        let status_response = ui.add(egui::Label::new(state.status_message).truncate());
-        if let Some(message) = state.status_hover_message {
-            status_response.on_hover_text(message);
-        }
     });
 
     action

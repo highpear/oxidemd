@@ -11,24 +11,33 @@ pub struct BottomBarAction {
     pub reset_zoom: bool,
 }
 
-pub struct BottomBarState {
+pub struct BottomBarState<'a> {
     pub language: Language,
     pub zoom_factor: f32,
     pub min_zoom_factor: f32,
     pub max_zoom_factor: f32,
     pub zoom_step: f32,
+    pub status_message: &'a str,
+    pub status_hover_message: Option<&'a str>,
 }
 
 pub fn render_bottom_bar(
     ctx: &egui::Context,
-    state: BottomBarState,
+    state: BottomBarState<'_>,
     zoom_factor: &mut f32,
 ) -> BottomBarAction {
     let mut action = BottomBarAction::default();
 
     TopBottomPanel::bottom("bottom_bar").show(ctx, |ui| {
         ui.horizontal(|ui| {
-            ui.label(zoom_label(state.language, state.zoom_factor));
+            let status_response = ui.add(
+                egui::Label::new(state.status_message)
+                    .truncate()
+                    .sense(egui::Sense::hover()),
+            );
+            if let Some(message) = state.status_hover_message {
+                status_response.on_hover_text(message);
+            }
 
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if ui
@@ -71,12 +80,4 @@ pub fn render_bottom_bar(
     });
 
     action
-}
-
-fn zoom_label(language: Language, zoom_factor: f32) -> String {
-    format!(
-        "{} {}%",
-        tr(language, TranslationKey::LabelZoom),
-        (zoom_factor * 100.0).round()
-    )
 }
