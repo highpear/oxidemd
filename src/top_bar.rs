@@ -16,6 +16,7 @@ pub struct TopBarAction {
     pub switch_language: bool,
     pub switch_theme: bool,
     pub switch_external_links: bool,
+    pub toggle_heading_panel: bool,
     pub show_shortcuts_help: bool,
     pub copy_path: bool,
 }
@@ -24,6 +25,7 @@ pub struct TopBarState<'a> {
     pub language: Language,
     pub current_theme_label: &'a str,
     pub external_link_behavior: ExternalLinkBehavior,
+    pub is_heading_panel_visible: bool,
     pub current_file: Option<&'a Path>,
     pub recent_files: &'a [PathBuf],
     pub reload_status_label: &'a str,
@@ -128,6 +130,19 @@ pub fn render_top_bar(ctx: &egui::Context, state: TopBarState<'_>) -> TopBarActi
                 }
 
                 ui.separator();
+                let heading_panel_action = if state.is_heading_panel_visible {
+                    TranslationKey::ActionHideSections
+                } else {
+                    TranslationKey::ActionShowSections
+                };
+                if ui
+                    .button(tr(state.language, heading_panel_action))
+                    .clicked()
+                {
+                    action.toggle_heading_panel = true;
+                    ui.close();
+                }
+
                 if ui
                     .button(tr(state.language, TranslationKey::ActionSwitchLanguage))
                     .clicked()

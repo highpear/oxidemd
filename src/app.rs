@@ -166,6 +166,7 @@ pub struct OxideMdApp {
     active_heading: Option<usize>,
     selected_heading: Option<usize>,
     search: SearchState,
+    is_heading_panel_visible: bool,
     show_shortcuts_help: bool,
     external_link_behavior: ExternalLinkBehavior,
     pending_external_link: Option<String>,
@@ -209,6 +210,7 @@ impl OxideMdApp {
             active_heading: None,
             selected_heading: None,
             search: SearchState::new(),
+            is_heading_panel_visible: true,
             show_shortcuts_help: false,
             external_link_behavior: ExternalLinkBehavior::AskFirst,
             pending_external_link: None,
@@ -244,6 +246,10 @@ impl OxideMdApp {
 
         if let Some(external_link_behavior) = restored.external_link_behavior {
             self.external_link_behavior = external_link_behavior;
+        }
+
+        if let Some(is_heading_panel_visible) = restored.is_heading_panel_visible {
+            self.is_heading_panel_visible = is_heading_panel_visible;
         }
 
         if let Some(recent_files) = restored.recent_files {
@@ -289,6 +295,10 @@ impl OxideMdApp {
 
     fn switch_external_link_behavior(&mut self) {
         self.external_link_behavior = self.external_link_behavior.next();
+    }
+
+    fn toggle_heading_panel(&mut self) {
+        self.is_heading_panel_visible = !self.is_heading_panel_visible;
     }
 
     fn current_theme_label(&self) -> &'static str {
@@ -745,6 +755,7 @@ impl OxideMdApp {
         }
 
         if shortcuts.focus_search {
+            self.is_heading_panel_visible = true;
             self.search.focus_input = true;
         }
 
@@ -833,6 +844,7 @@ impl OxideMdApp {
                 language: self.language,
                 current_theme_label,
                 external_link_behavior: self.external_link_behavior,
+                is_heading_panel_visible: self.is_heading_panel_visible,
                 current_file: self.current_file.as_deref(),
                 recent_files: &self.recent_files,
                 reload_status_label: self.reload_status_label(),
@@ -871,6 +883,10 @@ impl OxideMdApp {
             self.switch_external_link_behavior();
         }
 
+        if action.toggle_heading_panel {
+            self.toggle_heading_panel();
+        }
+
         if action.show_shortcuts_help {
             self.show_shortcuts_help = true;
         }
@@ -907,6 +923,10 @@ impl OxideMdApp {
     }
 
     fn render_heading_panel(&mut self, ctx: &egui::Context) {
+        if !self.is_heading_panel_visible {
+            return;
+        }
+
         let mut clicked_heading = None;
 
         SidePanel::left("heading_navigation")
@@ -1219,6 +1239,7 @@ impl eframe::App for OxideMdApp {
                 theme_id: self.theme_id,
                 zoom_factor: self.zoom_factor,
                 external_link_behavior: self.external_link_behavior,
+                is_heading_panel_visible: self.is_heading_panel_visible,
                 current_file: self.current_file.as_deref(),
                 recent_files: &self.recent_files,
             },
