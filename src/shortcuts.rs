@@ -134,9 +134,12 @@ fn shortcuts_help_items(language: Language) -> [(&'static str, &'static str); 11
         ),
         (
             tr(language, TranslationKey::ShortcutZoomIn),
-            "Ctrl++ / Ctrl+=",
+            "Ctrl++ / Ctrl+= / Ctrl+Wheel up",
         ),
-        (tr(language, TranslationKey::ShortcutZoomOut), "Ctrl+-"),
+        (
+            tr(language, TranslationKey::ShortcutZoomOut),
+            "Ctrl+- / Ctrl+Wheel down",
+        ),
         (tr(language, TranslationKey::ShortcutResetZoom), "Ctrl+0"),
         (tr(language, TranslationKey::ShortcutShowHelp), "F1"),
     ]
