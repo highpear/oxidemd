@@ -18,7 +18,6 @@ use crate::metrics;
 use crate::parser::MarkdownDocument;
 use crate::reload_worker::{ReloadResponse, ReloadWorkerHandle, spawn_reload_worker};
 use crate::renderer::render_markdown_document;
-use crate::search::SearchState;
 use crate::search_panel::{render_search_controls, render_search_results};
 use crate::session::{
     ExternalLinkBehavior, SessionSaveData, is_markdown_path, remember_recent_file,
@@ -88,10 +87,6 @@ pub struct OxideMdApp {
     pending_reload_at: Option<Instant>,
     queued_reload_id: u64,
     in_flight_reload_id: Option<u64>,
-    pending_block_scroll: Option<usize>,
-    active_heading: Option<usize>,
-    selected_heading: Option<usize>,
-    search: SearchState,
     is_heading_panel_visible: bool,
     show_shortcuts_help: bool,
     external_link_behavior: ExternalLinkBehavior,
@@ -127,10 +122,6 @@ impl OxideMdApp {
             pending_reload_at: None,
             queued_reload_id: 0,
             in_flight_reload_id: None,
-            pending_block_scroll: None,
-            active_heading: None,
-            selected_heading: None,
-            search: SearchState::new(),
             is_heading_panel_visible: true,
             show_shortcuts_help: false,
             external_link_behavior: ExternalLinkBehavior::AskFirst,
@@ -355,8 +346,6 @@ impl OxideMdApp {
     fn load_selected_file(&mut self, path: PathBuf) {
         match load_markdown_document(&path) {
             Ok(loaded) => {
-                let document = Arc::clone(&loaded.document);
-                let active_heading = document.headings().first().map(|item| item.block_index);
                 remember_recent_file(&mut self.recent_files, &path);
                 self.document_session = Some(DocumentSession::new(
                     path.clone(),
@@ -367,10 +356,6 @@ impl OxideMdApp {
                 self.pending_reload_at = None;
                 self.in_flight_reload_id = None;
                 self.reload_status = ReloadStatus::Idle;
-                self.pending_block_scroll = None;
-                self.active_heading = active_heading;
-                self.selected_heading = None;
-                self.refresh_search_matches();
                 self.start_watching_file(&path);
                 self.pending_render_measurement = Some(PendingRenderMeasurement {
                     reason: RenderMeasurementReason::Load,
@@ -385,10 +370,6 @@ impl OxideMdApp {
                 self.watcher = None;
                 self.pending_reload_at = None;
                 self.in_flight_reload_id = None;
-                self.pending_block_scroll = None;
-                self.active_heading = None;
-                self.selected_heading = None;
-                self.search.clear_matches();
                 self.pending_render_measurement = None;
                 self.set_reload_error(TranslationKey::StatusLoadFailed, error);
             }
@@ -608,11 +589,7 @@ impl OxideMdApp {
         fingerprint: DocumentFingerprint,
         file_snapshot: Option<FileSnapshot>,
     ) {
-        let active_heading = document.headings().first().map(|item| item.block_index);
         self.in_flight_reload_id = None;
-        self.pending_block_scroll = None;
-        self.active_heading = active_heading;
-        self.selected_heading = None;
         if let Some(session) = self.document_session.as_mut() {
             session.path = path.clone();
             session.replace_document(document, fingerprint, file_snapshot);
@@ -624,7 +601,6 @@ impl OxideMdApp {
                 file_snapshot,
             ));
         }
-        self.refresh_search_matches();
         self.pending_render_measurement = Some(PendingRenderMeasurement {
             reason: RenderMeasurementReason::Reload,
             path: path.clone(),
@@ -692,7 +668,12 @@ impl OxideMdApp {
     }
 
     fn handle_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
-        let shortcuts = consume_shortcuts(ctx, self.search.has_matches());
+        let has_search_matches = self
+            .document_session
+            .as_ref()
+            .map(|session| session.search.has_matches())
+            .unwrap_or(false);
+        let shortcuts = consume_shortcuts(ctx, has_search_matches);
 
         if shortcuts.open_file {
             self.open_markdown_file();
@@ -700,7 +681,9 @@ impl OxideMdApp {
 
         if shortcuts.focus_search {
             self.is_heading_panel_visible = true;
-            self.search.focus_input = true;
+            if let Some(session) = self.document_session.as_mut() {
+                session.search.focus_input = true;
+            }
         }
 
         if shortcuts.show_shortcuts_help {
@@ -740,32 +723,15 @@ impl OxideMdApp {
         }
     }
 
-    fn refresh_search_matches(&mut self) {
-        let document = self
-            .document_session
-            .as_ref()
-            .map(|session| Arc::clone(&session.document));
-        self.search.refresh_matches(document.as_deref());
-    }
-
-    fn select_search_match(&mut self, index: usize) {
-        if let Some(block_index) = self.search.select_match(index) {
-            self.pending_block_scroll = Some(block_index);
-            self.selected_heading = None;
-        }
-    }
-
     fn select_next_search_match(&mut self) {
-        if let Some(block_index) = self.search.select_next() {
-            self.pending_block_scroll = Some(block_index);
-            self.selected_heading = None;
+        if let Some(session) = self.document_session.as_mut() {
+            session.select_next_search_match();
         }
     }
 
     fn select_previous_search_match(&mut self) {
-        if let Some(block_index) = self.search.select_previous() {
-            self.pending_block_scroll = Some(block_index);
-            self.selected_heading = None;
+        if let Some(session) = self.document_session.as_mut() {
+            session.select_previous_search_match();
         }
     }
 
@@ -778,7 +744,9 @@ impl OxideMdApp {
         });
 
         if scroll_delta_y.abs() > f32::EPSILON && !is_zoom_scroll {
-            self.selected_heading = None;
+            if let Some(session) = self.document_session.as_mut() {
+                session.clear_selected_heading();
+            }
         }
     }
 
@@ -891,6 +859,23 @@ impl OxideMdApp {
             return;
         }
 
+        let language = self.language;
+        let theme_id = self.theme_id;
+        let Some(mut session) = self.document_session.take() else {
+            SidePanel::left("heading_navigation")
+                .resizable(true)
+                .default_width(HEADING_PANEL_DEFAULT_WIDTH)
+                .width_range(HEADING_PANEL_MIN_WIDTH..=HEADING_PANEL_MAX_WIDTH)
+                .show(ctx, |ui| {
+                    ui.heading(tr(language, TranslationKey::NavSections));
+                    ui.add_space(8.0);
+                    ui.label(
+                        RichText::new(tr(language, TranslationKey::NavNoSections))
+                            .color(theme(theme_id).text_secondary),
+                    );
+                });
+            return;
+        };
         let mut clicked_heading = None;
 
         SidePanel::left("heading_navigation")
@@ -898,47 +883,43 @@ impl OxideMdApp {
             .default_width(HEADING_PANEL_DEFAULT_WIDTH)
             .width_range(HEADING_PANEL_MIN_WIDTH..=HEADING_PANEL_MAX_WIDTH)
             .show(ctx, |ui| {
-                let search_action = render_search_controls(ui, self.language, &mut self.search);
+                let search_action = render_search_controls(ui, language, &mut session.search);
                 if search_action.query_changed {
-                    self.refresh_search_matches();
+                    session.refresh_search_matches();
 
-                    if self.search.has_matches() {
-                        self.select_search_match(0);
+                    if session.search.has_matches() {
+                        session.select_search_match(0);
                     }
                 }
 
                 if search_action.select_previous {
-                    self.select_previous_search_match();
+                    session.select_previous_search_match();
                 }
 
                 if search_action.select_next {
-                    self.select_next_search_match();
+                    session.select_next_search_match();
                 }
 
-                if let Some(index) = render_search_results(ui, self.language, &self.search) {
-                    self.select_search_match(index);
+                if let Some(index) = render_search_results(ui, language, &session.search) {
+                    session.select_search_match(index);
                 }
 
                 ui.add_space(12.0);
                 ui.separator();
                 ui.add_space(8.0);
-                ui.heading(tr(self.language, TranslationKey::NavSections));
+                ui.heading(tr(language, TranslationKey::NavSections));
                 ui.add_space(8.0);
 
-                let Some(document) = self.document() else {
-                    return;
-                };
-
-                let headings = document.headings();
+                let headings = session.document.headings();
                 if headings.is_empty() {
                     ui.label(
-                        RichText::new(tr(self.language, TranslationKey::NavNoSections))
-                            .color(theme(self.theme_id).text_secondary),
+                        RichText::new(tr(language, TranslationKey::NavNoSections))
+                            .color(theme(theme_id).text_secondary),
                     );
                     return;
                 }
 
-                let highlighted_heading = self.selected_heading.or(self.active_heading);
+                let highlighted_heading = session.selected_heading.or(session.active_heading);
 
                 ScrollArea::vertical()
                     .id_salt("heading_navigation_scroll")
@@ -965,7 +946,7 @@ impl OxideMdApp {
                                     if response
                                         .on_hover_text(format!(
                                             "{}\n{}",
-                                            tr(self.language, TranslationKey::NavJumpToHeading),
+                                            tr(language, TranslationKey::NavJumpToHeading),
                                             item.title
                                         ))
                                         .clicked()
@@ -979,10 +960,10 @@ impl OxideMdApp {
             });
 
         if let Some(block_index) = clicked_heading {
-            self.selected_heading = Some(block_index);
-            self.active_heading = Some(block_index);
-            self.pending_block_scroll = Some(block_index);
+            session.jump_to_heading(block_index);
         }
+
+        self.document_session = Some(session);
     }
 
     fn render_document_panel(&mut self, ctx: &egui::Context) {
@@ -997,9 +978,9 @@ impl OxideMdApp {
         };
         let document = Arc::clone(&session.document);
         let document_base_dir = session.base_dir().map(Path::to_path_buf);
-        let active_search_block = self.active_search_block();
-        let search_query = self.search.active_query().map(str::to_owned);
-        let pending_block_scroll = self.pending_block_scroll;
+        let active_search_block = session.search.active_block();
+        let search_query = session.search.active_query().map(str::to_owned);
+        let pending_block_scroll = session.pending_block_scroll;
         let language = self.language;
         let zoom_factor = self.zoom_factor;
         let external_link_behavior = self.external_link_behavior;
@@ -1108,16 +1089,14 @@ impl OxideMdApp {
                 }
 
                 if let Some(active_heading) = render_outcome.active_heading {
-                    self.active_heading = Some(active_heading);
+                    session.active_heading = Some(active_heading);
                 }
 
                 if let Some(block_index) = render_outcome
                     .clicked_anchor
                     .and_then(|anchor| document.heading_block_for_anchor(&anchor))
                 {
-                    self.selected_heading = Some(block_index);
-                    self.active_heading = Some(block_index);
-                    self.pending_block_scroll = Some(block_index);
+                    session.jump_to_heading(block_index);
                     ctx.request_repaint();
                 }
 
@@ -1133,7 +1112,7 @@ impl OxideMdApp {
                 if render_outcome.needs_scroll_stabilization {
                     ctx.request_repaint();
                 } else if render_outcome.did_scroll {
-                    self.pending_block_scroll = None;
+                    session.pending_block_scroll = None;
                 }
 
                 let used_content_rect = document_ui.min_rect();
@@ -1256,20 +1235,10 @@ impl OxideMdApp {
             });
     }
 
-    fn active_search_block(&self) -> Option<usize> {
-        self.search.active_block()
-    }
-
     fn current_file(&self) -> Option<&Path> {
         self.document_session
             .as_ref()
             .map(|session| session.path.as_path())
-    }
-
-    fn document(&self) -> Option<&MarkdownDocument> {
-        self.document_session
-            .as_ref()
-            .map(|session| session.document.as_ref())
     }
 }
 
