@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 
 use eframe::egui::{self, Align, FontFamily, FontId, Frame, RichText, Stroke, Ui, WidgetText};
@@ -8,18 +8,27 @@ use crate::code_block::render_code_block;
 use crate::diagram::{DiagramRenderCache, PreparedDiagram};
 use crate::embedded_svg::{EmbeddedSourceAction, EmbeddedSvgContent, EmbeddedSvgContentKind};
 use crate::i18n::{Language, TranslationKey, tr};
-use crate::image_cache::{ImageCache, ImageLoadState};
+use crate::image_cache::ImageCache;
 use crate::math::{MathRenderCache, MathRenderMode, PreparedMath};
 use crate::parser::{Block, InlineContent, InlineSpan, MarkdownDocument};
 use crate::search::{for_each_highlighted_segment, text_matches_query};
 use crate::theme::Theme;
 
-const BODY_TEXT_SIZE: f32 = 17.0;
+mod image;
+mod sizing;
+
+pub use sizing::estimate_document_block_heights;
+
+use sizing::{estimate_block_height, scale_margin, scale_spacing};
+
+use image::render_image_span;
+
+pub(super) const BODY_TEXT_SIZE: f32 = 17.0;
 const QUOTE_TEXT_SIZE: f32 = 16.0;
 const INLINE_CODE_TEXT_SIZE: f32 = 15.0;
-const BLOCK_SPACING_PARAGRAPH: f32 = 18.0;
-const BLOCK_SPACING_SECTION: f32 = 24.0;
-const LIST_ITEM_SPACING: f32 = 8.0;
+pub(super) const BLOCK_SPACING_PARAGRAPH: f32 = 18.0;
+pub(super) const BLOCK_SPACING_SECTION: f32 = 24.0;
+pub(super) const LIST_ITEM_SPACING: f32 = 8.0;
 const TABLE_CELL_MIN_WIDTH: f32 = 120.0;
 const MATH_BLOCK_PADDING_X: i8 = 18;
 const MATH_BLOCK_PADDING_Y: i8 = 16;
@@ -32,7 +41,7 @@ const INLINE_MATH_PLACEHOLDER_MIN_WIDTH: f32 = 28.0;
 const BLOCK_MATH_PLACEHOLDER_MIN_HEIGHT: f32 = 42.0;
 const LARGE_DOCUMENT_BLOCK_THRESHOLD: usize = 2_000;
 const VIRTUAL_RENDER_OVERSCAN: f32 = 1_200.0;
-const ESTIMATED_CHARS_PER_LINE: usize = 90;
+pub(super) const ESTIMATED_CHARS_PER_LINE: usize = 90;
 const COPY_FEEDBACK_DURATION_SECONDS: f64 = 1.2;
 const EMBEDDED_COPY_FEEDBACK_SLOT_WIDTH: f32 = 88.0;
 const DIAGRAM_BLOCK_MIN_SCALE: f32 = 0.9;
@@ -252,14 +261,6 @@ pub fn render_markdown_document(
     }
 }
 
-pub fn estimate_document_block_heights(document: &MarkdownDocument, zoom_factor: f32) -> Vec<f32> {
-    document
-        .blocks
-        .iter()
-        .map(|block| estimate_block_height(block, zoom_factor))
-        .collect()
-}
-
 fn should_skip_block(
     block_count: usize,
     scroll_to_block: Option<usize>,
@@ -275,98 +276,6 @@ fn should_skip_block(
 
     block_bottom < viewport_top - VIRTUAL_RENDER_OVERSCAN
         || block_top > viewport_bottom + VIRTUAL_RENDER_OVERSCAN
-}
-
-fn estimate_block_height(block: &Block, zoom_factor: f32) -> f32 {
-    match block {
-        Block::Heading { level, content } => {
-            let size = match level {
-                HeadingLevel::H1 => 31.0,
-                HeadingLevel::H2 => 26.0,
-                HeadingLevel::H3 => 22.0,
-                HeadingLevel::H4 => 19.0,
-                HeadingLevel::H5 => 17.0,
-                HeadingLevel::H6 => 16.0,
-            };
-            estimate_inline_height(content, size, zoom_factor)
-                + scale_spacing(BLOCK_SPACING_SECTION, zoom_factor)
-        }
-        Block::Paragraph(content) => {
-            estimate_inline_height(content, BODY_TEXT_SIZE, zoom_factor)
-                + scale_spacing(BLOCK_SPACING_PARAGRAPH, zoom_factor)
-        }
-        Block::UnorderedList(items) | Block::BlockQuote(items) => {
-            estimate_inline_items_height(items, BODY_TEXT_SIZE, zoom_factor)
-                + scale_spacing(BLOCK_SPACING_SECTION, zoom_factor)
-        }
-        Block::OrderedList { items, .. } => {
-            estimate_inline_items_height(items, BODY_TEXT_SIZE, zoom_factor)
-                + scale_spacing(BLOCK_SPACING_SECTION, zoom_factor)
-        }
-        Block::CodeBlock { code, .. } => {
-            let line_count = code.lines().count().max(1) as f32;
-            line_count * scale_spacing(20.0, zoom_factor) + scale_spacing(42.0, zoom_factor)
-        }
-        Block::DiagramBlock { source, .. } => {
-            let line_count = source.lines().count().max(1) as f32;
-            line_count * scale_spacing(20.0, zoom_factor) + scale_spacing(72.0, zoom_factor)
-        }
-        Block::MathBlock { expression } => {
-            let line_count = expression.lines().count().max(1) as f32;
-            line_count * scale_spacing(22.0, zoom_factor) + scale_spacing(58.0, zoom_factor)
-        }
-        Block::Table { headers, rows, .. } => {
-            let row_count = rows.len() + usize::from(!headers.is_empty());
-            row_count.max(1) as f32 * scale_spacing(34.0, zoom_factor)
-                + scale_spacing(BLOCK_SPACING_SECTION + 18.0, zoom_factor)
-        }
-    }
-}
-
-fn estimate_inline_items_height(items: &[InlineContent], text_size: f32, zoom_factor: f32) -> f32 {
-    items
-        .iter()
-        .map(|item| {
-            estimate_inline_height(item, text_size, zoom_factor)
-                + scale_spacing(LIST_ITEM_SPACING, zoom_factor)
-        })
-        .sum()
-}
-
-fn estimate_inline_height(content: &InlineContent, text_size: f32, zoom_factor: f32) -> f32 {
-    let lines = estimate_inline_line_count(content) as f32;
-    lines * text_size * zoom_factor * 1.45
-}
-
-fn estimate_inline_line_count(content: &InlineContent) -> usize {
-    let mut line_count = 1usize;
-    let mut line_len = 0usize;
-
-    for span in &content.spans {
-        match span {
-            InlineSpan::Text(text)
-            | InlineSpan::Strong(text)
-            | InlineSpan::Emphasis(text)
-            | InlineSpan::Code(text)
-            | InlineSpan::Math(text) => {
-                line_len += text.len();
-            }
-            InlineSpan::Link { text, .. } | InlineSpan::Image { alt: text, .. } => {
-                line_len += text.len();
-            }
-            InlineSpan::LineBreak => {
-                line_count += 1;
-                line_len = 0;
-            }
-        }
-
-        if line_len >= ESTIMATED_CHARS_PER_LINE {
-            line_count += line_len / ESTIMATED_CHARS_PER_LINE;
-            line_len %= ESTIMATED_CHARS_PER_LINE;
-        }
-    }
-
-    line_count
 }
 
 pub struct RenderOutcome {
@@ -1272,101 +1181,6 @@ fn render_diagram_block(
     ui.add_space(scale_spacing(BLOCK_SPACING_SECTION, zoom_factor));
 }
 
-fn render_image_span(
-    ui: &mut Ui,
-    alt: &str,
-    destination: &str,
-    theme: &Theme,
-    zoom_factor: f32,
-    render_resources: &mut RenderResources<'_>,
-) {
-    let Some(path) = resolve_local_image_path(render_resources.document_base_dir, destination)
-    else {
-        render_image_message(
-            ui,
-            tr(
-                render_resources.ui_language,
-                TranslationKey::MessageImageUnsupported,
-            ),
-            destination,
-            theme,
-            zoom_factor,
-        );
-        return;
-    };
-
-    match render_resources.image_cache.load(ui.ctx(), &path) {
-        ImageLoadState::Loaded(texture) => {
-            let max_width = ui.available_width().max(120.0);
-            ui.add(
-                egui::Image::from_texture(texture)
-                    .max_width(max_width)
-                    .fit_to_original_size(zoom_factor)
-                    .alt_text(alt),
-            );
-        }
-        ImageLoadState::Failed(error) => {
-            let detail = if alt.trim().is_empty() {
-                error
-            } else {
-                alt.trim()
-            };
-            render_image_message(
-                ui,
-                tr(
-                    render_resources.ui_language,
-                    TranslationKey::MessageImageLoadFailed,
-                ),
-                detail,
-                theme,
-                zoom_factor,
-            );
-        }
-    }
-}
-
-fn resolve_local_image_path(base_dir: Option<&Path>, destination: &str) -> Option<PathBuf> {
-    let cleaned = destination.trim();
-    if cleaned.is_empty() || is_remote_or_data_uri(cleaned) {
-        return None;
-    }
-
-    let without_fragment = cleaned.split('#').next().unwrap_or(cleaned);
-    let without_query = without_fragment
-        .split('?')
-        .next()
-        .unwrap_or(without_fragment);
-    let path = Path::new(without_query);
-
-    if path.is_absolute() {
-        Some(path.to_path_buf())
-    } else {
-        base_dir.map(|base_dir| base_dir.join(path))
-    }
-}
-
-fn is_remote_or_data_uri(destination: &str) -> bool {
-    let normalized = destination.trim().to_ascii_lowercase();
-    normalized.starts_with("http://")
-        || normalized.starts_with("https://")
-        || normalized.starts_with("data:")
-}
-
-fn render_image_message(ui: &mut Ui, prefix: &str, detail: &str, theme: &Theme, zoom_factor: f32) {
-    Frame::new()
-        .fill(theme.widget_inactive_background)
-        .stroke(Stroke::new(1.0, theme.content_border))
-        .corner_radius(egui::CornerRadius::same(6))
-        .inner_margin(egui::Margin::symmetric(10, 8))
-        .show(ui, |ui| {
-            ui.label(
-                RichText::new(format!("{} {}", prefix, detail))
-                    .size(QUOTE_TEXT_SIZE * zoom_factor)
-                    .color(theme.text_secondary),
-            );
-        });
-}
-
 fn internal_anchor(destination: &str) -> Option<&str> {
     let trimmed = destination.trim();
     trimmed
@@ -1827,16 +1641,6 @@ fn monospace_span_font_size(style: InlineStyle, zoom_factor: f32) -> f32 {
         InlineStyle::Heading(size) => (size - zoom_factor).max(INLINE_CODE_TEXT_SIZE),
         _ => INLINE_CODE_TEXT_SIZE * zoom_factor,
     }
-}
-
-fn scale_spacing(value: f32, zoom_factor: f32) -> f32 {
-    value * zoom_factor
-}
-
-fn scale_margin(value: i8, zoom_factor: f32) -> i8 {
-    ((value as f32) * zoom_factor)
-        .round()
-        .clamp(0.0, i8::MAX as f32) as i8
 }
 
 fn search_highlight_for_text(
