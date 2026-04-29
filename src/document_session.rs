@@ -7,6 +7,7 @@ use crate::image_cache::ImageCache;
 use crate::math::MathRenderCache;
 use crate::parser::MarkdownDocument;
 use crate::renderer::estimate_document_block_heights;
+use crate::search::SearchState;
 
 pub struct DocumentSession {
     pub path: PathBuf,
@@ -17,6 +18,10 @@ pub struct DocumentSession {
     pub math_render_cache: MathRenderCache,
     pub diagram_render_cache: DiagramRenderCache,
     pub block_height_cache: BlockHeightCache,
+    pub pending_block_scroll: Option<usize>,
+    pub active_heading: Option<usize>,
+    pub selected_heading: Option<usize>,
+    pub search: SearchState,
 }
 
 pub struct BlockHeightCache {
@@ -35,7 +40,8 @@ impl DocumentSession {
         fingerprint: DocumentFingerprint,
         file_snapshot: Option<FileSnapshot>,
     ) -> Self {
-        Self {
+        let active_heading = document.headings().first().map(|item| item.block_index);
+        let mut session = Self {
             path,
             document,
             fingerprint,
@@ -44,7 +50,14 @@ impl DocumentSession {
             math_render_cache: MathRenderCache::new(),
             diagram_render_cache: DiagramRenderCache::new(),
             block_height_cache: BlockHeightCache::new(),
-        }
+            pending_block_scroll: None,
+            active_heading,
+            selected_heading: None,
+            search: SearchState::new(),
+        };
+        session.refresh_search_matches();
+
+        session
     }
 
     pub fn replace_document(
@@ -57,6 +70,8 @@ impl DocumentSession {
         self.fingerprint = fingerprint;
         self.file_snapshot = file_snapshot;
         self.clear_render_caches();
+        self.reset_navigation();
+        self.refresh_search_matches();
     }
 
     pub fn update_unchanged_snapshot(
@@ -77,6 +92,51 @@ impl DocumentSession {
 
     pub fn base_dir(&self) -> Option<&Path> {
         self.path.parent()
+    }
+
+    pub fn refresh_search_matches(&mut self) {
+        self.search.refresh_matches(Some(&self.document));
+    }
+
+    pub fn select_search_match(&mut self, index: usize) {
+        if let Some(block_index) = self.search.select_match(index) {
+            self.pending_block_scroll = Some(block_index);
+            self.selected_heading = None;
+        }
+    }
+
+    pub fn select_next_search_match(&mut self) {
+        if let Some(block_index) = self.search.select_next() {
+            self.pending_block_scroll = Some(block_index);
+            self.selected_heading = None;
+        }
+    }
+
+    pub fn select_previous_search_match(&mut self) {
+        if let Some(block_index) = self.search.select_previous() {
+            self.pending_block_scroll = Some(block_index);
+            self.selected_heading = None;
+        }
+    }
+
+    pub fn jump_to_heading(&mut self, block_index: usize) {
+        self.selected_heading = Some(block_index);
+        self.active_heading = Some(block_index);
+        self.pending_block_scroll = Some(block_index);
+    }
+
+    pub fn clear_selected_heading(&mut self) {
+        self.selected_heading = None;
+    }
+
+    fn reset_navigation(&mut self) {
+        self.pending_block_scroll = None;
+        self.active_heading = self
+            .document
+            .headings()
+            .first()
+            .map(|item| item.block_index);
+        self.selected_heading = None;
     }
 }
 
