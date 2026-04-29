@@ -9,17 +9,15 @@ use eframe::egui::{
 use rfd::FileDialog;
 
 use crate::bottom_bar::{BottomBarState, render_bottom_bar};
-use crate::diagram::DiagramRenderCache;
 use crate::document_loader::{DocumentFingerprint, FileSnapshot, load_markdown_document};
+use crate::document_session::DocumentSession;
 use crate::export::write_html_export;
 use crate::external_links::{handle_external_link_click, render_external_link_confirmation};
 use crate::i18n::{Language, TranslationKey, tr};
-use crate::image_cache::ImageCache;
-use crate::math::MathRenderCache;
 use crate::metrics;
 use crate::parser::MarkdownDocument;
 use crate::reload_worker::{ReloadResponse, ReloadWorkerHandle, spawn_reload_worker};
-use crate::renderer::{estimate_document_block_heights, render_markdown_document};
+use crate::renderer::render_markdown_document;
 use crate::search::SearchState;
 use crate::search_panel::{render_search_controls, render_search_results};
 use crate::session::{
@@ -48,79 +46,11 @@ struct PendingRenderMeasurement {
     path: PathBuf,
 }
 
-struct BlockHeightCache {
-    fingerprint: Option<DocumentFingerprint>,
-    zoom_factor_bits: u32,
-    content_width_bits: u32,
-    estimated_zoom_factor_bits: u32,
-    heights: Vec<Option<f32>>,
-    estimated_heights: Vec<f32>,
-}
-
 impl RenderMeasurementReason {
     fn as_log_label(&self) -> &'static str {
         match self {
             RenderMeasurementReason::Load => "load",
             RenderMeasurementReason::Reload => "reload",
-        }
-    }
-}
-
-impl BlockHeightCache {
-    fn new() -> Self {
-        Self {
-            fingerprint: None,
-            zoom_factor_bits: 0,
-            content_width_bits: 0,
-            estimated_zoom_factor_bits: 0,
-            heights: Vec::new(),
-            estimated_heights: Vec::new(),
-        }
-    }
-
-    fn clear(&mut self) {
-        self.fingerprint = None;
-        self.zoom_factor_bits = 0;
-        self.content_width_bits = 0;
-        self.estimated_zoom_factor_bits = 0;
-        self.heights.clear();
-        self.estimated_heights.clear();
-    }
-
-    fn prepare(
-        &mut self,
-        fingerprint: Option<DocumentFingerprint>,
-        document: &MarkdownDocument,
-        zoom_factor: f32,
-        content_width: f32,
-    ) {
-        let zoom_factor_bits = zoom_factor.to_bits();
-        let content_width_bits = content_width.round().to_bits();
-        let document_or_zoom_changed =
-            self.fingerprint != fingerprint || self.zoom_factor_bits != zoom_factor_bits;
-        let content_width_changed = self.content_width_bits != content_width_bits;
-
-        if document_or_zoom_changed {
-            self.fingerprint = fingerprint;
-            self.zoom_factor_bits = zoom_factor_bits;
-            self.estimated_zoom_factor_bits = zoom_factor_bits;
-            self.estimated_heights = estimate_document_block_heights(document, zoom_factor);
-        }
-
-        if document_or_zoom_changed || content_width_changed {
-            self.content_width_bits = content_width_bits;
-            self.heights.clear();
-        }
-
-        if self.heights.len() != document.blocks.len() {
-            self.heights.resize(document.blocks.len(), None);
-        }
-
-        if self.estimated_zoom_factor_bits != zoom_factor_bits
-            || self.estimated_heights.len() != document.blocks.len()
-        {
-            self.estimated_zoom_factor_bits = zoom_factor_bits;
-            self.estimated_heights = estimate_document_block_heights(document, zoom_factor);
         }
     }
 }
@@ -148,14 +78,8 @@ pub struct OxideMdApp {
     language: Language,
     theme_id: ThemeId,
     zoom_factor: f32,
-    current_file: Option<PathBuf>,
+    document_session: Option<DocumentSession>,
     recent_files: Vec<PathBuf>,
-    document: Option<Arc<MarkdownDocument>>,
-    document_fingerprint: Option<DocumentFingerprint>,
-    document_file_snapshot: Option<FileSnapshot>,
-    image_cache: ImageCache,
-    math_render_cache: MathRenderCache,
-    diagram_render_cache: DiagramRenderCache,
     status_message: String,
     status_hover_message: Option<String>,
     reload_status: ReloadStatus,
@@ -173,7 +97,6 @@ pub struct OxideMdApp {
     external_link_behavior: ExternalLinkBehavior,
     pending_external_link: Option<String>,
     pending_render_measurement: Option<PendingRenderMeasurement>,
-    block_height_cache: BlockHeightCache,
     startup_started: Option<Instant>,
 }
 
@@ -195,14 +118,8 @@ impl OxideMdApp {
             language,
             theme_id: DEFAULT_THEME_ID,
             zoom_factor: DEFAULT_ZOOM_FACTOR,
-            current_file: None,
+            document_session: None,
             recent_files: Vec::new(),
-            document: None,
-            document_fingerprint: None,
-            document_file_snapshot: None,
-            image_cache: ImageCache::new(),
-            math_render_cache: MathRenderCache::new(),
-            diagram_render_cache: DiagramRenderCache::new(),
             status_message: tr(language, TranslationKey::StatusNoFile).to_owned(),
             status_hover_message: None,
             reload_status: ReloadStatus::Idle,
@@ -219,7 +136,6 @@ impl OxideMdApp {
             external_link_behavior: ExternalLinkBehavior::AskFirst,
             pending_external_link: None,
             pending_render_measurement: None,
-            block_height_cache: BlockHeightCache::new(),
             startup_started: Some(startup_started),
         };
 
@@ -296,7 +212,7 @@ impl OxideMdApp {
             Language::Ja => Language::En,
         };
 
-        if self.current_file.is_none() {
+        if self.document_session.is_none() {
             self.set_status_message(tr(self.language, TranslationKey::StatusNoFile));
         }
     }
@@ -354,7 +270,7 @@ impl OxideMdApp {
     }
 
     fn export_current_file_as_html(&mut self) {
-        let Some(source_path) = self.current_file.clone() else {
+        let Some(source_path) = self.current_file().map(Path::to_path_buf) else {
             self.set_status_message(tr(self.language, TranslationKey::StatusNoFile));
             return;
         };
@@ -380,7 +296,7 @@ impl OxideMdApp {
     }
 
     fn copy_current_file_path(&mut self, ctx: &egui::Context) {
-        let Some(path) = self.current_file.clone() else {
+        let Some(path) = self.current_file().map(Path::to_path_buf) else {
             self.set_status_message(tr(self.language, TranslationKey::StatusNoFile));
             return;
         };
@@ -439,17 +355,15 @@ impl OxideMdApp {
     fn load_selected_file(&mut self, path: PathBuf) {
         match load_markdown_document(&path) {
             Ok(loaded) => {
-                let document = loaded.document;
+                let document = Arc::clone(&loaded.document);
                 let active_heading = document.headings().first().map(|item| item.block_index);
-                self.current_file = Some(path.clone());
                 remember_recent_file(&mut self.recent_files, &path);
-                self.document = Some(document);
-                self.document_fingerprint = Some(loaded.fingerprint);
-                self.document_file_snapshot = loaded.file_snapshot;
-                self.image_cache.clear();
-                self.math_render_cache.clear();
-                self.diagram_render_cache.clear();
-                self.block_height_cache.clear();
+                self.document_session = Some(DocumentSession::new(
+                    path.clone(),
+                    loaded.document,
+                    loaded.fingerprint,
+                    loaded.file_snapshot,
+                ));
                 self.pending_reload_at = None;
                 self.in_flight_reload_id = None;
                 self.reload_status = ReloadStatus::Idle;
@@ -467,14 +381,7 @@ impl OxideMdApp {
                 self.set_status_with_path(TranslationKey::StatusLoaded, &path);
             }
             Err(error) => {
-                self.document = None;
-                self.document_fingerprint = None;
-                self.document_file_snapshot = None;
-                self.image_cache.clear();
-                self.math_render_cache.clear();
-                self.diagram_render_cache.clear();
-                self.block_height_cache.clear();
-                self.current_file = None;
+                self.document_session = None;
                 self.watcher = None;
                 self.pending_reload_at = None;
                 self.in_flight_reload_id = None;
@@ -581,7 +488,7 @@ impl OxideMdApp {
             return;
         }
 
-        let Some(path) = self.current_file.clone() else {
+        let Some(path) = self.current_file().map(Path::to_path_buf) else {
             self.pending_reload_at = None;
             return;
         };
@@ -605,7 +512,7 @@ impl OxideMdApp {
     }
 
     fn request_manual_reload(&mut self) {
-        let Some(path) = self.current_file.clone() else {
+        let Some(path) = self.current_file().map(Path::to_path_buf) else {
             self.set_status_message(tr(self.language, TranslationKey::StatusNoFile));
             return;
         };
@@ -622,11 +529,20 @@ impl OxideMdApp {
         self.queued_reload_id += 1;
         let reload_id = self.queued_reload_id;
 
+        let previous_fingerprint = self
+            .document_session
+            .as_ref()
+            .map(|session| session.fingerprint);
+        let previous_file_snapshot = self
+            .document_session
+            .as_ref()
+            .and_then(|session| session.file_snapshot);
+
         match self.reload_worker.request_reload(
             reload_id,
             path.clone(),
-            self.document_fingerprint,
-            self.document_file_snapshot,
+            previous_fingerprint,
+            previous_file_snapshot,
         ) {
             Ok(()) => {
                 self.in_flight_reload_id = Some(reload_id);
@@ -697,13 +613,17 @@ impl OxideMdApp {
         self.pending_block_scroll = None;
         self.active_heading = active_heading;
         self.selected_heading = None;
-        self.document = Some(document);
-        self.document_fingerprint = Some(fingerprint);
-        self.document_file_snapshot = file_snapshot;
-        self.image_cache.clear();
-        self.math_render_cache.clear();
-        self.diagram_render_cache.clear();
-        self.block_height_cache.clear();
+        if let Some(session) = self.document_session.as_mut() {
+            session.path = path.clone();
+            session.replace_document(document, fingerprint, file_snapshot);
+        } else {
+            self.document_session = Some(DocumentSession::new(
+                path.clone(),
+                document,
+                fingerprint,
+                file_snapshot,
+            ));
+        }
         self.refresh_search_matches();
         self.pending_render_measurement = Some(PendingRenderMeasurement {
             reason: RenderMeasurementReason::Reload,
@@ -722,8 +642,9 @@ impl OxideMdApp {
         file_snapshot: Option<FileSnapshot>,
     ) {
         self.in_flight_reload_id = None;
-        self.document_fingerprint = Some(fingerprint);
-        self.document_file_snapshot = file_snapshot;
+        if let Some(session) = self.document_session.as_mut() {
+            session.update_unchanged_snapshot(fingerprint, file_snapshot);
+        }
         self.reload_status = ReloadStatus::Idle;
         metrics::log_reload_skipped(&path, &timing);
         self.set_status_with_path(TranslationKey::StatusReloadSkipped, &path);
@@ -820,7 +741,11 @@ impl OxideMdApp {
     }
 
     fn refresh_search_matches(&mut self) {
-        self.search.refresh_matches(self.document.as_deref());
+        let document = self
+            .document_session
+            .as_ref()
+            .map(|session| Arc::clone(&session.document));
+        self.search.refresh_matches(document.as_deref());
     }
 
     fn select_search_match(&mut self, index: usize) {
@@ -884,7 +809,7 @@ impl OxideMdApp {
                 theme_options: &theme_options,
                 external_link_behavior: self.external_link_behavior,
                 is_heading_panel_visible: self.is_heading_panel_visible,
-                current_file: self.current_file.as_deref(),
+                current_file: self.current_file(),
                 recent_files: &self.recent_files,
                 reload_status_label: self.reload_status_label(),
                 reload_status_background,
@@ -1000,7 +925,7 @@ impl OxideMdApp {
                 ui.heading(tr(self.language, TranslationKey::NavSections));
                 ui.add_space(8.0);
 
-                let Some(document) = self.document.as_ref() else {
+                let Some(document) = self.document() else {
                     return;
                 };
 
@@ -1062,22 +987,28 @@ impl OxideMdApp {
 
     fn render_document_panel(&mut self, ctx: &egui::Context) {
         let theme = theme(self.theme_id);
-
-        CentralPanel::default().show(ctx, |ui| {
-            let Some(document) = self.document.clone() else {
+        let Some(mut session) = self.document_session.take() else {
+            CentralPanel::default().show(ctx, |ui| {
                 if let Some(path) = self.render_home_panel(ui, &theme) {
                     self.open_recent_file(path);
                 }
-                return;
-            };
-            let active_search_block = self.active_search_block();
+            });
+            return;
+        };
+        let document = Arc::clone(&session.document);
+        let document_base_dir = session.base_dir().map(Path::to_path_buf);
+        let active_search_block = self.active_search_block();
+        let search_query = self.search.active_query().map(str::to_owned);
+        let pending_block_scroll = self.pending_block_scroll;
+        let language = self.language;
+        let zoom_factor = self.zoom_factor;
+        let external_link_behavior = self.external_link_behavior;
 
+        CentralPanel::default().show(ctx, |ui| {
             ScrollArea::both().show(ui, |ui| {
-                let document_base_dir = self.current_file.as_ref().and_then(|path| path.parent());
-
                 ui.add_space(18.0);
                 let content_rect = ui.max_rect();
-                let frame_width = scaled_document_frame_max_width(self.zoom_factor);
+                let frame_width = scaled_document_frame_max_width(zoom_factor);
                 let frame_left = if content_rect.width() > frame_width {
                     content_rect.center().x - frame_width * 0.5
                 } else {
@@ -1087,8 +1018,8 @@ impl OxideMdApp {
                     egui::pos2(frame_left, ui.cursor().top()),
                     Vec2::new(frame_width, 0.0),
                 );
-                let horizontal_padding = scaled_document_horizontal_padding(self.zoom_factor);
-                let vertical_padding = scaled_document_vertical_padding(self.zoom_factor);
+                let horizontal_padding = scaled_document_horizontal_padding(zoom_factor);
+                let vertical_padding = scaled_document_vertical_padding(zoom_factor);
 
                 let document_frame = Frame::new()
                     .fill(theme.content_background)
@@ -1104,14 +1035,14 @@ impl OxideMdApp {
                     })
                     .corner_radius(egui::CornerRadius::same(12))
                     .inner_margin(Margin::symmetric(
-                        scaled_margin(32, self.zoom_factor),
-                        scaled_margin(28, self.zoom_factor),
+                        scaled_margin(32, zoom_factor),
+                        scaled_margin(28, zoom_factor),
                     ));
                 let background_shape = ui.painter().add(egui::Shape::Noop);
                 let content_width =
                     (frame_width - horizontal_padding - DOCUMENT_FRAME_STROKE_WIDTH * 2.0)
                         .max(0.0)
-                        .min(scaled_document_body_max_width(self.zoom_factor));
+                        .min(scaled_document_body_max_width(zoom_factor));
                 let content_min = egui::pos2(
                     frame_rect.left() + horizontal_padding * 0.5 + DOCUMENT_FRAME_STROKE_WIDTH,
                     frame_rect.top() + vertical_padding * 0.5 + DOCUMENT_FRAME_STROKE_WIDTH,
@@ -1137,31 +1068,32 @@ impl OxideMdApp {
                 let render_started = render_measurement.as_ref().map(|_| Instant::now());
                 let block_count = document.blocks.len();
                 let heading_count = document.headings().len();
-                self.block_height_cache.prepare(
-                    self.document_fingerprint,
+                session.block_height_cache.prepare(
+                    session.fingerprint,
                     &document,
-                    self.zoom_factor,
+                    zoom_factor,
                     content_width,
                 );
-                let BlockHeightCache {
+                let block_height_cache = &mut session.block_height_cache;
+                let crate::document_session::BlockHeightCache {
                     heights: block_heights,
                     estimated_heights: estimated_block_heights,
                     ..
-                } = &mut self.block_height_cache;
+                } = block_height_cache;
                 let render_outcome = render_markdown_document(
                     &mut document_ui,
                     &document,
-                    self.language,
+                    language,
                     &theme,
-                    self.zoom_factor,
-                    document_base_dir,
-                    &mut self.image_cache,
-                    &mut self.math_render_cache,
-                    &mut self.diagram_render_cache,
+                    zoom_factor,
+                    document_base_dir.as_deref(),
+                    &mut session.image_cache,
+                    &mut session.math_render_cache,
+                    &mut session.diagram_render_cache,
                     block_heights,
                     estimated_block_heights,
-                    self.pending_block_scroll,
-                    self.search.active_query(),
+                    pending_block_scroll,
+                    search_query.as_deref(),
                     active_search_block,
                 );
 
@@ -1192,7 +1124,7 @@ impl OxideMdApp {
                 if let Some(url) = render_outcome.clicked_external_link {
                     handle_external_link_click(
                         ctx,
-                        self.external_link_behavior,
+                        external_link_behavior,
                         &mut self.pending_external_link,
                         url,
                     );
@@ -1216,6 +1148,8 @@ impl OxideMdApp {
                 ui.add_space(24.0);
             });
         });
+
+        self.document_session = Some(session);
     }
 
     fn render_home_panel(&mut self, ui: &mut egui::Ui, theme: &Theme) -> Option<PathBuf> {
@@ -1325,6 +1259,18 @@ impl OxideMdApp {
     fn active_search_block(&self) -> Option<usize> {
         self.search.active_block()
     }
+
+    fn current_file(&self) -> Option<&Path> {
+        self.document_session
+            .as_ref()
+            .map(|session| session.path.as_path())
+    }
+
+    fn document(&self) -> Option<&MarkdownDocument> {
+        self.document_session
+            .as_ref()
+            .map(|session| session.document.as_ref())
+    }
 }
 
 impl eframe::App for OxideMdApp {
@@ -1337,7 +1283,7 @@ impl eframe::App for OxideMdApp {
                 zoom_factor: self.zoom_factor,
                 external_link_behavior: self.external_link_behavior,
                 is_heading_panel_visible: self.is_heading_panel_visible,
-                current_file: self.current_file.as_deref(),
+                current_file: self.current_file(),
                 recent_files: &self.recent_files,
             },
         );
@@ -1362,7 +1308,9 @@ impl eframe::App for OxideMdApp {
         apply_theme(ctx, &theme);
         self.render_top_bar(ctx);
         self.render_bottom_bar(ctx);
-        if self.document.is_some() && self.zoom_factor.to_bits() != previous_zoom_factor.to_bits() {
+        if self.document_session.is_some()
+            && self.zoom_factor.to_bits() != previous_zoom_factor.to_bits()
+        {
             self.request_window_expansion_for_preview();
         }
         self.render_heading_panel(ctx);
