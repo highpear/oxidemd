@@ -28,12 +28,18 @@ pub enum PreparedMath {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct MathCacheKey {
     mode: MathRenderMode,
-    text_color: [u8; 4],
     zoom_bucket: u16,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct ColoredMathCacheKey {
+    base: MathCacheKey,
+    text_color: [u8; 4],
 }
 
 pub struct MathRenderCache {
     entries: HashMap<(MathCacheKey, String), MathRenderState>,
+    colored_entries: HashMap<(ColoredMathCacheKey, String), PreparedMath>,
     result_sender: Sender<MathWorkerResult>,
     result_receiver: Receiver<MathWorkerResult>,
     generation: u64,
@@ -41,14 +47,33 @@ pub struct MathRenderCache {
 
 enum MathRenderState {
     Pending,
-    Ready(PreparedMath),
+    Ready(RawMathResult),
 }
 
 struct MathWorkerResult {
     generation: u64,
     key: MathCacheKey,
     expression: String,
-    result: PreparedMath,
+    result: RawMathResult,
+}
+
+#[derive(Clone)]
+enum RawMathResult {
+    Svg(RawMathSvg),
+    Error(String),
+}
+
+#[derive(Clone)]
+struct RawMathSvg {
+    source: String,
+    display_style: MathDisplayStyle,
+    font_size_bucket: u16,
+}
+
+#[derive(Clone, Copy)]
+enum MathDisplayStyle {
+    Text,
+    Display,
 }
 
 impl MathRenderCache {
@@ -57,6 +82,7 @@ impl MathRenderCache {
 
         Self {
             entries: HashMap::new(),
+            colored_entries: HashMap::new(),
             result_sender,
             result_receiver,
             generation: 0,
@@ -65,6 +91,7 @@ impl MathRenderCache {
 
     pub fn clear(&mut self) {
         self.entries.clear();
+        self.colored_entries.clear();
         self.generation = self.generation.wrapping_add(1);
         self.drain_finished_jobs();
     }
@@ -81,15 +108,29 @@ impl MathRenderCache {
 
         let key = MathCacheKey {
             mode,
-            text_color: text_color.to_array(),
             zoom_bucket: zoom_bucket(zoom_factor),
         };
         let entry_key = (key, expression.to_owned());
+        let colored_key = (
+            ColoredMathCacheKey {
+                base: key,
+                text_color: text_color.to_array(),
+            },
+            expression.to_owned(),
+        );
+
+        if let Some(result) = self.colored_entries.get(&colored_key) {
+            return result.clone();
+        }
 
         if let Some(state) = self.entries.get(&entry_key) {
             return match state {
                 MathRenderState::Pending => PreparedMath::Pending,
-                MathRenderState::Ready(result) => result.clone(),
+                MathRenderState::Ready(result) => {
+                    let prepared = prepare_colored_math(expression, key, result, text_color);
+                    self.colored_entries.insert(colored_key, prepared.clone());
+                    prepared
+                }
             };
         }
 
@@ -100,7 +141,6 @@ impl MathRenderCache {
             key,
             expression.to_owned(),
             mode,
-            text_color,
             zoom_factor,
         );
 
@@ -114,18 +154,16 @@ impl MathRenderCache {
         key: MathCacheKey,
         expression: String,
         mode: MathRenderMode,
-        text_color: egui::Color32,
         zoom_factor: f32,
     ) {
         let sender = self.result_sender.clone();
 
         thread::spawn(move || {
             let started = Instant::now();
-            let result = prepare_math(&expression, mode, text_color, zoom_factor);
+            let result = prepare_math(&expression, mode, zoom_factor);
             let outcome = match &result {
-                PreparedMath::Pending => "pending",
-                PreparedMath::Svg(_) => "ok",
-                PreparedMath::Error(_) => "error",
+                RawMathResult::Svg(_) => "ok",
+                RawMathResult::Error(_) => "error",
             };
             metrics::log_math_render(expression.len(), started.elapsed(), outcome);
             let _ = sender.send(MathWorkerResult {
@@ -152,37 +190,23 @@ impl MathRenderCache {
     }
 }
 
-fn prepare_math(
-    expression: &str,
-    mode: MathRenderMode,
-    text_color: egui::Color32,
-    zoom_factor: f32,
-) -> PreparedMath {
+fn prepare_math(expression: &str, mode: MathRenderMode, zoom_factor: f32) -> RawMathResult {
     match mode {
-        MathRenderMode::Inline => prepare_svg_math(
-            expression,
-            text_color,
-            zoom_factor,
-            INLINE_MATH_BASE_FONT_SIZE,
-            mode,
-        ),
-        MathRenderMode::Block => prepare_svg_math(
-            expression,
-            text_color,
-            zoom_factor,
-            BLOCK_MATH_BASE_FONT_SIZE,
-            mode,
-        ),
+        MathRenderMode::Inline => {
+            prepare_svg_math(expression, zoom_factor, INLINE_MATH_BASE_FONT_SIZE, mode)
+        }
+        MathRenderMode::Block => {
+            prepare_svg_math(expression, zoom_factor, BLOCK_MATH_BASE_FONT_SIZE, mode)
+        }
     }
 }
 
 fn prepare_svg_math(
     expression: &str,
-    text_color: egui::Color32,
     zoom_factor: f32,
     base_font_size: f32,
     mode: MathRenderMode,
-) -> PreparedMath {
+) -> RawMathResult {
     let font_size = base_font_size * zoom_factor;
     let use_display_style = mode == MathRenderMode::Inline && is_fraction_inline_math(expression);
     let render_expression = if use_display_style {
@@ -199,20 +223,45 @@ fn prepare_svg_math(
         },
     ) {
         Ok(svg) => svg,
-        Err(error) => return PreparedMath::Error(error.to_string()),
+        Err(error) => return RawMathResult::Error(error.to_string()),
     };
 
-    let svg = apply_current_color(&svg, text_color);
+    RawMathResult::Svg(RawMathSvg {
+        source: svg,
+        display_style: if use_display_style {
+            MathDisplayStyle::Display
+        } else {
+            MathDisplayStyle::Text
+        },
+        font_size_bucket: font_size_bucket(font_size),
+    })
+}
+
+fn prepare_colored_math(
+    expression: &str,
+    key: MathCacheKey,
+    result: &RawMathResult,
+    text_color: egui::Color32,
+) -> PreparedMath {
+    let raw = match result {
+        RawMathResult::Svg(raw) => raw,
+        RawMathResult::Error(error) => return PreparedMath::Error(error.clone()),
+    };
+
+    let svg = apply_current_color(&raw.source, text_color);
     let uri = format!(
         "bytes://math-{}-{}-{}-{}-{}-{}.svg",
         color_hash(text_color),
-        zoom_bucket(zoom_factor),
-        match mode {
+        key.zoom_bucket,
+        match key.mode {
             MathRenderMode::Inline => "inline",
             MathRenderMode::Block => "block",
         },
-        if use_display_style { "display" } else { "text" },
-        font_size_bucket(font_size),
+        match raw.display_style {
+            MathDisplayStyle::Text => "text",
+            MathDisplayStyle::Display => "display",
+        },
+        raw.font_size_bucket,
         svg_uri_hash(expression)
     );
 
@@ -327,11 +376,15 @@ mod tests {
 
     #[test]
     fn generated_svg_uri_does_not_embed_tex_source() {
-        let prepared = super::prepare_math(
+        let raw = super::prepare_math(r"\frac{1}{x+y}", MathRenderMode::Inline, 1.0);
+        let prepared = super::prepare_colored_math(
             r"\frac{1}{x+y}",
-            MathRenderMode::Inline,
+            super::MathCacheKey {
+                mode: MathRenderMode::Inline,
+                zoom_bucket: super::zoom_bucket(1.0),
+            },
+            &raw,
             Color32::from_rgb(34, 34, 34),
-            1.0,
         );
 
         if let PreparedMath::Svg(svg) = prepared {
@@ -348,21 +401,45 @@ mod tests {
 
     #[test]
     fn color_is_part_of_prepared_math_uri() {
-        let dark = super::prepare_math(
-            "x^2",
-            MathRenderMode::Inline,
-            Color32::from_rgb(224, 232, 242),
-            1.0,
-        );
-        let mist = super::prepare_math(
-            "x^2",
-            MathRenderMode::Inline,
-            Color32::from_rgb(28, 40, 46),
-            1.0,
-        );
+        let raw = super::prepare_math("x^2", MathRenderMode::Inline, 1.0);
+        let key = super::MathCacheKey {
+            mode: MathRenderMode::Inline,
+            zoom_bucket: super::zoom_bucket(1.0),
+        };
+        let dark = super::prepare_colored_math("x^2", key, &raw, Color32::from_rgb(224, 232, 242));
+        let mist = super::prepare_colored_math("x^2", key, &raw, Color32::from_rgb(28, 40, 46));
 
         if let (PreparedMath::Svg(dark), PreparedMath::Svg(mist)) = (dark, mist) {
             assert_ne!(dark.asset().uri(), mist.asset().uri());
         }
+    }
+
+    #[test]
+    fn reuses_raw_math_when_color_changes() {
+        let mut cache = MathRenderCache::new();
+        let ctx = Context::default();
+
+        let first_color = Color32::from_rgb(34, 34, 34);
+        let second_color = Color32::from_rgb(224, 232, 242);
+        assert!(matches!(
+            cache.prepare(&ctx, "x^2", MathRenderMode::Inline, first_color, 1.0),
+            PreparedMath::Pending
+        ));
+        let first = wait_for_prepared_math(
+            &mut cache,
+            &ctx,
+            "x^2",
+            MathRenderMode::Inline,
+            first_color,
+            1.0,
+        );
+        let second = cache.prepare(&ctx, "x^2", MathRenderMode::Inline, second_color, 1.0);
+
+        assert!(matches!(
+            (&first, &second),
+            (PreparedMath::Svg(first_svg), PreparedMath::Svg(second_svg))
+                if first_svg.asset().size() == second_svg.asset().size()
+                && first_svg.asset().uri() != second_svg.asset().uri()
+        ));
     }
 }

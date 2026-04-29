@@ -488,3 +488,21 @@ Conclusion:
 
 - Timings remain within the same range, with a small improvement on initial load and no sign of regression in render behavior.
 - The benefit is modest but consistent with removing repeated character scanning during search result preview generation.
+
+### 2026-04-29: Reuse Math SVGs Across Theme Colors
+
+Change:
+
+- Split math rendering into a raw MathJax SVG cache keyed by expression, render mode, and zoom bucket.
+- Keep theme-colored SVG assets in a separate lightweight cache so theme changes only recolor existing raw SVG output.
+- Preserve color-specific asset URIs to avoid egui image cache collisions between themes.
+
+Result:
+
+- `cargo test`: 40 passed, 1 ignored -> 41 passed, 1 ignored after adding the color-change cache test.
+- `cargo build`: passed.
+
+Conclusion:
+
+- Theme changes no longer schedule fresh MathJax work for equations that were already rendered at the same mode and zoom.
+- The remaining first-use cost on a new color is limited to applying the SVG color style and building a color-specific asset.
