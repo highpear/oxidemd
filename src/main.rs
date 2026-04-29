@@ -4,6 +4,7 @@ mod cli;
 mod code_block;
 mod diagram;
 mod document_loader;
+mod document_session;
 mod embedded_svg;
 mod export;
 mod external_links;
