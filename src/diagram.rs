@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::Instant;
@@ -8,6 +8,8 @@ use eframe::egui;
 use crate::embedded_svg::{EmbeddedSvgContent, EmbeddedSvgContentKind};
 use crate::metrics;
 use crate::svg::{SvgAsset, apply_current_color};
+
+const MAX_ACTIVE_DIAGRAM_RENDER_JOBS: usize = 2;
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct DiagramCacheKey {
@@ -37,9 +39,19 @@ struct DiagramWorkerResult {
 
 pub struct DiagramRenderCache {
     entries: HashMap<(DiagramCacheKey, String), DiagramRenderState>,
+    queued_jobs: VecDeque<DiagramRenderJob>,
+    active_job_count: usize,
     result_sender: Sender<DiagramWorkerResult>,
     result_receiver: Receiver<DiagramWorkerResult>,
     generation: u64,
+}
+
+struct DiagramRenderJob {
+    generation: u64,
+    key: DiagramCacheKey,
+    source: String,
+    text_color: egui::Color32,
+    background_color: egui::Color32,
 }
 
 impl DiagramRenderCache {
@@ -48,6 +60,8 @@ impl DiagramRenderCache {
 
         Self {
             entries: HashMap::new(),
+            queued_jobs: VecDeque::new(),
+            active_job_count: 0,
             result_sender,
             result_receiver,
             generation: 0,
@@ -56,6 +70,8 @@ impl DiagramRenderCache {
 
     pub fn clear(&mut self) {
         self.entries.clear();
+        self.queued_jobs.clear();
+        self.active_job_count = 0;
         self.generation = self.generation.wrapping_add(1);
         self.drain_finished_jobs();
     }
@@ -69,6 +85,7 @@ impl DiagramRenderCache {
         background_color: egui::Color32,
     ) -> PreparedDiagram {
         self.drain_finished_jobs();
+        self.start_queued_jobs(ctx.clone());
 
         let key = DiagramCacheKey {
             language: language.to_owned(),
@@ -85,42 +102,55 @@ impl DiagramRenderCache {
         }
 
         self.entries.insert(entry_key, DiagramRenderState::Pending);
-        self.spawn_render_job(
-            ctx,
-            self.generation,
+        self.queued_jobs.push_back(DiagramRenderJob {
+            generation: self.generation,
             key,
-            source.to_owned(),
+            source: source.to_owned(),
             text_color,
             background_color,
-        );
+        });
+        self.start_queued_jobs(ctx);
 
         PreparedDiagram::Pending
     }
 
-    fn spawn_render_job(
-        &self,
-        ctx: egui::Context,
-        generation: u64,
-        key: DiagramCacheKey,
-        source: String,
-        text_color: egui::Color32,
-        background_color: egui::Color32,
-    ) {
+    fn start_queued_jobs(&mut self, ctx: egui::Context) {
+        while self.active_job_count < MAX_ACTIVE_DIAGRAM_RENDER_JOBS {
+            let Some(job) = self.queued_jobs.pop_front() else {
+                break;
+            };
+
+            self.active_job_count += 1;
+            self.spawn_render_job(ctx.clone(), job);
+        }
+    }
+
+    fn spawn_render_job(&self, ctx: egui::Context, job: DiagramRenderJob) {
         let sender = self.result_sender.clone();
 
         thread::spawn(move || {
             let started = Instant::now();
-            let result = prepare_diagram(&key.language, &source, text_color, background_color);
+            let result = prepare_diagram(
+                &job.key.language,
+                &job.source,
+                job.text_color,
+                job.background_color,
+            );
             let outcome = match &result {
                 PreparedDiagram::Pending => "pending",
                 PreparedDiagram::Svg(_) => "ok",
                 PreparedDiagram::Error(_) => "error",
             };
-            metrics::log_diagram_render(&key.language, source.len(), started.elapsed(), outcome);
+            metrics::log_diagram_render(
+                &job.key.language,
+                job.source.len(),
+                started.elapsed(),
+                outcome,
+            );
             let _ = sender.send(DiagramWorkerResult {
-                generation,
-                key,
-                source,
+                generation: job.generation,
+                key: job.key,
+                source: job.source,
                 result,
             });
             ctx.request_repaint();
@@ -128,16 +158,21 @@ impl DiagramRenderCache {
     }
 
     fn drain_finished_jobs(&mut self) {
+        let mut finished_current_jobs = 0usize;
+
         while let Ok(result) = self.result_receiver.try_recv() {
             if result.generation != self.generation {
                 continue;
             }
 
+            finished_current_jobs += 1;
             self.entries.insert(
                 (result.key, result.source),
                 DiagramRenderState::Ready(result.result),
             );
         }
+
+        self.active_job_count = self.active_job_count.saturating_sub(finished_current_jobs);
     }
 }
 
@@ -306,6 +341,24 @@ mod tests {
         let prepared = cache.prepare(ctx, "mermaid", "graph TD\n  A --> B", color, background);
 
         assert!(matches!(prepared, PreparedDiagram::Pending));
+    }
+
+    #[test]
+    fn limits_active_diagram_render_jobs() {
+        let mut cache = DiagramRenderCache::new();
+        let ctx = Context::default();
+        let color = Color32::from_rgb(34, 34, 34);
+        let background = Color32::from_rgb(250, 250, 250);
+
+        cache.active_job_count = super::MAX_ACTIVE_DIAGRAM_RENDER_JOBS;
+        let prepared = cache.prepare(ctx, "mermaid", "graph TD\n  A --> B", color, background);
+
+        assert!(matches!(prepared, PreparedDiagram::Pending));
+        assert_eq!(
+            cache.active_job_count,
+            super::MAX_ACTIVE_DIAGRAM_RENDER_JOBS
+        );
+        assert_eq!(cache.queued_jobs.len(), 1);
     }
 
     #[test]
