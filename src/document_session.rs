@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
+
+use eframe::egui;
 
 use crate::diagram::DiagramRenderCache;
 use crate::document_loader::{DocumentFingerprint, FileSnapshot};
@@ -9,7 +11,7 @@ use crate::math::MathRenderCache;
 use crate::parser::MarkdownDocument;
 use crate::renderer::estimate_document_block_heights;
 use crate::search::SearchState;
-use crate::watcher::{FileWatchEvent, FileWatcherHandle};
+use crate::watcher::{FileWatchEvent, FileWatcherHandle, watch_file};
 
 pub struct DocumentSession {
     pub path: PathBuf,
@@ -32,6 +34,12 @@ pub struct DocumentSession {
 pub struct WatchEventSummary {
     pub saw_change: bool,
     pub error: Option<String>,
+}
+
+pub struct ReloadRequestData {
+    pub path: PathBuf,
+    pub previous_fingerprint: Option<DocumentFingerprint>,
+    pub previous_file_snapshot: Option<FileSnapshot>,
 }
 
 pub struct BlockHeightCache {
@@ -87,6 +95,18 @@ impl DocumentSession {
         self.refresh_search_matches();
     }
 
+    pub fn replace_reloaded_document(
+        &mut self,
+        path: PathBuf,
+        document: Arc<MarkdownDocument>,
+        fingerprint: DocumentFingerprint,
+        file_snapshot: Option<FileSnapshot>,
+    ) {
+        self.finish_reload();
+        self.path = path;
+        self.replace_document(document, fingerprint, file_snapshot);
+    }
+
     pub fn update_unchanged_snapshot(
         &mut self,
         fingerprint: DocumentFingerprint,
@@ -94,6 +114,15 @@ impl DocumentSession {
     ) {
         self.fingerprint = fingerprint;
         self.file_snapshot = file_snapshot;
+    }
+
+    pub fn finish_unchanged_reload(
+        &mut self,
+        fingerprint: DocumentFingerprint,
+        file_snapshot: Option<FileSnapshot>,
+    ) {
+        self.finish_reload();
+        self.update_unchanged_snapshot(fingerprint, file_snapshot);
     }
 
     pub fn clear_render_caches(&mut self) {
@@ -107,12 +136,17 @@ impl DocumentSession {
         self.path.parent()
     }
 
-    pub fn set_watcher(&mut self, watcher: FileWatcherHandle) {
-        self.watcher = Some(watcher);
-    }
-
-    pub fn clear_watcher(&mut self) {
-        self.watcher = None;
+    pub fn start_watching(&mut self, ctx: egui::Context) -> Result<(), String> {
+        match watch_file(&self.path, ctx) {
+            Ok(watcher) => {
+                self.watcher = Some(watcher);
+                Ok(())
+            }
+            Err(error) => {
+                self.watcher = None;
+                Err(error)
+            }
+        }
     }
 
     pub fn drain_watch_events(&self) -> WatchEventSummary {
@@ -152,6 +186,28 @@ impl DocumentSession {
 
     pub fn finish_reload(&mut self) {
         self.in_flight_reload_id = None;
+    }
+
+    pub fn is_reload_in_flight(&self) -> bool {
+        self.in_flight_reload_id.is_some()
+    }
+
+    pub fn is_current_reload(&self, id: u64) -> bool {
+        self.in_flight_reload_id == Some(id)
+    }
+
+    pub fn is_reload_due(&self, debounce: Duration) -> bool {
+        self.pending_reload_at
+            .map(|started| started.elapsed() >= debounce)
+            .unwrap_or(false)
+    }
+
+    pub fn reload_request_data(&self) -> ReloadRequestData {
+        ReloadRequestData {
+            path: self.path.clone(),
+            previous_fingerprint: Some(self.fingerprint),
+            previous_file_snapshot: self.file_snapshot,
+        }
     }
 
     pub fn refresh_search_matches(&mut self) {
