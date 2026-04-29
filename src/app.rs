@@ -26,7 +26,6 @@ use crate::session::{
 use crate::shortcuts::{consume_shortcuts, render_shortcuts_help};
 use crate::theme::{DEFAULT_THEME_ID, Theme, ThemeId, apply_theme, available_themes, theme};
 use crate::top_bar::{TopBarState, render_top_bar};
-use crate::watcher::watch_file;
 
 #[derive(Clone, Copy)]
 enum ReloadStatus {
@@ -348,7 +347,7 @@ impl OxideMdApp {
                     loaded.file_snapshot,
                 ));
                 self.reload_status = ReloadStatus::Idle;
-                self.start_watching_file(&path);
+                self.start_watching_file();
                 self.pending_render_measurement = Some(PendingRenderMeasurement {
                     reason: RenderMeasurementReason::Load,
                     path: path.clone(),
@@ -365,17 +364,9 @@ impl OxideMdApp {
         }
     }
 
-    fn start_watching_file(&mut self, path: &Path) {
-        match watch_file(path, self.ui_context.clone()) {
-            Ok(handle) => {
-                if let Some(session) = self.document_session.as_mut() {
-                    session.set_watcher(handle);
-                }
-            }
-            Err(error) => {
-                if let Some(session) = self.document_session.as_mut() {
-                    session.clear_watcher();
-                }
+    fn start_watching_file(&mut self) {
+        if let Some(session) = self.document_session.as_mut() {
+            if let Err(error) = session.start_watching(self.ui_context.clone()) {
                 self.set_reload_error(TranslationKey::StatusWatchFailed, error);
             }
         }
@@ -444,24 +435,23 @@ impl OxideMdApp {
         let Some(session) = self.document_session.as_ref() else {
             return;
         };
-        let Some(last_change_at) = session.pending_reload_at else {
+        if session.pending_reload_at.is_none() {
             return;
         };
 
-        if last_change_at.elapsed() < Duration::from_millis(200) {
+        if !session.is_reload_due(Duration::from_millis(200)) {
             self.ui_context
                 .request_repaint_after(Duration::from_millis(100));
             return;
         }
 
-        if session.in_flight_reload_id.is_some() {
+        if session.is_reload_in_flight() {
             self.ui_context
                 .request_repaint_after(Duration::from_millis(100));
             return;
         }
 
-        let path = session.path.clone();
-        self.enqueue_reload(path);
+        self.enqueue_reload();
     }
 
     fn reload_status_label(&self) -> &'static str {
@@ -473,7 +463,7 @@ impl OxideMdApp {
     }
 
     fn request_manual_reload(&mut self) {
-        let Some(path) = self.current_file().map(Path::to_path_buf) else {
+        if self.current_file().is_none() {
             self.set_status_message(tr(self.language, TranslationKey::StatusNoFile));
             return;
         };
@@ -481,16 +471,16 @@ impl OxideMdApp {
         if self
             .document_session
             .as_ref()
-            .and_then(|session| session.in_flight_reload_id)
-            .is_some()
+            .map(DocumentSession::is_reload_in_flight)
+            .unwrap_or(false)
         {
             return;
         }
 
-        self.enqueue_reload(path);
+        self.enqueue_reload();
     }
 
-    fn enqueue_reload(&mut self, path: PathBuf) {
+    fn enqueue_reload(&mut self) {
         self.queued_reload_id += 1;
         let reload_id = self.queued_reload_id;
 
@@ -498,26 +488,28 @@ impl OxideMdApp {
             session.clear_pending_reload();
         }
 
-        let previous_fingerprint = self
+        let Some(request_data) = self
             .document_session
             .as_ref()
-            .map(|session| session.fingerprint);
-        let previous_file_snapshot = self
-            .document_session
-            .as_ref()
-            .and_then(|session| session.file_snapshot);
+            .map(DocumentSession::reload_request_data)
+        else {
+            return;
+        };
 
         match self.reload_worker.request_reload(
             reload_id,
-            path.clone(),
-            previous_fingerprint,
-            previous_file_snapshot,
+            request_data.path.clone(),
+            request_data.previous_fingerprint,
+            request_data.previous_file_snapshot,
         ) {
             Ok(()) => {
                 if let Some(session) = self.document_session.as_mut() {
                     session.start_reload(reload_id);
                 }
-                self.set_reload_in_progress(TranslationKey::StatusReloadStarted, Some(&path));
+                self.set_reload_in_progress(
+                    TranslationKey::StatusReloadStarted,
+                    Some(&request_data.path),
+                );
             }
             Err(error) => {
                 self.set_reload_error(TranslationKey::StatusWorkerFailed, error);
@@ -582,9 +574,7 @@ impl OxideMdApp {
         file_snapshot: Option<FileSnapshot>,
     ) {
         if let Some(session) = self.document_session.as_mut() {
-            session.finish_reload();
-            session.path = path.clone();
-            session.replace_document(document, fingerprint, file_snapshot);
+            session.replace_reloaded_document(path.clone(), document, fingerprint, file_snapshot);
         } else {
             self.document_session = Some(DocumentSession::new(
                 path.clone(),
@@ -610,8 +600,7 @@ impl OxideMdApp {
         file_snapshot: Option<FileSnapshot>,
     ) {
         if let Some(session) = self.document_session.as_mut() {
-            session.finish_reload();
-            session.update_unchanged_snapshot(fingerprint, file_snapshot);
+            session.finish_unchanged_reload(fingerprint, file_snapshot);
         }
         self.reload_status = ReloadStatus::Idle;
         metrics::log_reload_skipped(&path, &timing);
@@ -664,8 +653,8 @@ impl OxideMdApp {
     fn is_current_reload(&self, id: u64) -> bool {
         self.document_session
             .as_ref()
-            .and_then(|session| session.in_flight_reload_id)
-            == Some(id)
+            .map(|session| session.is_current_reload(id))
+            .unwrap_or(false)
     }
 
     fn handle_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
