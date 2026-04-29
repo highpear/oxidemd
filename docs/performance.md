@@ -506,3 +506,22 @@ Conclusion:
 
 - Theme changes no longer schedule fresh MathJax work for equations that were already rendered at the same mode and zoom.
 - The remaining first-use cost on a new color is limited to applying the SVG color style and building a color-specific asset.
+
+### 2026-04-29: Limit Embedded Render Job Concurrency
+
+Change:
+
+- Add small FIFO queues to math and Mermaid render caches.
+- Limit active math render jobs to 2.
+- Limit active Mermaid render jobs to 2.
+- Keep existing generation checks so stale queued or finished work is ignored after document reloads.
+
+Result:
+
+- `cargo test`: 42 passed, 1 ignored after adding queue limit coverage.
+- `cargo build`: passed.
+
+Conclusion:
+
+- Documents with many visible math or Mermaid blocks no longer spawn an unbounded number of render threads at once.
+- Initial rendering may still show pending fallbacks while work drains, but CPU and thread pressure should be steadier.

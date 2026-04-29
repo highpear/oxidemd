@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::Instant;
@@ -11,6 +11,7 @@ use crate::svg::{SvgAsset, apply_current_color};
 
 const INLINE_MATH_BASE_FONT_SIZE: f32 = 16.0;
 const BLOCK_MATH_BASE_FONT_SIZE: f32 = 24.0;
+const MAX_ACTIVE_MATH_RENDER_JOBS: usize = 2;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum MathRenderMode {
@@ -40,6 +41,8 @@ struct ColoredMathCacheKey {
 pub struct MathRenderCache {
     entries: HashMap<(MathCacheKey, String), MathRenderState>,
     colored_entries: HashMap<(ColoredMathCacheKey, String), PreparedMath>,
+    queued_jobs: VecDeque<MathRenderJob>,
+    active_job_count: usize,
     result_sender: Sender<MathWorkerResult>,
     result_receiver: Receiver<MathWorkerResult>,
     generation: u64,
@@ -55,6 +58,14 @@ struct MathWorkerResult {
     key: MathCacheKey,
     expression: String,
     result: RawMathResult,
+}
+
+struct MathRenderJob {
+    generation: u64,
+    key: MathCacheKey,
+    expression: String,
+    mode: MathRenderMode,
+    zoom_factor: f32,
 }
 
 #[derive(Clone)]
@@ -83,6 +94,8 @@ impl MathRenderCache {
         Self {
             entries: HashMap::new(),
             colored_entries: HashMap::new(),
+            queued_jobs: VecDeque::new(),
+            active_job_count: 0,
             result_sender,
             result_receiver,
             generation: 0,
@@ -92,6 +105,8 @@ impl MathRenderCache {
     pub fn clear(&mut self) {
         self.entries.clear();
         self.colored_entries.clear();
+        self.queued_jobs.clear();
+        self.active_job_count = 0;
         self.generation = self.generation.wrapping_add(1);
         self.drain_finished_jobs();
     }
@@ -105,6 +120,7 @@ impl MathRenderCache {
         zoom_factor: f32,
     ) -> PreparedMath {
         self.drain_finished_jobs();
+        self.start_queued_jobs(ctx.clone());
 
         let key = MathCacheKey {
             mode,
@@ -135,41 +151,44 @@ impl MathRenderCache {
         }
 
         self.entries.insert(entry_key, MathRenderState::Pending);
-        self.spawn_render_job(
-            ctx.clone(),
-            self.generation,
+        self.queued_jobs.push_back(MathRenderJob {
+            generation: self.generation,
             key,
-            expression.to_owned(),
+            expression: expression.to_owned(),
             mode,
             zoom_factor,
-        );
+        });
+        self.start_queued_jobs(ctx.clone());
 
         PreparedMath::Pending
     }
 
-    fn spawn_render_job(
-        &self,
-        ctx: egui::Context,
-        generation: u64,
-        key: MathCacheKey,
-        expression: String,
-        mode: MathRenderMode,
-        zoom_factor: f32,
-    ) {
+    fn start_queued_jobs(&mut self, ctx: egui::Context) {
+        while self.active_job_count < MAX_ACTIVE_MATH_RENDER_JOBS {
+            let Some(job) = self.queued_jobs.pop_front() else {
+                break;
+            };
+
+            self.active_job_count += 1;
+            self.spawn_render_job(ctx.clone(), job);
+        }
+    }
+
+    fn spawn_render_job(&self, ctx: egui::Context, job: MathRenderJob) {
         let sender = self.result_sender.clone();
 
         thread::spawn(move || {
             let started = Instant::now();
-            let result = prepare_math(&expression, mode, zoom_factor);
+            let result = prepare_math(&job.expression, job.mode, job.zoom_factor);
             let outcome = match &result {
                 RawMathResult::Svg(_) => "ok",
                 RawMathResult::Error(_) => "error",
             };
-            metrics::log_math_render(expression.len(), started.elapsed(), outcome);
+            metrics::log_math_render(job.expression.len(), started.elapsed(), outcome);
             let _ = sender.send(MathWorkerResult {
-                generation,
-                key,
-                expression,
+                generation: job.generation,
+                key: job.key,
+                expression: job.expression,
                 result,
             });
             ctx.request_repaint();
@@ -177,16 +196,21 @@ impl MathRenderCache {
     }
 
     fn drain_finished_jobs(&mut self) {
+        let mut finished_current_jobs = 0usize;
+
         while let Ok(result) = self.result_receiver.try_recv() {
             if result.generation != self.generation {
                 continue;
             }
 
+            finished_current_jobs += 1;
             self.entries.insert(
                 (result.key, result.expression),
                 MathRenderState::Ready(result.result),
             );
         }
+
+        self.active_job_count = self.active_job_count.saturating_sub(finished_current_jobs);
     }
 }
 
@@ -338,19 +362,14 @@ mod tests {
         let second = cache.prepare(&ctx, "x^2", MathRenderMode::Inline, text_color, 1.0);
 
         assert!(
-            matches!(
-                (&first, &second),
-                (PreparedMath::Svg(first_svg), PreparedMath::Svg(second_svg))
-                    if first_svg.asset().size() == second_svg.asset().size()
+            matches!((&first, &second), (PreparedMath::Svg(first_svg), PreparedMath::Svg(second_svg))
+                if first_svg.asset().size() == second_svg.asset().size()
                     && first_svg.asset().uri() == second_svg.asset().uri()
                     && first_svg.kind() == super::EmbeddedSvgContentKind::Math
                     && first_svg.source_text() == "x^2"
-                    && second_svg.source_text() == "x^2"
-            ) || matches!(
-                (&first, &second),
-                (PreparedMath::Error(first_error), PreparedMath::Error(second_error))
-                    if first_error == second_error
-            )
+                    && second_svg.source_text() == "x^2")
+                || matches!((&first, &second), (PreparedMath::Error(first_error), PreparedMath::Error(second_error))
+                    if first_error == second_error)
         );
     }
 
@@ -441,5 +460,19 @@ mod tests {
                 if first_svg.asset().size() == second_svg.asset().size()
                 && first_svg.asset().uri() != second_svg.asset().uri()
         ));
+    }
+
+    #[test]
+    fn limits_active_math_render_jobs() {
+        let mut cache = MathRenderCache::new();
+        let ctx = Context::default();
+        let text_color = Color32::from_rgb(34, 34, 34);
+
+        cache.active_job_count = super::MAX_ACTIVE_MATH_RENDER_JOBS;
+        let prepared = cache.prepare(&ctx, "x^2", MathRenderMode::Inline, text_color, 1.0);
+
+        assert!(matches!(prepared, PreparedMath::Pending));
+        assert_eq!(cache.active_job_count, super::MAX_ACTIVE_MATH_RENDER_JOBS);
+        assert_eq!(cache.queued_jobs.len(), 1);
     }
 }
