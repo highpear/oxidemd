@@ -502,8 +502,9 @@ impl OxideMdApp {
             return;
         }
 
-        let target_width =
-            HEADING_PANEL_MAX_WIDTH + DOCUMENT_FRAME_MAX_WIDTH + PREVIEW_WINDOW_SIDE_PADDING;
+        let target_width = HEADING_PANEL_MAX_WIDTH
+            + scaled_document_frame_max_width(self.zoom_factor)
+            + PREVIEW_WINDOW_SIDE_PADDING;
         let current_height = current_size
             .map(|size| size.y)
             .unwrap_or(PREVIEW_WINDOW_FALLBACK_HEIGHT);
@@ -1052,17 +1053,23 @@ impl OxideMdApp {
             };
             let active_search_block = self.active_search_block();
 
-            ScrollArea::vertical().show(ui, |ui| {
+            ScrollArea::both().show(ui, |ui| {
                 let document_base_dir = self.current_file.as_ref().and_then(|path| path.parent());
 
                 ui.add_space(18.0);
                 let content_rect = ui.max_rect();
-                let frame_width = content_rect.width().min(DOCUMENT_FRAME_MAX_WIDTH);
-                let frame_left = content_rect.center().x - frame_width * 0.5;
+                let frame_width = scaled_document_frame_max_width(self.zoom_factor);
+                let frame_left = if content_rect.width() > frame_width {
+                    content_rect.center().x - frame_width * 0.5
+                } else {
+                    content_rect.left()
+                };
                 let frame_rect = egui::Rect::from_min_size(
                     egui::pos2(frame_left, ui.cursor().top()),
                     Vec2::new(frame_width, 0.0),
                 );
+                let horizontal_padding = scaled_document_horizontal_padding(self.zoom_factor);
+                let vertical_padding = scaled_document_vertical_padding(self.zoom_factor);
 
                 let document_frame = Frame::new()
                     .fill(theme.content_background)
@@ -1077,19 +1084,18 @@ impl OxideMdApp {
                         color: theme.content_shadow,
                     })
                     .corner_radius(egui::CornerRadius::same(12))
-                    .inner_margin(Margin::symmetric(32, 28));
+                    .inner_margin(Margin::symmetric(
+                        scaled_margin(32, self.zoom_factor),
+                        scaled_margin(28, self.zoom_factor),
+                    ));
                 let background_shape = ui.painter().add(egui::Shape::Noop);
                 let content_width =
-                    (frame_width - DOCUMENT_HORIZONTAL_PADDING - DOCUMENT_FRAME_STROKE_WIDTH * 2.0)
+                    (frame_width - horizontal_padding - DOCUMENT_FRAME_STROKE_WIDTH * 2.0)
                         .max(0.0)
-                        .min(DOCUMENT_BODY_MAX_WIDTH);
+                        .min(scaled_document_body_max_width(self.zoom_factor));
                 let content_min = egui::pos2(
-                    frame_rect.left()
-                        + DOCUMENT_HORIZONTAL_PADDING * 0.5
-                        + DOCUMENT_FRAME_STROKE_WIDTH,
-                    frame_rect.top()
-                        + DOCUMENT_VERTICAL_PADDING * 0.5
-                        + DOCUMENT_FRAME_STROKE_WIDTH,
+                    frame_rect.left() + horizontal_padding * 0.5 + DOCUMENT_FRAME_STROKE_WIDTH,
+                    frame_rect.top() + vertical_padding * 0.5 + DOCUMENT_FRAME_STROKE_WIDTH,
                 );
                 let content_max_rect = egui::Rect::from_min_max(
                     content_min,
@@ -1323,6 +1329,8 @@ impl eframe::App for OxideMdApp {
             metrics::log_startup(startup_started.elapsed());
         }
 
+        let previous_zoom_factor = self.zoom_factor;
+
         self.handle_keyboard_shortcuts(ctx);
         self.handle_file_drops(ctx);
         self.clear_selected_heading_on_manual_scroll(ctx);
@@ -1334,6 +1342,9 @@ impl eframe::App for OxideMdApp {
         apply_theme(ctx, &theme);
         self.render_top_bar(ctx);
         self.render_bottom_bar(ctx);
+        if self.document.is_some() && self.zoom_factor.to_bits() != previous_zoom_factor.to_bits() {
+            self.request_window_expansion_for_preview();
+        }
         self.render_heading_panel(ctx);
         self.render_document_panel(ctx);
         render_external_link_confirmation(ctx, self.language, &mut self.pending_external_link);
@@ -1388,4 +1399,26 @@ fn capped_preview_window_width(target_width: f32, monitor_size: Option<Vec2>) ->
         .map(|size| (size.x - PREVIEW_WINDOW_MONITOR_MARGIN).max(DOCUMENT_FRAME_MAX_WIDTH))
         .map(|max_width| target_width.min(max_width))
         .unwrap_or(target_width)
+}
+
+fn scaled_document_frame_max_width(zoom_factor: f32) -> f32 {
+    DOCUMENT_FRAME_MAX_WIDTH * zoom_factor
+}
+
+fn scaled_document_body_max_width(zoom_factor: f32) -> f32 {
+    DOCUMENT_BODY_MAX_WIDTH * zoom_factor
+}
+
+fn scaled_document_horizontal_padding(zoom_factor: f32) -> f32 {
+    DOCUMENT_HORIZONTAL_PADDING * zoom_factor
+}
+
+fn scaled_document_vertical_padding(zoom_factor: f32) -> f32 {
+    DOCUMENT_VERTICAL_PADDING * zoom_factor
+}
+
+fn scaled_margin(value: i8, zoom_factor: f32) -> i8 {
+    ((value as f32) * zoom_factor)
+        .round()
+        .clamp(0.0, i8::MAX as f32) as i8
 }
