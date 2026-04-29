@@ -318,15 +318,29 @@ impl OxideMdApp {
     }
 
     fn zoom_in(&mut self) {
-        self.zoom_factor = (self.zoom_factor + ZOOM_STEP).clamp(MIN_ZOOM_FACTOR, MAX_ZOOM_FACTOR);
+        self.set_zoom_factor(self.zoom_factor + ZOOM_STEP);
     }
 
     fn zoom_out(&mut self) {
-        self.zoom_factor = (self.zoom_factor - ZOOM_STEP).clamp(MIN_ZOOM_FACTOR, MAX_ZOOM_FACTOR);
+        self.set_zoom_factor(self.zoom_factor - ZOOM_STEP);
     }
 
     fn reset_zoom(&mut self) {
-        self.zoom_factor = DEFAULT_ZOOM_FACTOR;
+        self.set_zoom_factor(DEFAULT_ZOOM_FACTOR);
+    }
+
+    fn set_zoom_factor(&mut self, zoom_factor: f32) {
+        self.zoom_factor = zoom_factor.clamp(MIN_ZOOM_FACTOR, MAX_ZOOM_FACTOR);
+    }
+
+    fn handle_pointer_zoom(&mut self, ctx: &egui::Context) {
+        let zoom_delta = ctx.input(|input| input.zoom_delta());
+
+        if (zoom_delta - 1.0).abs() <= f32::EPSILON {
+            return;
+        }
+
+        self.set_zoom_factor(self.zoom_factor * zoom_delta);
     }
 
     fn open_markdown_file(&mut self) {
@@ -831,9 +845,14 @@ impl OxideMdApp {
     }
 
     fn clear_selected_heading_on_manual_scroll(&mut self, ctx: &egui::Context) {
-        let scroll_delta_y = ctx.input(|input| input.raw_scroll_delta.y);
+        let (scroll_delta_y, is_zoom_scroll) = ctx.input(|input| {
+            (
+                input.raw_scroll_delta.y,
+                input.modifiers.matches_any(egui::Modifiers::COMMAND),
+            )
+        });
 
-        if scroll_delta_y.abs() > f32::EPSILON {
+        if scroll_delta_y.abs() > f32::EPSILON && !is_zoom_scroll {
             self.selected_heading = None;
         }
     }
@@ -1332,6 +1351,7 @@ impl eframe::App for OxideMdApp {
         let previous_zoom_factor = self.zoom_factor;
 
         self.handle_keyboard_shortcuts(ctx);
+        self.handle_pointer_zoom(ctx);
         self.handle_file_drops(ctx);
         self.clear_selected_heading_on_manual_scroll(ctx);
         self.process_watch_events();
