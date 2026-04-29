@@ -8,15 +8,16 @@ use crate::i18n::{Language, TranslationKey, tr};
 use crate::math::{MathRenderMode, PreparedMath};
 use crate::theme::Theme;
 
+use super::inline::{InlineStyle, SpanKind, monospace_span_font_size, text_width};
 use super::sizing::{scale_margin, scale_spacing};
 use super::{
     BLOCK_MATH_PLACEHOLDER_MIN_HEIGHT, BLOCK_SPACING_SECTION, BODY_TEXT_SIZE,
     COPY_FEEDBACK_DURATION_SECONDS, DIAGRAM_BLOCK_MIN_SCALE, EMBEDDED_COPY_FEEDBACK_SLOT_WIDTH,
     INLINE_CODE_TEXT_SIZE, INLINE_MATH_BASELINE_OFFSET_MULTIPLIER,
     INLINE_MATH_LINE_HEIGHT_MULTIPLIER, INLINE_MATH_PLACEHOLDER_MIN_WIDTH,
-    INLINE_MATH_TARGET_HEIGHT_MULTIPLIER, InlineStyle, MATH_BLOCK_DISPLAY_SCALE,
-    MATH_BLOCK_PADDING_X, MATH_BLOCK_PADDING_Y, QUOTE_TEXT_SIZE, RenderResources, SpanKind,
-    TALL_INLINE_MATH_TARGET_HEIGHT_MULTIPLIER, monospace_span_font_size, text_width,
+    INLINE_MATH_TARGET_HEIGHT_MULTIPLIER, MATH_BLOCK_DISPLAY_SCALE, MATH_BLOCK_PADDING_X,
+    MATH_BLOCK_PADDING_Y, QUOTE_TEXT_SIZE, RenderResources,
+    TALL_INLINE_MATH_TARGET_HEIGHT_MULTIPLIER,
 };
 
 #[derive(Clone, Copy)]

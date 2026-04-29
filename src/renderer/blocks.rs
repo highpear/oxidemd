@@ -4,11 +4,11 @@ use pulldown_cmark::{Alignment, HeadingLevel};
 use crate::parser::{InlineContent, InlineSpan};
 use crate::theme::Theme;
 
+use super::inline::{InlineStyle, inline_content_width, render_inline, render_inline_span};
 use super::sizing::{scale_margin, scale_spacing};
 use super::{
-    BLOCK_SPACING_SECTION, BODY_TEXT_SIZE, HeadingRenderState, InlineStyle, LinkActions,
-    RenderResources, SearchHighlight, TABLE_CELL_MIN_WIDTH, inline_content_width, render_inline,
-    render_inline_span,
+    BLOCK_SPACING_SECTION, BODY_TEXT_SIZE, HeadingRenderState, LinkActions, RenderResources,
+    SearchHighlight, TABLE_CELL_MIN_WIDTH,
 };
 
 pub(super) fn render_heading(
