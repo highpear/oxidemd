@@ -28,6 +28,8 @@ const INLINE_MATH_TARGET_HEIGHT_MULTIPLIER: f32 = 1.3;
 const TALL_INLINE_MATH_TARGET_HEIGHT_MULTIPLIER: f32 = 2.15;
 const INLINE_MATH_LINE_HEIGHT_MULTIPLIER: f32 = 1.7;
 const INLINE_MATH_BASELINE_OFFSET_MULTIPLIER: f32 = 0.16;
+const INLINE_MATH_PLACEHOLDER_MIN_WIDTH: f32 = 28.0;
+const BLOCK_MATH_PLACEHOLDER_MIN_HEIGHT: f32 = 42.0;
 const LARGE_DOCUMENT_BLOCK_THRESHOLD: usize = 2_000;
 const VIRTUAL_RENDER_OVERSCAN: f32 = 1_200.0;
 const ESTIMATED_CHARS_PER_LINE: usize = 90;
@@ -1061,15 +1063,16 @@ fn render_inline_span(
                         fitted_size,
                     );
                 }
-                PreparedMath::Pending => render_text_label(
-                    ui,
-                    text,
-                    style,
-                    SpanKind::Math,
-                    theme,
-                    zoom_factor,
-                    search_highlight,
-                ),
+                PreparedMath::Pending => {
+                    render_inline_math_placeholder(
+                        ui,
+                        text,
+                        style,
+                        render_resources.ui_language,
+                        theme,
+                        zoom_factor,
+                    );
+                }
                 PreparedMath::Error(_) => render_text_label(
                     ui,
                     text,
@@ -1151,13 +1154,7 @@ fn render_math_block(
                     );
                 }
                 PreparedMath::Pending => {
-                    render_embedded_source_fallback(
-                        ui,
-                        block_index,
-                        expression,
-                        theme,
-                        zoom_factor,
-                    );
+                    render_math_block_placeholder(ui, expression, theme, zoom_factor);
                 }
                 PreparedMath::Error(error) => {
                     ui.label(
@@ -1567,6 +1564,38 @@ fn render_inline_math_image(
     );
 }
 
+fn render_inline_math_placeholder(
+    ui: &mut Ui,
+    expression: &str,
+    style: InlineStyle,
+    ui_language: Language,
+    theme: &Theme,
+    zoom_factor: f32,
+) {
+    let width = text_width(ui, expression, style, SpanKind::Math, theme, zoom_factor).max(
+        scale_spacing(INLINE_MATH_PLACEHOLDER_MIN_WIDTH, zoom_factor),
+    );
+    let line_height = inline_math_line_height(style, zoom_factor);
+    let bar_height = (monospace_span_font_size(style, zoom_factor) * 0.34).max(3.0);
+    let (rect, response) =
+        ui.allocate_exact_size(egui::vec2(width, line_height), egui::Sense::click());
+    let bar_rect = egui::Rect::from_center_size(
+        rect.center(),
+        egui::vec2(width, bar_height).min(rect.size()),
+    );
+
+    if response.clicked() {
+        ui.ctx().copy_text(expression.to_owned());
+    }
+    response.on_hover_text(tr(ui_language, TranslationKey::ActionCopyTex));
+
+    ui.painter().rect_filled(
+        bar_rect,
+        egui::CornerRadius::same(3),
+        theme.widget_active_background,
+    );
+}
+
 fn render_embedded_svg_block_image(
     ui: &mut Ui,
     content: &EmbeddedSvgContent,
@@ -1612,6 +1641,51 @@ fn render_embedded_svg_image(
         copy_embedded_source(ui, content.source_action());
     }
     response.on_hover_text(tr(ui_language, copy_action_key));
+}
+
+fn render_math_block_placeholder(ui: &mut Ui, expression: &str, theme: &Theme, zoom_factor: f32) {
+    let line_count = expression.lines().count().max(1).min(3);
+    let placeholder_height = (line_count as f32 * scale_spacing(22.0, zoom_factor)).max(
+        scale_spacing(BLOCK_MATH_PLACEHOLDER_MIN_HEIGHT, zoom_factor),
+    );
+    let placeholder_width = ui
+        .available_width()
+        .min(scale_spacing(360.0, zoom_factor))
+        .max(scale_spacing(96.0, zoom_factor));
+
+    ui.vertical_centered(|ui| {
+        let (rect, _) = ui.allocate_exact_size(
+            egui::vec2(placeholder_width, placeholder_height),
+            egui::Sense::hover(),
+        );
+        ui.painter().rect(
+            rect,
+            egui::CornerRadius::same(5),
+            theme.widget_inactive_background,
+            Stroke::new(1.0, theme.content_border),
+            egui::StrokeKind::Inside,
+        );
+
+        let bar_height = scale_spacing(5.0, zoom_factor).max(3.0);
+        let gap = scale_spacing(8.0, zoom_factor);
+        let total_bar_height = line_count as f32 * bar_height + (line_count - 1) as f32 * gap;
+        let mut y = rect.center().y - total_bar_height / 2.0;
+        let width_factors = [0.64, 0.48, 0.56];
+
+        for factor in width_factors.iter().take(line_count) {
+            let bar_width = placeholder_width * factor;
+            let bar_rect = egui::Rect::from_min_size(
+                egui::pos2(rect.center().x - bar_width / 2.0, y),
+                egui::vec2(bar_width, bar_height),
+            );
+            ui.painter().rect_filled(
+                bar_rect,
+                egui::CornerRadius::same(3),
+                theme.widget_active_background,
+            );
+            y += bar_height + gap;
+        }
+    });
 }
 
 fn render_embedded_source_fallback(
