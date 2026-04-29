@@ -1,8 +1,12 @@
+use std::collections::HashMap;
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::thread;
+use std::time::Instant;
+
 use eframe::egui::{self};
 
-use crate::embedded_svg::{
-    EmbeddedSvgContent, EmbeddedSvgContentKind, EmbeddedSvgRenderCache, EmbeddedSvgRenderResult,
-};
+use crate::embedded_svg::{EmbeddedSvgContent, EmbeddedSvgContentKind};
+use crate::metrics;
 use crate::svg::{SvgAsset, apply_current_color};
 
 const INLINE_MATH_BASE_FONT_SIZE: f32 = 16.0;
@@ -14,7 +18,12 @@ pub enum MathRenderMode {
     Block,
 }
 
-pub type PreparedMath = EmbeddedSvgRenderResult;
+#[derive(Clone)]
+pub enum PreparedMath {
+    Pending,
+    Svg(EmbeddedSvgContent),
+    Error(String),
+}
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct MathCacheKey {
@@ -24,37 +33,122 @@ struct MathCacheKey {
 }
 
 pub struct MathRenderCache {
-    cache: EmbeddedSvgRenderCache<MathCacheKey>,
+    entries: HashMap<(MathCacheKey, String), MathRenderState>,
+    result_sender: Sender<MathWorkerResult>,
+    result_receiver: Receiver<MathWorkerResult>,
+    generation: u64,
+}
+
+enum MathRenderState {
+    Pending,
+    Ready(PreparedMath),
+}
+
+struct MathWorkerResult {
+    generation: u64,
+    key: MathCacheKey,
+    expression: String,
+    result: PreparedMath,
 }
 
 impl MathRenderCache {
     pub fn new() -> Self {
+        let (result_sender, result_receiver) = mpsc::channel();
+
         Self {
-            cache: EmbeddedSvgRenderCache::new(),
+            entries: HashMap::new(),
+            result_sender,
+            result_receiver,
+            generation: 0,
         }
     }
 
     pub fn clear(&mut self) {
-        self.cache.clear();
+        self.entries.clear();
+        self.generation = self.generation.wrapping_add(1);
+        self.drain_finished_jobs();
     }
 
     pub fn prepare(
         &mut self,
-        _ctx: &egui::Context,
+        ctx: &egui::Context,
         expression: &str,
         mode: MathRenderMode,
         text_color: egui::Color32,
         zoom_factor: f32,
     ) -> PreparedMath {
+        self.drain_finished_jobs();
+
         let key = MathCacheKey {
             mode,
             text_color: text_color.to_array(),
             zoom_bucket: zoom_bucket(zoom_factor),
         };
+        let entry_key = (key, expression.to_owned());
 
-        self.cache.prepare_with(key, expression, |expression| {
-            prepare_math(expression, mode, text_color, zoom_factor)
-        })
+        if let Some(state) = self.entries.get(&entry_key) {
+            return match state {
+                MathRenderState::Pending => PreparedMath::Pending,
+                MathRenderState::Ready(result) => result.clone(),
+            };
+        }
+
+        self.entries.insert(entry_key, MathRenderState::Pending);
+        self.spawn_render_job(
+            ctx.clone(),
+            self.generation,
+            key,
+            expression.to_owned(),
+            mode,
+            text_color,
+            zoom_factor,
+        );
+
+        PreparedMath::Pending
+    }
+
+    fn spawn_render_job(
+        &self,
+        ctx: egui::Context,
+        generation: u64,
+        key: MathCacheKey,
+        expression: String,
+        mode: MathRenderMode,
+        text_color: egui::Color32,
+        zoom_factor: f32,
+    ) {
+        let sender = self.result_sender.clone();
+
+        thread::spawn(move || {
+            let started = Instant::now();
+            let result = prepare_math(&expression, mode, text_color, zoom_factor);
+            let outcome = match &result {
+                PreparedMath::Pending => "pending",
+                PreparedMath::Svg(_) => "ok",
+                PreparedMath::Error(_) => "error",
+            };
+            metrics::log_math_render(expression.len(), started.elapsed(), outcome);
+            let _ = sender.send(MathWorkerResult {
+                generation,
+                key,
+                expression,
+                result,
+            });
+            ctx.request_repaint();
+        });
+    }
+
+    fn drain_finished_jobs(&mut self) {
+        while let Ok(result) = self.result_receiver.try_recv() {
+            if result.generation != self.generation {
+                continue;
+            }
+
+            self.entries.insert(
+                (result.key, result.expression),
+                MathRenderState::Ready(result.result),
+            );
+        }
     }
 }
 
@@ -172,6 +266,7 @@ fn svg_uri_hash(expression: &str) -> String {
 mod tests {
     use super::{MathRenderCache, MathRenderMode, PreparedMath};
     use eframe::egui::{Color32, Context};
+    use std::time::{Duration, Instant};
 
     #[test]
     fn reuses_prepared_math_by_key() {
@@ -179,7 +274,18 @@ mod tests {
         let ctx = Context::default();
 
         let text_color = Color32::from_rgb(34, 34, 34);
-        let first = cache.prepare(&ctx, "x^2", MathRenderMode::Inline, text_color, 1.0);
+        assert!(matches!(
+            cache.prepare(&ctx, "x^2", MathRenderMode::Inline, text_color, 1.0),
+            PreparedMath::Pending
+        ));
+        let first = wait_for_prepared_math(
+            &mut cache,
+            &ctx,
+            "x^2",
+            MathRenderMode::Inline,
+            text_color,
+            1.0,
+        );
         let second = cache.prepare(&ctx, "x^2", MathRenderMode::Inline, text_color, 1.0);
 
         assert!(
@@ -197,6 +303,26 @@ mod tests {
                     if first_error == second_error
             )
         );
+    }
+
+    fn wait_for_prepared_math(
+        cache: &mut MathRenderCache,
+        ctx: &Context,
+        expression: &str,
+        mode: MathRenderMode,
+        text_color: Color32,
+        zoom_factor: f32,
+    ) -> PreparedMath {
+        let started = Instant::now();
+
+        loop {
+            match cache.prepare(ctx, expression, mode, text_color, zoom_factor) {
+                PreparedMath::Pending if started.elapsed() < Duration::from_secs(5) => {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                result => return result,
+            }
+        }
     }
 
     #[test]

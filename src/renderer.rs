@@ -854,6 +854,7 @@ fn inline_math_width(
         PreparedMath::Svg(content) => {
             fit_inline_math_size(text, style, zoom_factor, content.asset().size()).x
         }
+        PreparedMath::Pending => text_width(ui, text, style, SpanKind::Math, theme, zoom_factor),
         PreparedMath::Error(_) => text_width(ui, text, style, SpanKind::Math, theme, zoom_factor),
     }
 }
@@ -1060,6 +1061,15 @@ fn render_inline_span(
                         fitted_size,
                     );
                 }
+                PreparedMath::Pending => render_text_label(
+                    ui,
+                    text,
+                    style,
+                    SpanKind::Math,
+                    theme,
+                    zoom_factor,
+                    search_highlight,
+                ),
                 PreparedMath::Error(_) => render_text_label(
                     ui,
                     text,
@@ -1116,6 +1126,7 @@ fn render_math_block(
         .show(ui, |ui| {
             let source_action = match &prepared {
                 PreparedMath::Svg(content) => content.source_action(),
+                PreparedMath::Pending => EmbeddedSourceAction::new(expression),
                 PreparedMath::Error(_) => EmbeddedSourceAction::new(expression),
             };
 
@@ -1137,6 +1148,15 @@ fn render_math_block(
                         &content,
                         render_resources.ui_language,
                         TranslationKey::ActionCopyTex,
+                    );
+                }
+                PreparedMath::Pending => {
+                    render_embedded_source_fallback(
+                        ui,
+                        block_index,
+                        expression,
+                        theme,
+                        zoom_factor,
                     );
                 }
                 PreparedMath::Error(error) => {

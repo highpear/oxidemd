@@ -67,6 +67,15 @@ pub fn log_diagram_render(language: &str, source_len: usize, duration: Duration,
     );
 }
 
+pub fn log_math_render(source_len: usize, duration: Duration, outcome: &str) {
+    eprintln!(
+        "[perf] math_render: {} ms, {} source bytes, {}",
+        duration.as_millis(),
+        source_len,
+        outcome
+    );
+}
+
 fn format_byte_len(byte_len: usize) -> String {
     const KIB: f64 = 1024.0;
     const MIB: f64 = KIB * 1024.0;

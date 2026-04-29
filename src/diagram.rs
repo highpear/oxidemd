@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use eframe::egui;
 
-use crate::embedded_svg::{EmbeddedSvgContent, EmbeddedSvgContentKind, EmbeddedSvgRenderResult};
+use crate::embedded_svg::{EmbeddedSvgContent, EmbeddedSvgContentKind};
 use crate::metrics;
 use crate::svg::{SvgAsset, apply_current_color};
 
@@ -263,15 +263,6 @@ fn has_dangling_arrow_operator(line: &str) -> bool {
 
 fn is_arrow_operator_char(character: char) -> bool {
     matches!(character, '<' | '>' | '-' | '.' | '=' | 'o' | 'x')
-}
-
-impl From<EmbeddedSvgRenderResult> for PreparedDiagram {
-    fn from(result: EmbeddedSvgRenderResult) -> Self {
-        match result {
-            EmbeddedSvgRenderResult::Svg(content) => Self::Svg(content),
-            EmbeddedSvgRenderResult::Error(error) => Self::Error(error),
-        }
-    }
 }
 
 fn color_hash(color: egui::Color32) -> String {
