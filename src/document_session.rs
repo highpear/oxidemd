@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Instant;
 
 use crate::diagram::DiagramRenderCache;
 use crate::document_loader::{DocumentFingerprint, FileSnapshot};
@@ -8,6 +9,7 @@ use crate::math::MathRenderCache;
 use crate::parser::MarkdownDocument;
 use crate::renderer::estimate_document_block_heights;
 use crate::search::SearchState;
+use crate::watcher::{FileWatchEvent, FileWatcherHandle};
 
 pub struct DocumentSession {
     pub path: PathBuf,
@@ -22,6 +24,14 @@ pub struct DocumentSession {
     pub active_heading: Option<usize>,
     pub selected_heading: Option<usize>,
     pub search: SearchState,
+    pub watcher: Option<FileWatcherHandle>,
+    pub pending_reload_at: Option<Instant>,
+    pub in_flight_reload_id: Option<u64>,
+}
+
+pub struct WatchEventSummary {
+    pub saw_change: bool,
+    pub error: Option<String>,
 }
 
 pub struct BlockHeightCache {
@@ -54,6 +64,9 @@ impl DocumentSession {
             active_heading,
             selected_heading: None,
             search: SearchState::new(),
+            watcher: None,
+            pending_reload_at: None,
+            in_flight_reload_id: None,
         };
         session.refresh_search_matches();
 
@@ -92,6 +105,53 @@ impl DocumentSession {
 
     pub fn base_dir(&self) -> Option<&Path> {
         self.path.parent()
+    }
+
+    pub fn set_watcher(&mut self, watcher: FileWatcherHandle) {
+        self.watcher = Some(watcher);
+    }
+
+    pub fn clear_watcher(&mut self) {
+        self.watcher = None;
+    }
+
+    pub fn drain_watch_events(&self) -> WatchEventSummary {
+        let mut summary = WatchEventSummary {
+            saw_change: false,
+            error: None,
+        };
+
+        if let Some(watcher) = &self.watcher {
+            while let Ok(event) = watcher.receiver.try_recv() {
+                match event {
+                    FileWatchEvent::Changed => {
+                        summary.saw_change = true;
+                    }
+                    FileWatchEvent::Error(error) => {
+                        summary.error = Some(error);
+                    }
+                }
+            }
+        }
+
+        summary
+    }
+
+    pub fn schedule_reload(&mut self) {
+        self.pending_reload_at = Some(Instant::now());
+    }
+
+    pub fn clear_pending_reload(&mut self) {
+        self.pending_reload_at = None;
+    }
+
+    pub fn start_reload(&mut self, id: u64) {
+        self.pending_reload_at = None;
+        self.in_flight_reload_id = Some(id);
+    }
+
+    pub fn finish_reload(&mut self) {
+        self.in_flight_reload_id = None;
     }
 
     pub fn refresh_search_matches(&mut self) {

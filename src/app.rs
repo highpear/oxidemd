@@ -26,7 +26,7 @@ use crate::session::{
 use crate::shortcuts::{consume_shortcuts, render_shortcuts_help};
 use crate::theme::{DEFAULT_THEME_ID, Theme, ThemeId, apply_theme, available_themes, theme};
 use crate::top_bar::{TopBarState, render_top_bar};
-use crate::watcher::{FileWatchEvent, FileWatcherHandle, watch_file};
+use crate::watcher::watch_file;
 
 #[derive(Clone, Copy)]
 enum ReloadStatus {
@@ -83,10 +83,7 @@ pub struct OxideMdApp {
     status_hover_message: Option<String>,
     reload_status: ReloadStatus,
     reload_worker: ReloadWorkerHandle,
-    watcher: Option<FileWatcherHandle>,
-    pending_reload_at: Option<Instant>,
     queued_reload_id: u64,
-    in_flight_reload_id: Option<u64>,
     is_heading_panel_visible: bool,
     show_shortcuts_help: bool,
     external_link_behavior: ExternalLinkBehavior,
@@ -118,10 +115,7 @@ impl OxideMdApp {
             status_message: tr(language, TranslationKey::StatusNoFile).to_owned(),
             status_hover_message: None,
             reload_status: ReloadStatus::Idle,
-            watcher: None,
-            pending_reload_at: None,
             queued_reload_id: 0,
-            in_flight_reload_id: None,
             is_heading_panel_visible: true,
             show_shortcuts_help: false,
             external_link_behavior: ExternalLinkBehavior::AskFirst,
@@ -353,8 +347,6 @@ impl OxideMdApp {
                     loaded.fingerprint,
                     loaded.file_snapshot,
                 ));
-                self.pending_reload_at = None;
-                self.in_flight_reload_id = None;
                 self.reload_status = ReloadStatus::Idle;
                 self.start_watching_file(&path);
                 self.pending_render_measurement = Some(PendingRenderMeasurement {
@@ -367,9 +359,6 @@ impl OxideMdApp {
             }
             Err(error) => {
                 self.document_session = None;
-                self.watcher = None;
-                self.pending_reload_at = None;
-                self.in_flight_reload_id = None;
                 self.pending_render_measurement = None;
                 self.set_reload_error(TranslationKey::StatusLoadFailed, error);
             }
@@ -379,10 +368,14 @@ impl OxideMdApp {
     fn start_watching_file(&mut self, path: &Path) {
         match watch_file(path, self.ui_context.clone()) {
             Ok(handle) => {
-                self.watcher = Some(handle);
+                if let Some(session) = self.document_session.as_mut() {
+                    session.set_watcher(handle);
+                }
             }
             Err(error) => {
-                self.watcher = None;
+                if let Some(session) = self.document_session.as_mut() {
+                    session.clear_watcher();
+                }
                 self.set_reload_error(TranslationKey::StatusWatchFailed, error);
             }
         }
@@ -431,35 +424,27 @@ impl OxideMdApp {
     }
 
     fn process_watch_events(&mut self) {
-        let mut watch_error = None;
-        let mut saw_change = false;
+        let Some(session) = self.document_session.as_ref() else {
+            return;
+        };
+        let summary = session.drain_watch_events();
 
-        if let Some(watcher) = &self.watcher {
-            while let Ok(event) = watcher.receiver.try_recv() {
-                match event {
-                    FileWatchEvent::Changed => {
-                        saw_change = true;
-                    }
-                    FileWatchEvent::Error(error) => {
-                        watch_error = Some(error);
-                    }
-                }
-            }
-        }
-
-        if saw_change {
+        if summary.saw_change {
             self.schedule_reload();
             self.ui_context
                 .request_repaint_after(Duration::from_millis(100));
         }
 
-        if let Some(error) = watch_error {
+        if let Some(error) = summary.error {
             self.set_reload_error(TranslationKey::StatusWatchFailed, error);
         }
     }
 
     fn reload_if_ready(&mut self) {
-        let Some(last_change_at) = self.pending_reload_at else {
+        let Some(session) = self.document_session.as_ref() else {
+            return;
+        };
+        let Some(last_change_at) = session.pending_reload_at else {
             return;
         };
 
@@ -469,18 +454,13 @@ impl OxideMdApp {
             return;
         }
 
-        let Some(path) = self.current_file().map(Path::to_path_buf) else {
-            self.pending_reload_at = None;
-            return;
-        };
-
-        if self.in_flight_reload_id.is_some() {
+        if session.in_flight_reload_id.is_some() {
             self.ui_context
                 .request_repaint_after(Duration::from_millis(100));
             return;
         }
 
-        self.pending_reload_at = None;
+        let path = session.path.clone();
         self.enqueue_reload(path);
     }
 
@@ -498,17 +478,25 @@ impl OxideMdApp {
             return;
         };
 
-        if self.in_flight_reload_id.is_some() {
+        if self
+            .document_session
+            .as_ref()
+            .and_then(|session| session.in_flight_reload_id)
+            .is_some()
+        {
             return;
         }
 
-        self.pending_reload_at = None;
         self.enqueue_reload(path);
     }
 
     fn enqueue_reload(&mut self, path: PathBuf) {
         self.queued_reload_id += 1;
         let reload_id = self.queued_reload_id;
+
+        if let Some(session) = self.document_session.as_mut() {
+            session.clear_pending_reload();
+        }
 
         let previous_fingerprint = self
             .document_session
@@ -526,7 +514,9 @@ impl OxideMdApp {
             previous_file_snapshot,
         ) {
             Ok(()) => {
-                self.in_flight_reload_id = Some(reload_id);
+                if let Some(session) = self.document_session.as_mut() {
+                    session.start_reload(reload_id);
+                }
                 self.set_reload_in_progress(TranslationKey::StatusReloadStarted, Some(&path));
             }
             Err(error) => {
@@ -546,7 +536,7 @@ impl OxideMdApp {
                     fingerprint,
                     file_snapshot,
                 } => {
-                    if self.in_flight_reload_id != Some(id) {
+                    if !self.is_current_reload(id) {
                         continue;
                     }
 
@@ -559,14 +549,14 @@ impl OxideMdApp {
                     fingerprint,
                     file_snapshot,
                 } => {
-                    if self.in_flight_reload_id != Some(id) {
+                    if !self.is_current_reload(id) {
                         continue;
                     }
 
                     self.finish_reload_unchanged(path, timing, fingerprint, file_snapshot);
                 }
                 ReloadResponse::Error { id, path, error } => {
-                    if self.in_flight_reload_id != Some(id) {
+                    if !self.is_current_reload(id) {
                         continue;
                     }
 
@@ -577,7 +567,9 @@ impl OxideMdApp {
     }
 
     fn schedule_reload(&mut self) {
-        self.pending_reload_at = Some(Instant::now());
+        if let Some(session) = self.document_session.as_mut() {
+            session.schedule_reload();
+        }
         self.set_reload_in_progress(TranslationKey::ReloadReloading, None);
     }
 
@@ -589,8 +581,8 @@ impl OxideMdApp {
         fingerprint: DocumentFingerprint,
         file_snapshot: Option<FileSnapshot>,
     ) {
-        self.in_flight_reload_id = None;
         if let Some(session) = self.document_session.as_mut() {
+            session.finish_reload();
             session.path = path.clone();
             session.replace_document(document, fingerprint, file_snapshot);
         } else {
@@ -617,8 +609,8 @@ impl OxideMdApp {
         fingerprint: DocumentFingerprint,
         file_snapshot: Option<FileSnapshot>,
     ) {
-        self.in_flight_reload_id = None;
         if let Some(session) = self.document_session.as_mut() {
+            session.finish_reload();
             session.update_unchanged_snapshot(fingerprint, file_snapshot);
         }
         self.reload_status = ReloadStatus::Idle;
@@ -627,7 +619,9 @@ impl OxideMdApp {
     }
 
     fn finish_reload_error(&mut self, path: PathBuf, error: String) {
-        self.in_flight_reload_id = None;
+        if let Some(session) = self.document_session.as_mut() {
+            session.finish_reload();
+        }
         self.reload_status = ReloadStatus::Error;
         let display_path = status_path_label(&path);
         self.status_message = format!(
@@ -665,6 +659,13 @@ impl OxideMdApp {
     fn set_status_with_path(&mut self, key: TranslationKey, path: &Path) {
         self.status_message = format!("{} {}", tr(self.language, key), status_path_label(path));
         self.status_hover_message = Some(format!("{} {}", tr(self.language, key), path.display()));
+    }
+
+    fn is_current_reload(&self, id: u64) -> bool {
+        self.document_session
+            .as_ref()
+            .and_then(|session| session.in_flight_reload_id)
+            == Some(id)
     }
 
     fn handle_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
