@@ -8,11 +8,13 @@ use eframe::egui;
 use crate::document_loader::{
     DocumentFingerprint, FileSnapshot, ReloadDocumentOutcome, reload_markdown_document,
 };
+use crate::document_workspace::DocumentId;
 use crate::metrics::DocumentTiming;
 use crate::parser::MarkdownDocument;
 
 enum ReloadRequest {
     Reload {
+        document_id: DocumentId,
         id: u64,
         path: PathBuf,
         previous_fingerprint: Option<DocumentFingerprint>,
@@ -22,6 +24,7 @@ enum ReloadRequest {
 
 pub enum ReloadResponse {
     Reloaded {
+        document_id: DocumentId,
         id: u64,
         path: PathBuf,
         document: Arc<MarkdownDocument>,
@@ -30,6 +33,7 @@ pub enum ReloadResponse {
         file_snapshot: Option<FileSnapshot>,
     },
     Unchanged {
+        document_id: DocumentId,
         id: u64,
         path: PathBuf,
         timing: DocumentTiming,
@@ -37,6 +41,7 @@ pub enum ReloadResponse {
         file_snapshot: Option<FileSnapshot>,
     },
     Error {
+        document_id: DocumentId,
         id: u64,
         path: PathBuf,
         error: String,
@@ -57,6 +62,7 @@ pub fn spawn_reload_worker(ctx: egui::Context) -> ReloadWorkerHandle {
         while let Ok(request) = request_receiver.recv() {
             match request {
                 ReloadRequest::Reload {
+                    document_id,
                     id,
                     path,
                     previous_fingerprint,
@@ -68,6 +74,7 @@ pub fn spawn_reload_worker(ctx: egui::Context) -> ReloadWorkerHandle {
                         previous_file_snapshot,
                     ) {
                         Ok(ReloadDocumentOutcome::Reloaded(loaded)) => ReloadResponse::Reloaded {
+                            document_id,
                             id,
                             path,
                             document: loaded.document,
@@ -80,6 +87,7 @@ pub fn spawn_reload_worker(ctx: egui::Context) -> ReloadWorkerHandle {
                             file_snapshot,
                             timing,
                         }) => ReloadResponse::Unchanged {
+                            document_id,
                             id,
                             path,
                             timing,
@@ -87,6 +95,7 @@ pub fn spawn_reload_worker(ctx: egui::Context) -> ReloadWorkerHandle {
                             file_snapshot,
                         },
                         Err(error) => ReloadResponse::Error {
+                            document_id,
                             id,
                             path,
                             error: error.to_string(),
@@ -113,6 +122,7 @@ pub fn spawn_reload_worker(ctx: egui::Context) -> ReloadWorkerHandle {
 impl ReloadWorkerHandle {
     pub fn request_reload(
         &self,
+        document_id: DocumentId,
         id: u64,
         path: PathBuf,
         previous_fingerprint: Option<DocumentFingerprint>,
@@ -120,6 +130,7 @@ impl ReloadWorkerHandle {
     ) -> Result<(), String> {
         self.sender
             .send(ReloadRequest::Reload {
+                document_id,
                 id,
                 path,
                 previous_fingerprint,

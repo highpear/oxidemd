@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use crate::document_loader::{DocumentFingerprint, FileSnapshot};
 use crate::document_session::DocumentSession;
+use crate::document_workspace::DocumentId;
 use crate::i18n::{TranslationKey, tr};
 use crate::metrics;
 use crate::parser::MarkdownDocument;
@@ -84,6 +85,7 @@ impl OxideMdApp {
         while let Ok(result) = self.reload_worker.receiver.try_recv() {
             match result {
                 ReloadResponse::Reloaded {
+                    document_id,
                     id,
                     path,
                     document,
@@ -91,31 +93,50 @@ impl OxideMdApp {
                     fingerprint,
                     file_snapshot,
                 } => {
-                    if !self.is_current_reload(id) {
+                    if !self.is_current_reload(document_id, id) {
                         continue;
                     }
 
-                    self.finish_reload_success(path, document, timing, fingerprint, file_snapshot);
+                    self.finish_reload_success(
+                        document_id,
+                        path,
+                        document,
+                        timing,
+                        fingerprint,
+                        file_snapshot,
+                    );
                 }
                 ReloadResponse::Unchanged {
+                    document_id,
                     id,
                     path,
                     timing,
                     fingerprint,
                     file_snapshot,
                 } => {
-                    if !self.is_current_reload(id) {
+                    if !self.is_current_reload(document_id, id) {
                         continue;
                     }
 
-                    self.finish_reload_unchanged(path, timing, fingerprint, file_snapshot);
+                    self.finish_reload_unchanged(
+                        document_id,
+                        path,
+                        timing,
+                        fingerprint,
+                        file_snapshot,
+                    );
                 }
-                ReloadResponse::Error { id, path, error } => {
-                    if !self.is_current_reload(id) {
+                ReloadResponse::Error {
+                    document_id,
+                    id,
+                    path,
+                    error,
+                } => {
+                    if !self.is_current_reload(document_id, id) {
                         continue;
                     }
 
-                    self.finish_reload_error(path, error);
+                    self.finish_reload_error(document_id, path, error);
                 }
             }
         }
@@ -151,6 +172,9 @@ impl OxideMdApp {
     fn enqueue_reload(&mut self) {
         self.queued_reload_id += 1;
         let reload_id = self.queued_reload_id;
+        let Some(document_id) = self.documents.active_document_id() else {
+            return;
+        };
 
         if let Some(session) = self.documents.active_session_mut() {
             session.clear_pending_reload();
@@ -165,6 +189,7 @@ impl OxideMdApp {
         };
 
         match self.reload_worker.request_reload(
+            document_id,
             reload_id,
             request_data.path.clone(),
             request_data.previous_fingerprint,
@@ -194,13 +219,14 @@ impl OxideMdApp {
 
     fn finish_reload_success(
         &mut self,
+        document_id: DocumentId,
         path: PathBuf,
         document: Arc<MarkdownDocument>,
         timing: metrics::DocumentTiming,
         fingerprint: DocumentFingerprint,
         file_snapshot: Option<FileSnapshot>,
     ) {
-        if let Some(session) = self.documents.active_session_mut() {
+        if let Some(session) = self.documents.active_session_mut_for_id(document_id) {
             session.replace_reloaded_document(path.clone(), document, fingerprint, file_snapshot);
         } else {
             self.documents.set_active_session(DocumentSession::new(
@@ -221,12 +247,13 @@ impl OxideMdApp {
 
     fn finish_reload_unchanged(
         &mut self,
+        document_id: DocumentId,
         path: PathBuf,
         timing: metrics::DocumentTiming,
         fingerprint: DocumentFingerprint,
         file_snapshot: Option<FileSnapshot>,
     ) {
-        if let Some(session) = self.documents.active_session_mut() {
+        if let Some(session) = self.documents.active_session_mut_for_id(document_id) {
             session.finish_unchanged_reload(fingerprint, file_snapshot);
         }
         self.reload_status = ReloadStatus::Idle;
@@ -234,8 +261,8 @@ impl OxideMdApp {
         self.set_status_with_path(TranslationKey::StatusReloadSkipped, &path);
     }
 
-    fn finish_reload_error(&mut self, path: PathBuf, error: String) {
-        if let Some(session) = self.documents.active_session_mut() {
+    fn finish_reload_error(&mut self, document_id: DocumentId, path: PathBuf, error: String) {
+        if let Some(session) = self.documents.active_session_mut_for_id(document_id) {
             session.finish_reload();
         }
         self.reload_status = ReloadStatus::Error;
@@ -254,7 +281,11 @@ impl OxideMdApp {
         ));
     }
 
-    fn is_current_reload(&self, id: u64) -> bool {
+    fn is_current_reload(&self, document_id: DocumentId, id: u64) -> bool {
+        if self.documents.active_document_id() != Some(document_id) {
+            return false;
+        }
+
         self.documents
             .active_session()
             .map(|session| session.is_current_reload(id))
