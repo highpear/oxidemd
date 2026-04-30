@@ -39,6 +39,11 @@ struct PendingRenderMeasurement {
     path: PathBuf,
 }
 
+struct LoadedDocumentSession {
+    session: DocumentSession,
+    timing: metrics::DocumentTiming,
+}
+
 impl RenderMeasurementReason {
     fn as_log_label(&self) -> &'static str {
         match self {
@@ -332,15 +337,10 @@ impl OxideMdApp {
     }
 
     fn load_selected_file(&mut self, path: PathBuf) {
-        match load_markdown_document(&path) {
+        match self.load_document_session(&path) {
             Ok(loaded) => {
                 remember_recent_file(&mut self.recent_files, &path);
-                self.documents.set_active_session(DocumentSession::new(
-                    path.clone(),
-                    loaded.document,
-                    loaded.fingerprint,
-                    loaded.file_snapshot,
-                ));
+                self.documents.open_or_replace_active(loaded.session);
                 self.reload_status = ReloadStatus::Idle;
                 self.start_watching_file();
                 self.pending_render_measurement = Some(PendingRenderMeasurement {
@@ -357,6 +357,21 @@ impl OxideMdApp {
                 self.set_reload_error(TranslationKey::StatusLoadFailed, error);
             }
         }
+    }
+
+    fn load_document_session(&self, path: &Path) -> Result<LoadedDocumentSession, String> {
+        let loaded = load_markdown_document(path)?;
+        let session = DocumentSession::new(
+            path.to_path_buf(),
+            loaded.document,
+            loaded.fingerprint,
+            loaded.file_snapshot,
+        );
+
+        Ok(LoadedDocumentSession {
+            session,
+            timing: loaded.timing,
+        })
     }
 
     fn start_watching_file(&mut self) {
