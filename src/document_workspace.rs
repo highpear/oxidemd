@@ -3,7 +3,7 @@ use std::path::Path;
 
 use crate::document_session::DocumentSession;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct DocumentId(u64);
 
 #[allow(dead_code)]
@@ -219,5 +219,11 @@ impl Deref for ActiveDocumentSession {
 impl DerefMut for ActiveDocumentSession {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.entry.session
+    }
+}
+
+impl ActiveDocumentSession {
+    pub fn id(&self) -> DocumentId {
+        self.entry.id
     }
 }

@@ -1,5 +1,6 @@
 use eframe::egui::{self, Align, Key, Layout, ScrollArea, TextEdit};
 
+use crate::document_workspace::DocumentId;
 use crate::i18n::{Language, TranslationKey, tr};
 use crate::search::SearchState;
 
@@ -14,6 +15,7 @@ pub struct SearchPanelAction {
 
 pub fn render_search_controls(
     ui: &mut egui::Ui,
+    document_id: DocumentId,
     language: Language,
     search: &mut SearchState,
 ) -> SearchPanelAction {
@@ -21,7 +23,7 @@ pub fn render_search_controls(
 
     ui.label(tr(language, TranslationKey::LabelSearch));
 
-    let search_input_id = egui::Id::new(SEARCH_INPUT_ID);
+    let search_input_id = egui::Id::new((SEARCH_INPUT_ID, document_id));
     let response = ui.add(
         TextEdit::singleline(&mut search.query)
             .id(search_input_id)
@@ -91,6 +93,7 @@ pub fn render_search_controls(
 
 pub fn render_search_results(
     ui: &mut egui::Ui,
+    document_id: DocumentId,
     language: Language,
     search: &SearchState,
 ) -> Option<usize> {
@@ -100,7 +103,7 @@ pub fn render_search_results(
 
     ui.add_space(8.0);
     ScrollArea::vertical()
-        .id_salt("search_results_scroll")
+        .id_salt(("search_results_scroll", document_id))
         .max_height(180.0)
         .show(ui, |ui| {
             if search.matches.is_empty() {
