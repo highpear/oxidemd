@@ -229,7 +229,7 @@ impl OxideMdApp {
         if let Some(session) = self.documents.active_session_mut_for_id(document_id) {
             session.replace_reloaded_document(path.clone(), document, fingerprint, file_snapshot);
         } else {
-            self.documents.set_active_session(DocumentSession::new(
+            self.documents.open_document(DocumentSession::new(
                 path.clone(),
                 document,
                 fingerprint,

@@ -6,6 +6,13 @@ use crate::document_session::DocumentSession;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DocumentId(u64);
 
+#[allow(dead_code)]
+pub struct DocumentTab<'a> {
+    pub id: DocumentId,
+    pub path: &'a Path,
+    pub is_active: bool,
+}
+
 pub struct DocumentWorkspace {
     next_document_id: u64,
     active_index: Option<usize>,
@@ -47,9 +54,9 @@ impl DocumentWorkspace {
         &mut self,
         document_id: DocumentId,
     ) -> Option<&mut DocumentSession> {
+        let index = self.index_for_id(document_id)?;
         self.documents
-            .iter_mut()
-            .find(|entry| entry.id == document_id)
+            .get_mut(index)
             .map(|entry| &mut entry.session)
     }
 
@@ -57,15 +64,83 @@ impl DocumentWorkspace {
         self.active_entry().map(|entry| entry.id)
     }
 
-    pub fn set_active_session(&mut self, session: DocumentSession) {
+    #[allow(dead_code)]
+    pub fn document_tabs(&self) -> Vec<DocumentTab<'_>> {
+        self.documents
+            .iter()
+            .enumerate()
+            .map(|(index, entry)| DocumentTab {
+                id: entry.id,
+                path: entry.session.path.as_path(),
+                is_active: self.active_index == Some(index),
+            })
+            .collect()
+    }
+
+    pub fn open_document(&mut self, session: DocumentSession) -> DocumentId {
         let entry = DocumentEntry {
             id: self.allocate_document_id(),
             session,
         };
+        let document_id = entry.id;
 
-        self.documents.clear();
         self.documents.push(entry);
-        self.active_index = Some(0);
+        self.active_index = Some(self.documents.len() - 1);
+
+        document_id
+    }
+
+    pub fn replace_active_session(&mut self, session: DocumentSession) -> DocumentId {
+        let entry = DocumentEntry {
+            id: self.allocate_document_id(),
+            session,
+        };
+        let document_id = entry.id;
+
+        match self.active_index() {
+            Some(index) => {
+                self.documents[index] = entry;
+                self.active_index = Some(index);
+            }
+            None => {
+                self.documents.push(entry);
+                self.active_index = Some(self.documents.len() - 1);
+            }
+        }
+
+        document_id
+    }
+
+    pub fn open_or_replace_active(&mut self, session: DocumentSession) -> DocumentId {
+        self.replace_active_session(session)
+    }
+
+    #[allow(dead_code)]
+    pub fn switch_to(&mut self, document_id: DocumentId) -> bool {
+        let Some(index) = self.index_for_id(document_id) else {
+            return false;
+        };
+
+        self.active_index = Some(index);
+        true
+    }
+
+    #[allow(dead_code)]
+    pub fn close(&mut self, document_id: DocumentId) -> Option<DocumentSession> {
+        let index = self.index_for_id(document_id)?;
+        let entry = self.documents.remove(index);
+
+        self.active_index = match self.active_index {
+            Some(active_index) if active_index == index && self.documents.is_empty() => None,
+            Some(active_index) if active_index == index => {
+                Some(index.min(self.documents.len() - 1))
+            }
+            Some(active_index) if active_index > index => Some(active_index - 1),
+            Some(active_index) => Some(active_index),
+            None => None,
+        };
+
+        Some(entry.session)
     }
 
     pub fn clear_active_session(&mut self) {
@@ -124,6 +199,12 @@ impl DocumentWorkspace {
     fn active_index(&self) -> Option<usize> {
         self.active_index
             .filter(|index| *index < self.documents.len())
+    }
+
+    fn index_for_id(&self, document_id: DocumentId) -> Option<usize> {
+        self.documents
+            .iter()
+            .position(|entry| entry.id == document_id)
     }
 }
 
