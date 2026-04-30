@@ -5,7 +5,7 @@ use eframe::egui::{self, Vec2};
 use rfd::FileDialog;
 
 use crate::document_loader::load_markdown_document;
-use crate::document_session::DocumentSession;
+use crate::document_session::{DocumentSession, RenderMeasurementReason};
 use crate::document_workspace::DocumentWorkspace;
 use crate::export::write_html_export;
 use crate::external_links::render_external_link_confirmation;
@@ -29,28 +29,9 @@ enum ReloadStatus {
     Error,
 }
 
-enum RenderMeasurementReason {
-    Load,
-    Reload,
-}
-
-struct PendingRenderMeasurement {
-    reason: RenderMeasurementReason,
-    path: PathBuf,
-}
-
 struct LoadedDocumentSession {
     session: DocumentSession,
     timing: metrics::DocumentTiming,
-}
-
-impl RenderMeasurementReason {
-    fn as_log_label(&self) -> &'static str {
-        match self {
-            RenderMeasurementReason::Load => "load",
-            RenderMeasurementReason::Reload => "reload",
-        }
-    }
 }
 
 const DEFAULT_ZOOM_FACTOR: f32 = 1.0;
@@ -87,7 +68,6 @@ pub struct OxideMdApp {
     show_shortcuts_help: bool,
     external_link_behavior: ExternalLinkBehavior,
     pending_external_link: Option<String>,
-    pending_render_measurement: Option<PendingRenderMeasurement>,
     startup_started: Option<Instant>,
 }
 
@@ -119,7 +99,6 @@ impl OxideMdApp {
             show_shortcuts_help: false,
             external_link_behavior: ExternalLinkBehavior::AskFirst,
             pending_external_link: None,
-            pending_render_measurement: None,
             startup_started: Some(startup_started),
         };
 
@@ -343,17 +322,15 @@ impl OxideMdApp {
                 self.documents.open_or_replace_active(loaded.session);
                 self.reload_status = ReloadStatus::Idle;
                 self.start_watching_file();
-                self.pending_render_measurement = Some(PendingRenderMeasurement {
-                    reason: RenderMeasurementReason::Load,
-                    path: path.clone(),
-                });
+                if let Some(session) = self.documents.active_session_mut() {
+                    session.request_render_measurement(RenderMeasurementReason::Load, path.clone());
+                }
                 self.request_window_expansion_for_preview();
                 metrics::log_initial_load(&path, &loaded.timing);
                 self.set_status_with_path(TranslationKey::StatusLoaded, &path);
             }
             Err(error) => {
                 self.documents.clear_active_session();
-                self.pending_render_measurement = None;
                 self.set_reload_error(TranslationKey::StatusLoadFailed, error);
             }
         }
