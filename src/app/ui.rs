@@ -151,15 +151,17 @@ impl OxideMdApp {
                 });
             return;
         };
+        let document_id = active_document.id();
         let session = &mut *active_document;
         let mut clicked_heading = None;
 
-        SidePanel::left("heading_navigation")
+        SidePanel::left(egui::Id::new(("heading_navigation", document_id)))
             .resizable(true)
             .default_width(HEADING_PANEL_DEFAULT_WIDTH)
             .width_range(HEADING_PANEL_MIN_WIDTH..=HEADING_PANEL_MAX_WIDTH)
             .show(ctx, |ui| {
-                let search_action = render_search_controls(ui, language, &mut session.search);
+                let search_action =
+                    render_search_controls(ui, document_id, language, &mut session.search);
                 if search_action.query_changed {
                     session.refresh_search_matches();
 
@@ -176,7 +178,9 @@ impl OxideMdApp {
                     session.select_next_search_match();
                 }
 
-                if let Some(index) = render_search_results(ui, language, &session.search) {
+                if let Some(index) =
+                    render_search_results(ui, document_id, language, &session.search)
+                {
                     session.select_search_match(index);
                 }
 
@@ -198,7 +202,7 @@ impl OxideMdApp {
                 let highlighted_heading = session.selected_heading.or(session.active_heading);
 
                 ScrollArea::vertical()
-                    .id_salt("heading_navigation_scroll")
+                    .id_salt(("heading_navigation_scroll", document_id))
                     .show_rows(
                         ui,
                         ui.spacing().interact_size.y,
@@ -252,6 +256,7 @@ impl OxideMdApp {
             });
             return;
         };
+        let document_id = active_document.id();
         let session = &mut *active_document;
         let document = Arc::clone(&session.document);
         let document_base_dir = session.base_dir().map(Path::to_path_buf);
@@ -263,146 +268,149 @@ impl OxideMdApp {
         let external_link_behavior = self.external_link_behavior;
 
         CentralPanel::default().show(ctx, |ui| {
-            ScrollArea::both().show(ui, |ui| {
-                ui.add_space(18.0);
-                let content_rect = ui.max_rect();
-                let frame_width = scaled_document_frame_max_width(zoom_factor);
-                let frame_left = if content_rect.width() > frame_width {
-                    content_rect.center().x - frame_width * 0.5
-                } else {
-                    content_rect.left()
-                };
-                let frame_rect = egui::Rect::from_min_size(
-                    egui::pos2(frame_left, ui.cursor().top()),
-                    Vec2::new(frame_width, 0.0),
-                );
-                let horizontal_padding = scaled_document_horizontal_padding(zoom_factor);
-                let vertical_padding = scaled_document_vertical_padding(zoom_factor);
-
-                let document_frame = Frame::new()
-                    .fill(theme.content_background)
-                    .stroke(egui::Stroke::new(
-                        DOCUMENT_FRAME_STROKE_WIDTH,
-                        theme.content_border,
-                    ))
-                    .shadow(egui::epaint::Shadow {
-                        offset: [0, 8],
-                        blur: 28,
-                        spread: 0,
-                        color: theme.content_shadow,
-                    })
-                    .corner_radius(egui::CornerRadius::same(12))
-                    .inner_margin(Margin::symmetric(
-                        scaled_margin(32, zoom_factor),
-                        scaled_margin(28, zoom_factor),
-                    ));
-                let background_shape = ui.painter().add(egui::Shape::Noop);
-                let content_width =
-                    (frame_width - horizontal_padding - DOCUMENT_FRAME_STROKE_WIDTH * 2.0)
-                        .max(0.0)
-                        .min(scaled_document_body_max_width(zoom_factor));
-                let content_min = egui::pos2(
-                    frame_rect.left() + horizontal_padding * 0.5 + DOCUMENT_FRAME_STROKE_WIDTH,
-                    frame_rect.top() + vertical_padding * 0.5 + DOCUMENT_FRAME_STROKE_WIDTH,
-                );
-                let content_max_rect = egui::Rect::from_min_max(
-                    content_min,
-                    egui::pos2(content_min.x + content_width, content_rect.bottom()),
-                );
-
-                let mut document_ui = ui.new_child(
-                    UiBuilder::new()
-                        .max_rect(content_max_rect)
-                        .layout(Layout::top_down(Align::Min)),
-                );
-                let mut document_clip_rect = document_ui.clip_rect();
-                document_clip_rect.min.x = content_max_rect.left();
-                document_clip_rect.max.x = content_max_rect.right();
-                document_ui.set_clip_rect(document_clip_rect);
-                document_ui.set_min_width(content_width);
-                document_ui.set_max_width(content_width);
-
-                let render_measurement = self.pending_render_measurement.take();
-                let render_started = render_measurement.as_ref().map(|_| Instant::now());
-                let block_count = document.blocks.len();
-                let heading_count = document.headings().len();
-                session.block_height_cache.prepare(
-                    session.fingerprint,
-                    &document,
-                    zoom_factor,
-                    content_width,
-                );
-                let block_height_cache = &mut session.block_height_cache;
-                let crate::document_session::BlockHeightCache {
-                    heights: block_heights,
-                    estimated_heights: estimated_block_heights,
-                    ..
-                } = block_height_cache;
-                let render_outcome = render_markdown_document(
-                    &mut document_ui,
-                    &document,
-                    language,
-                    &theme,
-                    zoom_factor,
-                    document_base_dir.as_deref(),
-                    &mut session.image_cache,
-                    &mut session.math_render_cache,
-                    &mut session.diagram_render_cache,
-                    block_heights,
-                    estimated_block_heights,
-                    pending_block_scroll,
-                    search_query.as_deref(),
-                    active_search_block,
-                );
-
-                if let (Some(measurement), Some(started)) = (render_measurement, render_started) {
-                    metrics::log_document_render(
-                        measurement.reason.as_log_label(),
-                        &measurement.path,
-                        started.elapsed(),
-                        block_count,
-                        heading_count,
+            ScrollArea::both()
+                .id_salt(("document_scroll", document_id))
+                .show(ui, |ui| {
+                    ui.add_space(18.0);
+                    let content_rect = ui.max_rect();
+                    let frame_width = scaled_document_frame_max_width(zoom_factor);
+                    let frame_left = if content_rect.width() > frame_width {
+                        content_rect.center().x - frame_width * 0.5
+                    } else {
+                        content_rect.left()
+                    };
+                    let frame_rect = egui::Rect::from_min_size(
+                        egui::pos2(frame_left, ui.cursor().top()),
+                        Vec2::new(frame_width, 0.0),
                     );
-                }
+                    let horizontal_padding = scaled_document_horizontal_padding(zoom_factor);
+                    let vertical_padding = scaled_document_vertical_padding(zoom_factor);
 
-                if let Some(active_heading) = render_outcome.active_heading {
-                    session.active_heading = Some(active_heading);
-                }
-
-                if let Some(block_index) = render_outcome
-                    .clicked_anchor
-                    .and_then(|anchor| document.heading_block_for_anchor(&anchor))
-                {
-                    session.jump_to_heading(block_index);
-                    ctx.request_repaint();
-                }
-
-                if let Some(url) = render_outcome.clicked_external_link {
-                    handle_external_link_click(
-                        ctx,
-                        external_link_behavior,
-                        &mut self.pending_external_link,
-                        url,
+                    let document_frame = Frame::new()
+                        .fill(theme.content_background)
+                        .stroke(egui::Stroke::new(
+                            DOCUMENT_FRAME_STROKE_WIDTH,
+                            theme.content_border,
+                        ))
+                        .shadow(egui::epaint::Shadow {
+                            offset: [0, 8],
+                            blur: 28,
+                            spread: 0,
+                            color: theme.content_shadow,
+                        })
+                        .corner_radius(egui::CornerRadius::same(12))
+                        .inner_margin(Margin::symmetric(
+                            scaled_margin(32, zoom_factor),
+                            scaled_margin(28, zoom_factor),
+                        ));
+                    let background_shape = ui.painter().add(egui::Shape::Noop);
+                    let content_width =
+                        (frame_width - horizontal_padding - DOCUMENT_FRAME_STROKE_WIDTH * 2.0)
+                            .max(0.0)
+                            .min(scaled_document_body_max_width(zoom_factor));
+                    let content_min = egui::pos2(
+                        frame_rect.left() + horizontal_padding * 0.5 + DOCUMENT_FRAME_STROKE_WIDTH,
+                        frame_rect.top() + vertical_padding * 0.5 + DOCUMENT_FRAME_STROKE_WIDTH,
                     );
-                }
+                    let content_max_rect = egui::Rect::from_min_max(
+                        content_min,
+                        egui::pos2(content_min.x + content_width, content_rect.bottom()),
+                    );
 
-                if render_outcome.needs_scroll_stabilization {
-                    ctx.request_repaint();
-                } else if render_outcome.did_scroll {
-                    session.pending_block_scroll = None;
-                }
+                    let mut document_ui = ui.new_child(
+                        UiBuilder::new()
+                            .max_rect(content_max_rect)
+                            .layout(Layout::top_down(Align::Min)),
+                    );
+                    let mut document_clip_rect = document_ui.clip_rect();
+                    document_clip_rect.min.x = content_max_rect.left();
+                    document_clip_rect.max.x = content_max_rect.right();
+                    document_ui.set_clip_rect(document_clip_rect);
+                    document_ui.set_min_width(content_width);
+                    document_ui.set_max_width(content_width);
 
-                let used_content_rect = document_ui.min_rect();
-                let fixed_content_rect = egui::Rect::from_min_size(
-                    content_min,
-                    Vec2::new(content_width, used_content_rect.height()),
-                );
-                let actual_frame_rect = document_frame.outer_rect(fixed_content_rect);
-                ui.painter()
-                    .set(background_shape, document_frame.paint(fixed_content_rect));
-                ui.allocate_rect(actual_frame_rect, egui::Sense::hover());
-                ui.add_space(24.0);
-            });
+                    let render_measurement = self.pending_render_measurement.take();
+                    let render_started = render_measurement.as_ref().map(|_| Instant::now());
+                    let block_count = document.blocks.len();
+                    let heading_count = document.headings().len();
+                    session.block_height_cache.prepare(
+                        session.fingerprint,
+                        &document,
+                        zoom_factor,
+                        content_width,
+                    );
+                    let block_height_cache = &mut session.block_height_cache;
+                    let crate::document_session::BlockHeightCache {
+                        heights: block_heights,
+                        estimated_heights: estimated_block_heights,
+                        ..
+                    } = block_height_cache;
+                    let render_outcome = render_markdown_document(
+                        &mut document_ui,
+                        &document,
+                        language,
+                        &theme,
+                        zoom_factor,
+                        document_base_dir.as_deref(),
+                        &mut session.image_cache,
+                        &mut session.math_render_cache,
+                        &mut session.diagram_render_cache,
+                        block_heights,
+                        estimated_block_heights,
+                        pending_block_scroll,
+                        search_query.as_deref(),
+                        active_search_block,
+                    );
+
+                    if let (Some(measurement), Some(started)) = (render_measurement, render_started)
+                    {
+                        metrics::log_document_render(
+                            measurement.reason.as_log_label(),
+                            &measurement.path,
+                            started.elapsed(),
+                            block_count,
+                            heading_count,
+                        );
+                    }
+
+                    if let Some(active_heading) = render_outcome.active_heading {
+                        session.active_heading = Some(active_heading);
+                    }
+
+                    if let Some(block_index) = render_outcome
+                        .clicked_anchor
+                        .and_then(|anchor| document.heading_block_for_anchor(&anchor))
+                    {
+                        session.jump_to_heading(block_index);
+                        ctx.request_repaint();
+                    }
+
+                    if let Some(url) = render_outcome.clicked_external_link {
+                        handle_external_link_click(
+                            ctx,
+                            external_link_behavior,
+                            &mut self.pending_external_link,
+                            url,
+                        );
+                    }
+
+                    if render_outcome.needs_scroll_stabilization {
+                        ctx.request_repaint();
+                    } else if render_outcome.did_scroll {
+                        session.pending_block_scroll = None;
+                    }
+
+                    let used_content_rect = document_ui.min_rect();
+                    let fixed_content_rect = egui::Rect::from_min_size(
+                        content_min,
+                        Vec2::new(content_width, used_content_rect.height()),
+                    );
+                    let actual_frame_rect = document_frame.outer_rect(fixed_content_rect);
+                    ui.painter()
+                        .set(background_shape, document_frame.paint(fixed_content_rect));
+                    ui.allocate_rect(actual_frame_rect, egui::Sense::hover());
+                    ui.add_space(24.0);
+                });
         });
 
         self.documents.restore_active_session(active_document);
