@@ -136,7 +136,7 @@ impl OxideMdApp {
 
         let language = self.language;
         let theme_id = self.theme_id;
-        let Some(mut session) = self.document_session.take() else {
+        let Some(mut session) = self.documents.take_active_session() else {
             SidePanel::left("heading_navigation")
                 .resizable(true)
                 .default_width(HEADING_PANEL_DEFAULT_WIDTH)
@@ -238,12 +238,12 @@ impl OxideMdApp {
             session.jump_to_heading(block_index);
         }
 
-        self.document_session = Some(session);
+        self.documents.restore_active_session(session);
     }
 
     pub(super) fn render_document_panel(&mut self, ctx: &egui::Context) {
         let theme = theme(self.theme_id);
-        let Some(mut session) = self.document_session.take() else {
+        let Some(mut session) = self.documents.take_active_session() else {
             CentralPanel::default().show(ctx, |ui| {
                 if let Some(path) = self.render_home_panel(ui, &theme) {
                     self.open_recent_file(path);
@@ -403,7 +403,7 @@ impl OxideMdApp {
             });
         });
 
-        self.document_session = Some(session);
+        self.documents.restore_active_session(session);
     }
 
     pub(super) fn render_home_panel(

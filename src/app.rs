@@ -6,6 +6,7 @@ use rfd::FileDialog;
 
 use crate::document_loader::load_markdown_document;
 use crate::document_session::DocumentSession;
+use crate::document_workspace::DocumentWorkspace;
 use crate::export::write_html_export;
 use crate::external_links::render_external_link_confirmation;
 use crate::i18n::{Language, TranslationKey, tr};
@@ -70,7 +71,7 @@ pub struct OxideMdApp {
     language: Language,
     theme_id: ThemeId,
     zoom_factor: f32,
-    document_session: Option<DocumentSession>,
+    documents: DocumentWorkspace,
     recent_files: Vec<PathBuf>,
     status_message: String,
     status_hover_message: Option<String>,
@@ -103,7 +104,7 @@ impl OxideMdApp {
             language,
             theme_id: DEFAULT_THEME_ID,
             zoom_factor: DEFAULT_ZOOM_FACTOR,
-            document_session: None,
+            documents: DocumentWorkspace::new(),
             recent_files: Vec::new(),
             status_message: tr(language, TranslationKey::StatusNoFile).to_owned(),
             status_hover_message: None,
@@ -190,7 +191,7 @@ impl OxideMdApp {
             Language::Ja => Language::En,
         };
 
-        if self.document_session.is_none() {
+        if self.documents.is_empty() {
             self.set_status_message(tr(self.language, TranslationKey::StatusNoFile));
         }
     }
@@ -334,7 +335,7 @@ impl OxideMdApp {
         match load_markdown_document(&path) {
             Ok(loaded) => {
                 remember_recent_file(&mut self.recent_files, &path);
-                self.document_session = Some(DocumentSession::new(
+                self.documents.set_active_session(DocumentSession::new(
                     path.clone(),
                     loaded.document,
                     loaded.fingerprint,
@@ -351,7 +352,7 @@ impl OxideMdApp {
                 self.set_status_with_path(TranslationKey::StatusLoaded, &path);
             }
             Err(error) => {
-                self.document_session = None;
+                self.documents.clear_active_session();
                 self.pending_render_measurement = None;
                 self.set_reload_error(TranslationKey::StatusLoadFailed, error);
             }
@@ -359,7 +360,7 @@ impl OxideMdApp {
     }
 
     fn start_watching_file(&mut self) {
-        if let Some(session) = self.document_session.as_mut() {
+        if let Some(session) = self.documents.active_session_mut() {
             if let Err(error) = session.start_watching(self.ui_context.clone()) {
                 self.set_reload_error(TranslationKey::StatusWatchFailed, error);
             }
@@ -410,8 +411,8 @@ impl OxideMdApp {
 
     fn handle_keyboard_shortcuts(&mut self, ctx: &egui::Context) {
         let has_search_matches = self
-            .document_session
-            .as_ref()
+            .documents
+            .active_session()
             .map(|session| session.search.has_matches())
             .unwrap_or(false);
         let shortcuts = consume_shortcuts(ctx, has_search_matches);
@@ -422,7 +423,7 @@ impl OxideMdApp {
 
         if shortcuts.focus_search {
             self.is_heading_panel_visible = true;
-            if let Some(session) = self.document_session.as_mut() {
+            if let Some(session) = self.documents.active_session_mut() {
                 session.search.focus_input = true;
             }
         }
@@ -465,13 +466,13 @@ impl OxideMdApp {
     }
 
     fn select_next_search_match(&mut self) {
-        if let Some(session) = self.document_session.as_mut() {
+        if let Some(session) = self.documents.active_session_mut() {
             session.select_next_search_match();
         }
     }
 
     fn select_previous_search_match(&mut self) {
-        if let Some(session) = self.document_session.as_mut() {
+        if let Some(session) = self.documents.active_session_mut() {
             session.select_previous_search_match();
         }
     }
@@ -485,16 +486,14 @@ impl OxideMdApp {
         });
 
         if scroll_delta_y.abs() > f32::EPSILON && !is_zoom_scroll {
-            if let Some(session) = self.document_session.as_mut() {
+            if let Some(session) = self.documents.active_session_mut() {
                 session.clear_selected_heading();
             }
         }
     }
 
     fn current_file(&self) -> Option<&Path> {
-        self.document_session
-            .as_ref()
-            .map(|session| session.path.as_path())
+        self.documents.current_file()
     }
 }
 
@@ -533,7 +532,7 @@ impl eframe::App for OxideMdApp {
         apply_theme(ctx, &theme);
         self.render_top_bar(ctx);
         self.render_bottom_bar(ctx);
-        if self.document_session.is_some()
+        if !self.documents.is_empty()
             && self.zoom_factor.to_bits() != previous_zoom_factor.to_bits()
         {
             self.request_window_expansion_for_preview();

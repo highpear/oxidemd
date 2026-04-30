@@ -5,6 +5,7 @@ mod code_block;
 mod diagram;
 mod document_loader;
 mod document_session;
+mod document_workspace;
 mod embedded_svg;
 mod export;
 mod external_links;
