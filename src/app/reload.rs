@@ -15,7 +15,7 @@ use super::{
 
 impl OxideMdApp {
     pub(in crate::app) fn process_watch_events(&mut self) {
-        let Some(session) = self.document_session.as_ref() else {
+        let Some(session) = self.documents.active_session() else {
             return;
         };
         let summary = session.drain_watch_events();
@@ -32,7 +32,7 @@ impl OxideMdApp {
     }
 
     pub(in crate::app) fn reload_if_ready(&mut self) {
-        let Some(session) = self.document_session.as_ref() else {
+        let Some(session) = self.documents.active_session() else {
             return;
         };
         if session.pending_reload_at.is_none() {
@@ -69,8 +69,8 @@ impl OxideMdApp {
         };
 
         if self
-            .document_session
-            .as_ref()
+            .documents
+            .active_session()
             .map(DocumentSession::is_reload_in_flight)
             .unwrap_or(false)
         {
@@ -152,13 +152,13 @@ impl OxideMdApp {
         self.queued_reload_id += 1;
         let reload_id = self.queued_reload_id;
 
-        if let Some(session) = self.document_session.as_mut() {
+        if let Some(session) = self.documents.active_session_mut() {
             session.clear_pending_reload();
         }
 
         let Some(request_data) = self
-            .document_session
-            .as_ref()
+            .documents
+            .active_session()
             .map(DocumentSession::reload_request_data)
         else {
             return;
@@ -171,7 +171,7 @@ impl OxideMdApp {
             request_data.previous_file_snapshot,
         ) {
             Ok(()) => {
-                if let Some(session) = self.document_session.as_mut() {
+                if let Some(session) = self.documents.active_session_mut() {
                     session.start_reload(reload_id);
                 }
                 self.set_reload_in_progress(
@@ -186,7 +186,7 @@ impl OxideMdApp {
     }
 
     fn schedule_reload(&mut self) {
-        if let Some(session) = self.document_session.as_mut() {
+        if let Some(session) = self.documents.active_session_mut() {
             session.schedule_reload();
         }
         self.set_reload_in_progress(TranslationKey::ReloadReloading, None);
@@ -200,10 +200,10 @@ impl OxideMdApp {
         fingerprint: DocumentFingerprint,
         file_snapshot: Option<FileSnapshot>,
     ) {
-        if let Some(session) = self.document_session.as_mut() {
+        if let Some(session) = self.documents.active_session_mut() {
             session.replace_reloaded_document(path.clone(), document, fingerprint, file_snapshot);
         } else {
-            self.document_session = Some(DocumentSession::new(
+            self.documents.set_active_session(DocumentSession::new(
                 path.clone(),
                 document,
                 fingerprint,
@@ -226,7 +226,7 @@ impl OxideMdApp {
         fingerprint: DocumentFingerprint,
         file_snapshot: Option<FileSnapshot>,
     ) {
-        if let Some(session) = self.document_session.as_mut() {
+        if let Some(session) = self.documents.active_session_mut() {
             session.finish_unchanged_reload(fingerprint, file_snapshot);
         }
         self.reload_status = ReloadStatus::Idle;
@@ -235,7 +235,7 @@ impl OxideMdApp {
     }
 
     fn finish_reload_error(&mut self, path: PathBuf, error: String) {
-        if let Some(session) = self.document_session.as_mut() {
+        if let Some(session) = self.documents.active_session_mut() {
             session.finish_reload();
         }
         self.reload_status = ReloadStatus::Error;
@@ -255,8 +255,8 @@ impl OxideMdApp {
     }
 
     fn is_current_reload(&self, id: u64) -> bool {
-        self.document_session
-            .as_ref()
+        self.documents
+            .active_session()
             .map(|session| session.is_current_reload(id))
             .unwrap_or(false)
     }
