@@ -29,6 +29,17 @@ pub struct DocumentSession {
     pub watcher: Option<FileWatcherHandle>,
     pub pending_reload_at: Option<Instant>,
     pub in_flight_reload_id: Option<u64>,
+    pending_render_measurement: Option<PendingRenderMeasurement>,
+}
+
+pub enum RenderMeasurementReason {
+    Load,
+    Reload,
+}
+
+pub struct PendingRenderMeasurement {
+    pub reason: RenderMeasurementReason,
+    pub path: PathBuf,
 }
 
 pub struct WatchEventSummary {
@@ -40,6 +51,15 @@ pub struct ReloadRequestData {
     pub path: PathBuf,
     pub previous_fingerprint: Option<DocumentFingerprint>,
     pub previous_file_snapshot: Option<FileSnapshot>,
+}
+
+impl RenderMeasurementReason {
+    pub fn as_log_label(&self) -> &'static str {
+        match self {
+            RenderMeasurementReason::Load => "load",
+            RenderMeasurementReason::Reload => "reload",
+        }
+    }
 }
 
 pub struct BlockHeightCache {
@@ -75,6 +95,7 @@ impl DocumentSession {
             watcher: None,
             pending_reload_at: None,
             in_flight_reload_id: None,
+            pending_render_measurement: None,
         };
         session.refresh_search_matches();
 
@@ -208,6 +229,14 @@ impl DocumentSession {
             previous_fingerprint: Some(self.fingerprint),
             previous_file_snapshot: self.file_snapshot,
         }
+    }
+
+    pub fn request_render_measurement(&mut self, reason: RenderMeasurementReason, path: PathBuf) {
+        self.pending_render_measurement = Some(PendingRenderMeasurement { reason, path });
+    }
+
+    pub fn take_pending_render_measurement(&mut self) -> Option<PendingRenderMeasurement> {
+        self.pending_render_measurement.take()
     }
 
     pub fn refresh_search_matches(&mut self) {

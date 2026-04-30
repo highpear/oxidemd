@@ -3,16 +3,14 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::document_loader::{DocumentFingerprint, FileSnapshot};
-use crate::document_session::DocumentSession;
+use crate::document_session::{DocumentSession, RenderMeasurementReason};
 use crate::document_workspace::DocumentId;
 use crate::i18n::{TranslationKey, tr};
 use crate::metrics;
 use crate::parser::MarkdownDocument;
 use crate::reload_worker::ReloadResponse;
 
-use super::{
-    OxideMdApp, PendingRenderMeasurement, ReloadStatus, RenderMeasurementReason, status_path_label,
-};
+use super::{OxideMdApp, ReloadStatus, status_path_label};
 
 impl OxideMdApp {
     pub(in crate::app) fn process_watch_events(&mut self) {
@@ -228,18 +226,13 @@ impl OxideMdApp {
     ) {
         if let Some(session) = self.documents.active_session_mut_for_id(document_id) {
             session.replace_reloaded_document(path.clone(), document, fingerprint, file_snapshot);
+            session.request_render_measurement(RenderMeasurementReason::Reload, path.clone());
         } else {
-            self.documents.open_document(DocumentSession::new(
-                path.clone(),
-                document,
-                fingerprint,
-                file_snapshot,
-            ));
+            let mut session =
+                DocumentSession::new(path.clone(), document, fingerprint, file_snapshot);
+            session.request_render_measurement(RenderMeasurementReason::Reload, path.clone());
+            self.documents.open_document(session);
         }
-        self.pending_render_measurement = Some(PendingRenderMeasurement {
-            reason: RenderMeasurementReason::Reload,
-            path: path.clone(),
-        });
         self.reload_status = ReloadStatus::Idle;
         metrics::log_reload(&path, &timing);
         self.set_status_with_path(TranslationKey::StatusReloaded, &path);

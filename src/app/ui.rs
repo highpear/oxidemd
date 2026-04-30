@@ -329,7 +329,7 @@ impl OxideMdApp {
                     document_ui.set_min_width(content_width);
                     document_ui.set_max_width(content_width);
 
-                    let render_measurement = self.pending_render_measurement.take();
+                    let render_measurement = session.take_pending_render_measurement();
                     let render_started = render_measurement.as_ref().map(|_| Instant::now());
                     let block_count = document.blocks.len();
                     let heading_count = document.headings().len();
