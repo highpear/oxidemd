@@ -136,7 +136,7 @@ impl OxideMdApp {
 
         let language = self.language;
         let theme_id = self.theme_id;
-        let Some(mut session) = self.documents.take_active_session() else {
+        let Some(mut active_document) = self.documents.take_active_session() else {
             SidePanel::left("heading_navigation")
                 .resizable(true)
                 .default_width(HEADING_PANEL_DEFAULT_WIDTH)
@@ -151,6 +151,7 @@ impl OxideMdApp {
                 });
             return;
         };
+        let session = &mut *active_document;
         let mut clicked_heading = None;
 
         SidePanel::left("heading_navigation")
@@ -238,12 +239,12 @@ impl OxideMdApp {
             session.jump_to_heading(block_index);
         }
 
-        self.documents.restore_active_session(session);
+        self.documents.restore_active_session(active_document);
     }
 
     pub(super) fn render_document_panel(&mut self, ctx: &egui::Context) {
         let theme = theme(self.theme_id);
-        let Some(mut session) = self.documents.take_active_session() else {
+        let Some(mut active_document) = self.documents.take_active_session() else {
             CentralPanel::default().show(ctx, |ui| {
                 if let Some(path) = self.render_home_panel(ui, &theme) {
                     self.open_recent_file(path);
@@ -251,6 +252,7 @@ impl OxideMdApp {
             });
             return;
         };
+        let session = &mut *active_document;
         let document = Arc::clone(&session.document);
         let document_base_dir = session.base_dir().map(Path::to_path_buf);
         let active_search_block = session.search.active_block();
@@ -403,7 +405,7 @@ impl OxideMdApp {
             });
         });
 
-        self.documents.restore_active_session(session);
+        self.documents.restore_active_session(active_document);
     }
 
     pub(super) fn render_home_panel(
