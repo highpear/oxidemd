@@ -227,3 +227,195 @@ impl ActiveDocumentSession {
         self.entry.id
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::{Path, PathBuf};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use crate::document_loader::load_markdown_document;
+    use crate::document_session::DocumentSession;
+
+    use super::{DocumentId, DocumentWorkspace};
+
+    static NEXT_TEST_FILE_ID: AtomicUsize = AtomicUsize::new(1);
+
+    #[test]
+    fn opens_documents_and_marks_latest_active() {
+        let mut workspace = DocumentWorkspace::new();
+        let first_path = test_markdown_path("first", "# First");
+        let second_path = test_markdown_path("second", "# Second");
+
+        let first_id = workspace.open_document(test_session(&first_path));
+        let second_id = workspace.open_document(test_session(&second_path));
+
+        let tabs = workspace.document_tabs();
+        assert_eq!(tabs.len(), 2);
+        assert_eq!(tabs[0].id, first_id);
+        assert_eq!(tabs[0].path, first_path.as_path());
+        assert!(!tabs[0].is_active);
+        assert_eq!(tabs[1].id, second_id);
+        assert_eq!(tabs[1].path, second_path.as_path());
+        assert!(tabs[1].is_active);
+        assert_eq!(workspace.active_document_id(), Some(second_id));
+        assert_eq!(workspace.current_file(), Some(second_path.as_path()));
+    }
+
+    #[test]
+    fn switches_to_existing_document() {
+        let mut workspace = DocumentWorkspace::new();
+        let first_path = test_markdown_path("first", "# First");
+        let second_path = test_markdown_path("second", "# Second");
+
+        let first_id = workspace.open_document(test_session(&first_path));
+        workspace.open_document(test_session(&second_path));
+
+        assert!(workspace.switch_to(first_id));
+        assert_eq!(workspace.active_document_id(), Some(first_id));
+        assert_eq!(workspace.current_file(), Some(first_path.as_path()));
+        assert!(!workspace.switch_to(DocumentId(999)));
+        assert_eq!(workspace.active_document_id(), Some(first_id));
+    }
+
+    #[test]
+    fn closes_active_document_and_selects_neighbor() {
+        let mut workspace = DocumentWorkspace::new();
+        let first_path = test_markdown_path("first", "# First");
+        let second_path = test_markdown_path("second", "# Second");
+        let third_path = test_markdown_path("third", "# Third");
+
+        let first_id = workspace.open_document(test_session(&first_path));
+        let second_id = workspace.open_document(test_session(&second_path));
+        let third_id = workspace.open_document(test_session(&third_path));
+
+        assert!(workspace.switch_to(second_id));
+        let closed = workspace
+            .close(second_id)
+            .expect("active document should close");
+
+        assert_eq!(closed.path, second_path);
+        assert_eq!(workspace.active_document_id(), Some(third_id));
+
+        let tabs = workspace.document_tabs();
+        assert_eq!(tabs.len(), 2);
+        assert_eq!(tabs[0].id, first_id);
+        assert!(!tabs[0].is_active);
+        assert_eq!(tabs[1].id, third_id);
+        assert!(tabs[1].is_active);
+    }
+
+    #[test]
+    fn closing_document_before_active_preserves_active_document() {
+        let mut workspace = DocumentWorkspace::new();
+        let first_path = test_markdown_path("first", "# First");
+        let second_path = test_markdown_path("second", "# Second");
+        let third_path = test_markdown_path("third", "# Third");
+
+        let first_id = workspace.open_document(test_session(&first_path));
+        let second_id = workspace.open_document(test_session(&second_path));
+        let third_id = workspace.open_document(test_session(&third_path));
+
+        assert_eq!(workspace.active_document_id(), Some(third_id));
+        let closed = workspace.close(second_id).expect("document should close");
+
+        assert_eq!(closed.path, second_path);
+        assert_eq!(workspace.active_document_id(), Some(third_id));
+        assert_eq!(workspace.current_file(), Some(third_path.as_path()));
+
+        let tabs = workspace.document_tabs();
+        assert_eq!(tabs.len(), 2);
+        assert_eq!(tabs[0].id, first_id);
+        assert_eq!(tabs[1].id, third_id);
+        assert!(tabs[1].is_active);
+    }
+
+    #[test]
+    fn closing_last_active_document_selects_previous_document() {
+        let mut workspace = DocumentWorkspace::new();
+        let first_path = test_markdown_path("first", "# First");
+        let second_path = test_markdown_path("second", "# Second");
+
+        let first_id = workspace.open_document(test_session(&first_path));
+        let second_id = workspace.open_document(test_session(&second_path));
+
+        let closed = workspace
+            .close(second_id)
+            .expect("active document should close");
+
+        assert_eq!(closed.path, second_path);
+        assert_eq!(workspace.active_document_id(), Some(first_id));
+        assert_eq!(workspace.current_file(), Some(first_path.as_path()));
+    }
+
+    #[test]
+    fn replacing_active_document_keeps_position_and_allocates_new_id() {
+        let mut workspace = DocumentWorkspace::new();
+        let first_path = test_markdown_path("first", "# First");
+        let second_path = test_markdown_path("second", "# Second");
+        let replacement_path = test_markdown_path("replacement", "# Replacement");
+
+        let first_id = workspace.open_document(test_session(&first_path));
+        let second_id = workspace.open_document(test_session(&second_path));
+
+        assert!(workspace.switch_to(first_id));
+        let replacement_id = workspace.replace_active_session(test_session(&replacement_path));
+
+        let tabs = workspace.document_tabs();
+        assert_eq!(tabs.len(), 2);
+        assert_eq!(tabs[0].id, replacement_id);
+        assert_eq!(tabs[0].path, replacement_path.as_path());
+        assert!(tabs[0].is_active);
+        assert_eq!(tabs[1].id, second_id);
+        assert_eq!(tabs[1].path, second_path.as_path());
+        assert!(!tabs[1].is_active);
+        assert_ne!(replacement_id, first_id);
+    }
+
+    #[test]
+    fn restores_taken_active_document_to_original_position() {
+        let mut workspace = DocumentWorkspace::new();
+        let first_path = test_markdown_path("first", "# First");
+        let second_path = test_markdown_path("second", "# Second");
+        let third_path = test_markdown_path("third", "# Third");
+
+        let first_id = workspace.open_document(test_session(&first_path));
+        let second_id = workspace.open_document(test_session(&second_path));
+        let third_id = workspace.open_document(test_session(&third_path));
+
+        assert!(workspace.switch_to(second_id));
+        let active = workspace
+            .take_active_session()
+            .expect("active document should be taken");
+
+        assert_eq!(active.id(), second_id);
+        assert_eq!(workspace.active_document_id(), Some(third_id));
+
+        workspace.restore_active_session(active);
+
+        let tabs = workspace.document_tabs();
+        assert_eq!(tabs.len(), 3);
+        assert_eq!(tabs[0].id, first_id);
+        assert_eq!(tabs[1].id, second_id);
+        assert!(tabs[1].is_active);
+        assert_eq!(tabs[2].id, third_id);
+    }
+
+    fn test_session(path: &Path) -> DocumentSession {
+        let loaded = load_markdown_document(path).expect("test markdown should load");
+
+        DocumentSession::new(
+            path.to_path_buf(),
+            Arc::clone(&loaded.document),
+            loaded.fingerprint,
+            loaded.file_snapshot,
+        )
+    }
+
+    fn test_markdown_path(name: &str, content: &str) -> PathBuf {
+        let id = NEXT_TEST_FILE_ID.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!("oxidemd_document_workspace_{id}_{name}.md"));
+        std::fs::write(&path, content).expect("test markdown should be written");
+        path
+    }
+}
