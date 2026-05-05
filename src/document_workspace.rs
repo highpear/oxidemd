@@ -76,9 +76,11 @@ impl DocumentWorkspace {
     }
 
     pub fn document_id_for_path(&self, path: &Path) -> Option<DocumentId> {
+        let lookup_path = comparable_file_path(path);
+
         self.documents
             .iter()
-            .find(|entry| entry.session.path == path)
+            .find(|entry| comparable_file_path(&entry.session.path) == lookup_path)
             .map(|entry| entry.id)
     }
 
@@ -179,6 +181,10 @@ impl DocumentWorkspace {
             .iter()
             .position(|entry| entry.id == document_id)
     }
+}
+
+fn comparable_file_path(path: &Path) -> std::path::PathBuf {
+    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
 }
 
 impl Deref for ActiveDocumentSession {

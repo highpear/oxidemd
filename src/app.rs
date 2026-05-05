@@ -324,7 +324,7 @@ impl OxideMdApp {
     }
 
     fn load_selected_file(&mut self, path: PathBuf) {
-        let path = existing_file_path(path);
+        let path = user_visible_file_path(path);
 
         if let Some(document_id) = self.documents.document_id_for_path(&path) {
             self.documents.switch_to(document_id);
@@ -609,8 +609,18 @@ fn export_file_name(path: &Path) -> String {
     format!("{}.html", stem)
 }
 
-fn existing_file_path(path: PathBuf) -> PathBuf {
-    path.canonicalize().unwrap_or(path)
+fn user_visible_file_path(path: PathBuf) -> PathBuf {
+    let path_text = path.as_os_str().to_string_lossy();
+
+    if let Some(stripped) = path_text.strip_prefix(r"\\?\UNC\") {
+        return PathBuf::from(format!(r"\\{stripped}"));
+    }
+
+    if let Some(stripped) = path_text.strip_prefix(r"\\?\") {
+        return PathBuf::from(stripped);
+    }
+
+    path
 }
 
 fn heading_nav_indent(level: pulldown_cmark::HeadingLevel) -> f32 {
@@ -651,4 +661,25 @@ fn scaled_margin(value: i8, zoom_factor: f32) -> i8 {
     ((value as f32) * zoom_factor)
         .round()
         .clamp(0.0, i8::MAX as f32) as i8
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::user_visible_file_path;
+
+    #[test]
+    fn user_visible_file_path_removes_windows_verbatim_disk_prefix() {
+        let path = user_visible_file_path(PathBuf::from(r"\\?\C:\Users\example\doc.md"));
+
+        assert_eq!(path, PathBuf::from(r"C:\Users\example\doc.md"));
+    }
+
+    #[test]
+    fn user_visible_file_path_removes_windows_verbatim_unc_prefix() {
+        let path = user_visible_file_path(PathBuf::from(r"\\?\UNC\server\share\doc.md"));
+
+        assert_eq!(path, PathBuf::from(r"\\server\share\doc.md"));
+    }
 }
