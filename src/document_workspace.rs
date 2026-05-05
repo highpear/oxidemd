@@ -6,7 +6,6 @@ use crate::document_session::DocumentSession;
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct DocumentId(u64);
 
-#[allow(dead_code)]
 pub struct DocumentTab<'a> {
     pub id: DocumentId,
     pub path: &'a Path,
@@ -64,7 +63,6 @@ impl DocumentWorkspace {
         self.active_entry().map(|entry| entry.id)
     }
 
-    #[allow(dead_code)]
     pub fn document_tabs(&self) -> Vec<DocumentTab<'_>> {
         self.documents
             .iter()
@@ -75,6 +73,13 @@ impl DocumentWorkspace {
                 is_active: self.active_index == Some(index),
             })
             .collect()
+    }
+
+    pub fn document_id_for_path(&self, path: &Path) -> Option<DocumentId> {
+        self.documents
+            .iter()
+            .find(|entry| entry.session.path == path)
+            .map(|entry| entry.id)
     }
 
     pub fn open_document(&mut self, session: DocumentSession) -> DocumentId {
@@ -90,32 +95,6 @@ impl DocumentWorkspace {
         document_id
     }
 
-    pub fn replace_active_session(&mut self, session: DocumentSession) -> DocumentId {
-        let entry = DocumentEntry {
-            id: self.allocate_document_id(),
-            session,
-        };
-        let document_id = entry.id;
-
-        match self.active_index() {
-            Some(index) => {
-                self.documents[index] = entry;
-                self.active_index = Some(index);
-            }
-            None => {
-                self.documents.push(entry);
-                self.active_index = Some(self.documents.len() - 1);
-            }
-        }
-
-        document_id
-    }
-
-    pub fn open_or_replace_active(&mut self, session: DocumentSession) -> DocumentId {
-        self.replace_active_session(session)
-    }
-
-    #[allow(dead_code)]
     pub fn switch_to(&mut self, document_id: DocumentId) -> bool {
         let Some(index) = self.index_for_id(document_id) else {
             return false;
@@ -125,7 +104,6 @@ impl DocumentWorkspace {
         true
     }
 
-    #[allow(dead_code)]
     pub fn close(&mut self, document_id: DocumentId) -> Option<DocumentSession> {
         let index = self.index_for_id(document_id)?;
         let entry = self.documents.remove(index);
@@ -141,11 +119,6 @@ impl DocumentWorkspace {
         };
 
         Some(entry.session)
-    }
-
-    pub fn clear_active_session(&mut self) {
-        self.documents.clear();
-        self.active_index = None;
     }
 
     pub fn take_active_session(&mut self) -> Option<ActiveDocumentSession> {
@@ -260,6 +233,11 @@ mod tests {
         assert!(tabs[1].is_active);
         assert_eq!(workspace.active_document_id(), Some(second_id));
         assert_eq!(workspace.current_file(), Some(second_path.as_path()));
+        assert_eq!(workspace.document_id_for_path(&first_path), Some(first_id));
+        assert_eq!(
+            workspace.document_id_for_path(&second_path),
+            Some(second_id)
+        );
     }
 
     #[test]
@@ -346,30 +324,6 @@ mod tests {
         assert_eq!(closed.path, second_path);
         assert_eq!(workspace.active_document_id(), Some(first_id));
         assert_eq!(workspace.current_file(), Some(first_path.as_path()));
-    }
-
-    #[test]
-    fn replacing_active_document_keeps_position_and_allocates_new_id() {
-        let mut workspace = DocumentWorkspace::new();
-        let first_path = test_markdown_path("first", "# First");
-        let second_path = test_markdown_path("second", "# Second");
-        let replacement_path = test_markdown_path("replacement", "# Replacement");
-
-        let first_id = workspace.open_document(test_session(&first_path));
-        let second_id = workspace.open_document(test_session(&second_path));
-
-        assert!(workspace.switch_to(first_id));
-        let replacement_id = workspace.replace_active_session(test_session(&replacement_path));
-
-        let tabs = workspace.document_tabs();
-        assert_eq!(tabs.len(), 2);
-        assert_eq!(tabs[0].id, replacement_id);
-        assert_eq!(tabs[0].path, replacement_path.as_path());
-        assert!(tabs[0].is_active);
-        assert_eq!(tabs[1].id, second_id);
-        assert_eq!(tabs[1].path, second_path.as_path());
-        assert!(!tabs[1].is_active);
-        assert_ne!(replacement_id, first_id);
     }
 
     #[test]

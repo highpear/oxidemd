@@ -43,6 +43,7 @@ impl OxideMdApp {
                 tr(self.language, TranslationKey::ThemeNightOwl),
             ),
         ];
+        let document_tabs = self.documents.document_tabs();
 
         let action = render_top_bar(
             ctx,
@@ -53,6 +54,7 @@ impl OxideMdApp {
                 external_link_behavior: self.external_link_behavior,
                 is_heading_panel_visible: self.is_heading_panel_visible,
                 current_file: self.current_file(),
+                document_tabs: &document_tabs,
                 recent_files: &self.recent_files,
                 reload_status_label: self.reload_status_label(),
                 reload_status_background,
@@ -66,6 +68,14 @@ impl OxideMdApp {
 
         if let Some(path) = action.open_recent_file {
             self.open_recent_file(path);
+        }
+
+        if let Some(document_id) = action.switch_tab {
+            self.switch_to_document(document_id);
+        }
+
+        if let Some(document_id) = action.close_tab {
+            self.close_document(document_id);
         }
 
         if action.clear_recent_files {

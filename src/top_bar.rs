@@ -2,16 +2,20 @@ use std::path::{Path, PathBuf};
 
 use eframe::egui::{self, Color32, Frame, Margin, RichText, TopBottomPanel};
 
+use crate::document_workspace::{DocumentId, DocumentTab};
 use crate::i18n::{Language, TranslationKey, tr};
 use crate::session::ExternalLinkBehavior;
 use crate::theme::ThemeId;
 
 const TOP_BAR_FILE_LABEL_MAX_WIDTH: f32 = 280.0;
+const TAB_LABEL_MAX_WIDTH: f32 = 180.0;
 
 #[derive(Default)]
 pub struct TopBarAction {
     pub open_file: bool,
     pub open_recent_file: Option<PathBuf>,
+    pub switch_tab: Option<DocumentId>,
+    pub close_tab: Option<DocumentId>,
     pub clear_recent_files: bool,
     pub export_html: bool,
     pub switch_language: bool,
@@ -29,6 +33,7 @@ pub struct TopBarState<'a> {
     pub external_link_behavior: ExternalLinkBehavior,
     pub is_heading_panel_visible: bool,
     pub current_file: Option<&'a Path>,
+    pub document_tabs: &'a [DocumentTab<'a>],
     pub recent_files: &'a [PathBuf],
     pub reload_status_label: &'a str,
     pub reload_status_background: Color32,
@@ -193,6 +198,34 @@ pub fn render_top_bar(ctx: &egui::Context, state: TopBarState<'_>) -> TopBarActi
                     );
                 });
         });
+
+        if !state.document_tabs.is_empty() {
+            ui.separator();
+            ui.horizontal_wrapped(|ui| {
+                for tab in state.document_tabs {
+                    let tab_label = tab_file_label(tab.path);
+                    let response = ui.add_sized(
+                        [TAB_LABEL_MAX_WIDTH, ui.spacing().interact_size.y],
+                        egui::Button::selectable(tab.is_active, tab_label).truncate(),
+                    );
+
+                    if response
+                        .on_hover_text(tab.path.display().to_string())
+                        .clicked()
+                    {
+                        action.switch_tab = Some(tab.id);
+                    }
+
+                    if ui
+                        .small_button("x")
+                        .on_hover_text(tr(state.language, TranslationKey::ActionClose))
+                        .clicked()
+                    {
+                        action.close_tab = Some(tab.id);
+                    }
+                }
+            });
+        }
     });
 
     action
@@ -206,6 +239,13 @@ fn current_file_label(language: Language, path: Option<&Path>) -> String {
 }
 
 fn recent_file_label(path: &Path) -> String {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| path.display().to_string())
+}
+
+fn tab_file_label(path: &Path) -> String {
     path.file_name()
         .and_then(|name| name.to_str())
         .map(ToOwned::to_owned)

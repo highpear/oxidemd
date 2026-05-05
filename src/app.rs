@@ -6,7 +6,7 @@ use rfd::FileDialog;
 
 use crate::document_loader::load_markdown_document;
 use crate::document_session::{DocumentSession, RenderMeasurementReason};
-use crate::document_workspace::DocumentWorkspace;
+use crate::document_workspace::{DocumentId, DocumentWorkspace};
 use crate::export::write_html_export;
 use crate::external_links::render_external_link_confirmation;
 use crate::i18n::{Language, TranslationKey, tr};
@@ -302,8 +302,16 @@ impl OxideMdApp {
             return;
         }
 
-        if let Some(path) = dropped_paths.iter().find(|path| is_markdown_path(path)) {
-            self.load_selected_file(path.clone());
+        let markdown_paths = dropped_paths
+            .iter()
+            .filter(|path| is_markdown_path(path))
+            .cloned()
+            .collect::<Vec<_>>();
+
+        if !markdown_paths.is_empty() {
+            for path in markdown_paths {
+                self.load_selected_file(path);
+            }
             return;
         }
 
@@ -316,10 +324,21 @@ impl OxideMdApp {
     }
 
     fn load_selected_file(&mut self, path: PathBuf) {
+        let path = existing_file_path(path);
+
+        if let Some(document_id) = self.documents.document_id_for_path(&path) {
+            self.documents.switch_to(document_id);
+            remember_recent_file(&mut self.recent_files, &path);
+            self.reload_status = ReloadStatus::Idle;
+            self.request_window_expansion_for_preview();
+            self.set_status_with_path(TranslationKey::StatusLoaded, &path);
+            return;
+        }
+
         match self.load_document_session(&path) {
             Ok(loaded) => {
                 remember_recent_file(&mut self.recent_files, &path);
-                self.documents.open_or_replace_active(loaded.session);
+                self.documents.open_document(loaded.session);
                 self.reload_status = ReloadStatus::Idle;
                 self.start_watching_file();
                 if let Some(session) = self.documents.active_session_mut() {
@@ -330,7 +349,6 @@ impl OxideMdApp {
                 self.set_status_with_path(TranslationKey::StatusLoaded, &path);
             }
             Err(error) => {
-                self.documents.clear_active_session();
                 self.set_reload_error(TranslationKey::StatusLoadFailed, error);
             }
         }
@@ -487,6 +505,30 @@ impl OxideMdApp {
     fn current_file(&self) -> Option<&Path> {
         self.documents.current_file()
     }
+
+    fn switch_to_document(&mut self, document_id: DocumentId) {
+        if !self.documents.switch_to(document_id) {
+            return;
+        }
+
+        self.reload_status = ReloadStatus::Idle;
+        if let Some(path) = self.current_file().map(Path::to_path_buf) {
+            self.set_status_with_path(TranslationKey::StatusLoaded, &path);
+        }
+    }
+
+    fn close_document(&mut self, document_id: DocumentId) {
+        if self.documents.close(document_id).is_none() {
+            return;
+        }
+
+        self.reload_status = ReloadStatus::Idle;
+        if let Some(path) = self.current_file().map(Path::to_path_buf) {
+            self.set_status_with_path(TranslationKey::StatusLoaded, &path);
+        } else {
+            self.set_status_message(tr(self.language, TranslationKey::StatusNoFile));
+        }
+    }
 }
 
 impl eframe::App for OxideMdApp {
@@ -565,6 +607,10 @@ fn export_file_name(path: &Path) -> String {
         .unwrap_or("export");
 
     format!("{}.html", stem)
+}
+
+fn existing_file_path(path: PathBuf) -> PathBuf {
+    path.canonicalize().unwrap_or(path)
 }
 
 fn heading_nav_indent(level: pulldown_cmark::HeadingLevel) -> f32 {
