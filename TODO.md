@@ -279,6 +279,20 @@ Goal: consider future extensions without committing too early.
 * [x] External link opening behavior options
 * [x] Drag and drop file open
 * [ ] Multiple tabs
+  * [x] Add `DocumentWorkspace` behavior tests before UI work
+  * [x] Define tab behavior before implementation
+    * [x] Open Markdown files in new tabs by default
+    * [x] Switch to an existing tab instead of opening duplicate tabs for the same file
+    * [x] Open recent files in tabs, switching to an existing tab when already open
+    * [x] Open dropped Markdown files in tabs; when multiple Markdown files are dropped, open all and activate the last one
+    * [x] Close the active tab by selecting the right neighbor, or the left neighbor when there is no right neighbor
+    * [x] Keep the current active tab selected when closing a different tab
+    * [x] Return to the home view when the last tab is closed
+    * [x] Show the file name as the tab label and the full path as the tooltip
+    * [x] Keep Copy Path, export, reload, search, and TOC actions scoped to the active tab
+    * [x] Watch and reload every open tab, including inactive tabs
+    * [x] Restore open tabs and the active tab on normal startup
+    * [x] Prefer an explicitly provided CLI file over restored tabs; open only the CLI file while still restoring non-file settings
 * [x] Session restore
 * [x] Recent files
   * [x] Show an empty recent-files menu state
