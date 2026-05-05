@@ -298,7 +298,7 @@ Goal: consider future extensions without committing too early.
   * [x] Open multiple dropped Markdown files as tabs
   * [x] Add a basic tab bar for switching and closing tabs
   * [x] Persist and restore open tabs plus the active tab
-  * [ ] Reload inactive tabs in the background
+  * [x] Reload inactive tabs in the background
 * [x] Session restore
 * [x] Recent files
   * [x] Show an empty recent-files menu state

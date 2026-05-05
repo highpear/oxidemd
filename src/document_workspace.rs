@@ -53,6 +53,15 @@ impl DocumentWorkspace {
         &mut self,
         document_id: DocumentId,
     ) -> Option<&mut DocumentSession> {
+        self.session_mut(document_id)
+    }
+
+    pub fn session(&self, document_id: DocumentId) -> Option<&DocumentSession> {
+        let index = self.index_for_id(document_id)?;
+        self.documents.get(index).map(|entry| &entry.session)
+    }
+
+    pub fn session_mut(&mut self, document_id: DocumentId) -> Option<&mut DocumentSession> {
         let index = self.index_for_id(document_id)?;
         self.documents
             .get_mut(index)
@@ -162,6 +171,10 @@ impl DocumentWorkspace {
             .collect()
     }
 
+    pub fn document_ids(&self) -> Vec<DocumentId> {
+        self.documents.iter().map(|entry| entry.id).collect()
+    }
+
     fn allocate_document_id(&mut self) -> DocumentId {
         let document_id = DocumentId(self.next_document_id);
         self.next_document_id += 1;
@@ -254,6 +267,13 @@ mod tests {
         assert_eq!(
             workspace.open_files(),
             vec![first_path.as_path(), second_path.as_path()]
+        );
+        assert_eq!(workspace.document_ids(), vec![first_id, second_id]);
+        assert_eq!(
+            workspace
+                .session(first_id)
+                .map(|session| session.path.as_path()),
+            Some(first_path.as_path())
         );
     }
 
