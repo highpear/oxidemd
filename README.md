@@ -22,16 +22,18 @@ The project is in early `v0.1` development.
 
 Current capabilities:
 
-- Open a single Markdown file with a native file dialog
+- Open Markdown files with a native file dialog
 - Open a Markdown file from the command line
-- Open a Markdown file with drag and drop
+- Open one or more Markdown files with drag and drop
+- View multiple Markdown files in tabs
+- Switch to an already open tab instead of opening duplicate tabs for the same file
 - Render core Markdown blocks
 - Render basic inline Markdown styling
 - Open links from rendered content
 - Choose whether external links open directly or ask first
 - Render local PNG and JPEG images
 - Render inline and display math visually
-- Live reload when the opened file changes
+- Live reload when opened files change, including inactive tabs
 - English and Japanese UI strings
 - Theme switching and document zoom
 - Table of contents and heading navigation
@@ -41,9 +43,9 @@ Current capabilities:
 - Copy fenced code block contents
 - Show Mermaid fenced blocks with readable fallback and source copy
 - Copy the current file path
-- Export the current Markdown file as HTML
+- Export the active Markdown file as HTML
 - Export Markdown as HTML from the command line
-- Restore the last session settings and file
+- Restore the last session settings, open tabs, and active tab
 - Reopen recently opened Markdown files
 
 Currently supported Markdown elements:
@@ -70,10 +72,10 @@ Currently supported Markdown elements:
 The current target is intentionally small:
 
 - Windows-first
-- Single-file Markdown viewing
+- Local Markdown viewing with lightweight tabs
 - Reliable readability over feature breadth
 
-Items such as tabs, large file improvements, richer math polish, and Mermaid are planned for later phases.
+Items such as large file improvements, richer math polish, and Mermaid refinement are planned for later phases.
 
 ---
 
@@ -144,6 +146,8 @@ Start without reopening the previous file:
 ```powershell
 oxidemd --no-restore-file
 ```
+
+When a Markdown file is provided on the command line, OxideMD opens that file instead of restoring the previous tabs. Other saved settings, such as theme and zoom, are still restored.
 
 Reset saved session settings and recent files:
 
