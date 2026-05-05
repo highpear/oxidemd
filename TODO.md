@@ -297,7 +297,7 @@ Goal: consider future extensions without committing too early.
   * [x] Switch to existing tabs when opening an already open file
   * [x] Open multiple dropped Markdown files as tabs
   * [x] Add a basic tab bar for switching and closing tabs
-  * [ ] Persist and restore open tabs plus the active tab
+  * [x] Persist and restore open tabs plus the active tab
   * [ ] Reload inactive tabs in the background
 * [x] Session restore
 * [x] Recent files

@@ -34,6 +34,11 @@ struct LoadedDocumentSession {
     timing: metrics::DocumentTiming,
 }
 
+struct RestoredOpenFiles {
+    files: Vec<PathBuf>,
+    active_file: Option<PathBuf>,
+}
+
 const DEFAULT_ZOOM_FACTOR: f32 = 1.0;
 const MIN_ZOOM_FACTOR: f32 = 0.8;
 const MAX_ZOOM_FACTOR: f32 = 1.8;
@@ -102,15 +107,17 @@ impl OxideMdApp {
             startup_started: Some(startup_started),
         };
 
-        let restored_file = if reset_session {
+        let restored_files = if reset_session {
             None
         } else {
             app.restore_session(storage, restore_file)
         };
         apply_theme(&app.ui_context, &theme(app.theme_id));
 
-        if let Some(path) = initial_file.or(restored_file) {
+        if let Some(path) = initial_file {
             app.load_initial_file(path);
+        } else if let Some(restored_files) = restored_files {
+            app.load_restored_files(restored_files);
         }
 
         app
@@ -120,7 +127,7 @@ impl OxideMdApp {
         &mut self,
         storage: Option<&dyn eframe::Storage>,
         restore_file: bool,
-    ) -> Option<PathBuf> {
+    ) -> Option<RestoredOpenFiles> {
         let restored = restore_saved_session(storage, MIN_ZOOM_FACTOR, MAX_ZOOM_FACTOR);
 
         if let Some(language) = restored.language {
@@ -147,14 +154,24 @@ impl OxideMdApp {
             self.recent_files = recent_files;
         }
 
-        if restore_file && let Some(path) = restored.unavailable_current_file {
+        if restore_file
+            && let Some(path) = restored
+                .unavailable_open_files
+                .first()
+                .or(restored.unavailable_current_file.as_ref())
+        {
             self.set_reload_error(
                 TranslationKey::StatusLastFileUnavailable,
                 path.display().to_string(),
             );
         }
 
-        restore_file.then_some(restored.current_file).flatten()
+        restore_file
+            .then_some(RestoredOpenFiles {
+                files: restored.open_files,
+                active_file: restored.active_file,
+            })
+            .filter(|restored_files| !restored_files.files.is_empty())
     }
 
     fn load_initial_file(&mut self, path: PathBuf) {
@@ -167,6 +184,20 @@ impl OxideMdApp {
             TranslationKey::StatusUnsupportedFile,
             path.display().to_string(),
         );
+    }
+
+    fn load_restored_files(&mut self, restored_files: RestoredOpenFiles) {
+        let active_file = restored_files.active_file;
+
+        for path in restored_files.files {
+            self.load_file_as_tab(path, false);
+        }
+
+        if let Some(active_file) = active_file
+            && let Some(document_id) = self.documents.document_id_for_path(&active_file)
+        {
+            self.switch_to_document(document_id);
+        }
     }
 
     fn switch_language(&mut self) {
@@ -324,11 +355,17 @@ impl OxideMdApp {
     }
 
     fn load_selected_file(&mut self, path: PathBuf) {
+        self.load_file_as_tab(path, true);
+    }
+
+    fn load_file_as_tab(&mut self, path: PathBuf, update_recent_files: bool) {
         let path = user_visible_file_path(path);
 
         if let Some(document_id) = self.documents.document_id_for_path(&path) {
             self.documents.switch_to(document_id);
-            remember_recent_file(&mut self.recent_files, &path);
+            if update_recent_files {
+                remember_recent_file(&mut self.recent_files, &path);
+            }
             self.reload_status = ReloadStatus::Idle;
             self.request_window_expansion_for_preview();
             self.set_status_with_path(TranslationKey::StatusLoaded, &path);
@@ -337,7 +374,9 @@ impl OxideMdApp {
 
         match self.load_document_session(&path) {
             Ok(loaded) => {
-                remember_recent_file(&mut self.recent_files, &path);
+                if update_recent_files {
+                    remember_recent_file(&mut self.recent_files, &path);
+                }
                 self.documents.open_document(loaded.session);
                 self.reload_status = ReloadStatus::Idle;
                 self.start_watching_file();
@@ -542,6 +581,7 @@ impl eframe::App for OxideMdApp {
                 external_link_behavior: self.external_link_behavior,
                 is_heading_panel_visible: self.is_heading_panel_visible,
                 current_file: self.current_file(),
+                open_files: self.documents.open_files(),
                 recent_files: &self.recent_files,
             },
         );

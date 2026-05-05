@@ -4,12 +4,15 @@ use crate::i18n::{Language, TranslationKey, tr};
 use crate::theme::ThemeId;
 
 const MAX_RECENT_FILES: usize = 8;
+const MAX_RESTORED_OPEN_FILES: usize = 32;
 const STORAGE_KEY_LANGUAGE: &str = "oxidemd.language";
 const STORAGE_KEY_THEME: &str = "oxidemd.theme";
 const STORAGE_KEY_ZOOM: &str = "oxidemd.zoom";
 const STORAGE_KEY_EXTERNAL_LINKS: &str = "oxidemd.external_links";
 const STORAGE_KEY_HEADING_PANEL: &str = "oxidemd.heading_panel";
 const STORAGE_KEY_CURRENT_FILE: &str = "oxidemd.current_file";
+const STORAGE_KEY_OPEN_FILES: &str = "oxidemd.open_files";
+const STORAGE_KEY_ACTIVE_FILE: &str = "oxidemd.active_file";
 const STORAGE_KEY_RECENT_FILES: &str = "oxidemd.recent_files";
 
 #[derive(Clone, Copy)]
@@ -25,8 +28,10 @@ pub struct RestoredSession {
     pub external_link_behavior: Option<ExternalLinkBehavior>,
     pub is_heading_panel_visible: Option<bool>,
     pub recent_files: Option<Vec<PathBuf>>,
-    pub current_file: Option<PathBuf>,
     pub unavailable_current_file: Option<PathBuf>,
+    pub open_files: Vec<PathBuf>,
+    pub active_file: Option<PathBuf>,
+    pub unavailable_open_files: Vec<PathBuf>,
 }
 
 pub struct SessionSaveData<'a> {
@@ -36,6 +41,7 @@ pub struct SessionSaveData<'a> {
     pub external_link_behavior: ExternalLinkBehavior,
     pub is_heading_panel_visible: bool,
     pub current_file: Option<&'a Path>,
+    pub open_files: Vec<&'a Path>,
     pub recent_files: &'a [PathBuf],
 }
 
@@ -101,6 +107,23 @@ pub fn restore_session(
 
     let (current_file, unavailable_current_file) =
         restored_current_file(storage.get_string(STORAGE_KEY_CURRENT_FILE));
+    let (mut open_files, mut unavailable_open_files) = restored_file_list(
+        storage.get_string(STORAGE_KEY_OPEN_FILES),
+        MAX_RESTORED_OPEN_FILES,
+    );
+
+    if open_files.is_empty() {
+        if let Some(path) = &current_file {
+            open_files.push(path.clone());
+        }
+    } else if let Some(path) = &unavailable_current_file {
+        unavailable_open_files.push(path.clone());
+    }
+
+    let active_file =
+        restored_active_file(storage.get_string(STORAGE_KEY_ACTIVE_FILE), &open_files)
+            .or_else(|| current_file.clone())
+            .filter(|path| open_files.contains(path));
 
     RestoredSession {
         language,
@@ -109,8 +132,10 @@ pub fn restore_session(
         external_link_behavior,
         is_heading_panel_visible,
         recent_files,
-        current_file,
         unavailable_current_file,
+        open_files,
+        active_file,
+        unavailable_open_files,
     }
 }
 
@@ -135,10 +160,16 @@ pub fn save_session(storage: &mut dyn eframe::Storage, data: SessionSaveData<'_>
 
     if let Some(path) = data.current_file {
         storage.set_string(STORAGE_KEY_CURRENT_FILE, path.display().to_string());
+        storage.set_string(STORAGE_KEY_ACTIVE_FILE, path.display().to_string());
     } else {
         storage.set_string(STORAGE_KEY_CURRENT_FILE, String::new());
+        storage.set_string(STORAGE_KEY_ACTIVE_FILE, String::new());
     }
 
+    storage.set_string(
+        STORAGE_KEY_OPEN_FILES,
+        file_list_storage_value(&data.open_files, MAX_RESTORED_OPEN_FILES),
+    );
     storage.set_string(
         STORAGE_KEY_RECENT_FILES,
         recent_files_storage_value(data.recent_files),
@@ -170,8 +201,10 @@ impl RestoredSession {
             external_link_behavior: None,
             is_heading_panel_visible: None,
             recent_files: None,
-            current_file: None,
             unavailable_current_file: None,
+            open_files: Vec::new(),
+            active_file: None,
+            unavailable_open_files: Vec::new(),
         }
     }
 }
@@ -206,26 +239,50 @@ fn restored_current_file(value: Option<String>) -> (Option<PathBuf>, Option<Path
 }
 
 fn recent_files_from_storage_value(value: &str) -> Vec<PathBuf> {
+    restored_file_list(Some(value.to_owned()), MAX_RECENT_FILES).0
+}
+
+fn restored_file_list(value: Option<String>, max_count: usize) -> (Vec<PathBuf>, Vec<PathBuf>) {
     let mut recent_files = Vec::new();
+    let mut unavailable_files = Vec::new();
+
+    let Some(value) = value else {
+        return (recent_files, unavailable_files);
+    };
 
     for path in value.lines().map(PathBuf::from) {
-        if recent_files.len() >= MAX_RECENT_FILES {
+        if recent_files.len() >= max_count {
             break;
         }
 
         if path.is_file() && is_markdown_path(&path) && !recent_files.contains(&path) {
             recent_files.push(path);
+        } else if !path.as_os_str().is_empty() && !unavailable_files.contains(&path) {
+            unavailable_files.push(path);
         }
     }
 
-    recent_files
+    (recent_files, unavailable_files)
+}
+
+fn restored_active_file(value: Option<String>, open_files: &[PathBuf]) -> Option<PathBuf> {
+    let path = PathBuf::from(value?);
+    if open_files.contains(&path) {
+        Some(path)
+    } else {
+        None
+    }
 }
 
 fn recent_files_storage_value(recent_files: &[PathBuf]) -> String {
-    recent_files
+    file_list_storage_value(recent_files, MAX_RECENT_FILES)
+}
+
+fn file_list_storage_value(paths: &[impl AsRef<Path>], max_count: usize) -> String {
+    paths
         .iter()
-        .take(MAX_RECENT_FILES)
-        .map(|path| path.display().to_string())
+        .take(max_count)
+        .map(|path| path.as_ref().display().to_string())
         .collect::<Vec<_>>()
         .join("\n")
 }

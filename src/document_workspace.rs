@@ -155,6 +155,13 @@ impl DocumentWorkspace {
         self.active_session().map(|session| session.path.as_path())
     }
 
+    pub fn open_files(&self) -> Vec<&Path> {
+        self.documents
+            .iter()
+            .map(|entry| entry.session.path.as_path())
+            .collect()
+    }
+
     fn allocate_document_id(&mut self) -> DocumentId {
         let document_id = DocumentId(self.next_document_id);
         self.next_document_id += 1;
@@ -243,6 +250,10 @@ mod tests {
         assert_eq!(
             workspace.document_id_for_path(&second_path),
             Some(second_id)
+        );
+        assert_eq!(
+            workspace.open_files(),
+            vec![first_path.as_path(), second_path.as_path()]
         );
     }
 
