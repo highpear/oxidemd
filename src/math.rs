@@ -502,4 +502,57 @@ mod tests {
         assert_eq!(cache.active_job_count, super::MAX_ACTIVE_MATH_RENDER_JOBS);
         assert_eq!(cache.queued_jobs.len(), 1);
     }
+
+    #[test]
+    #[ignore = "prints release-mode math render latency for a batch of formulas"]
+    fn measures_math_render_batch_latency() {
+        let mut cache = MathRenderCache::new();
+        let ctx = Context::default();
+        let text_color = Color32::from_rgb(34, 34, 34);
+        let expressions = [
+            r"e^{i\pi} + 1 = 0",
+            r"\frac{1}{n}",
+            r"x^2 + y^2",
+            r"\sum_{k=1}^{n} k = \frac{n(n+1)}{2}",
+            r"\int_0^1 x^2\,dx = \frac{1}{3}",
+            r"\alpha + \beta + \gamma",
+            r"\sqrt{x^2 + y^2}",
+            r"P(A \mid B)=\frac{P(A \cap B)}{P(B)}",
+        ];
+
+        for expression in expressions {
+            let prepared = cache.prepare(&ctx, expression, MathRenderMode::Inline, text_color, 1.0);
+            assert!(matches!(prepared, PreparedMath::Pending));
+        }
+
+        let started = Instant::now();
+        loop {
+            let ready_count = expressions
+                .iter()
+                .filter(|expression| {
+                    matches!(
+                        cache.prepare(&ctx, expression, MathRenderMode::Inline, text_color, 1.0,),
+                        PreparedMath::Svg(_) | PreparedMath::Error(_)
+                    )
+                })
+                .count();
+
+            if ready_count == expressions.len() {
+                break;
+            }
+
+            assert!(
+                started.elapsed() < Duration::from_secs(10),
+                "math render batch timed out"
+            );
+            std::thread::sleep(Duration::from_millis(5));
+        }
+
+        println!(
+            "[perf] math_render_batch: {} ms, {} formulas, {} workers",
+            started.elapsed().as_millis(),
+            expressions.len(),
+            super::MAX_ACTIVE_MATH_RENDER_JOBS
+        );
+    }
 }

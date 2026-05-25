@@ -525,3 +525,27 @@ Conclusion:
 
 - Documents with many visible math or Mermaid blocks no longer spawn an unbounded number of render threads at once.
 - Initial rendering may still show pending fallbacks while work drains, but CPU and thread pressure should be steadier.
+
+### 2026-05-25: Parallelize MathJax SVG Rendering
+
+Change:
+
+- Add a small lazy MathJax worker pool for math SVG rendering.
+- Keep the pool size aligned with the existing active math render job limit of 2.
+- Avoid building owned expression strings for math cache lookup hits by grouping cache entries by render key first.
+
+Result:
+
+- Command: `cargo test --release math::tests::measures_math_render_batch_latency -- --ignored --nocapture`
+- Batch result: 566 ms for 8 inline formulas with 2 workers.
+- Individual render logs:
+  - First two formulas: 476 ms and 477 ms, including cold MathJax worker initialization.
+  - Remaining formulas: 10-28 ms each after workers were initialized.
+- Validation: `cargo test --release math::tests -- --nocapture` passed with 5 tests and logged two cold small-formula renders at 462 ms and 466 ms.
+
+Conclusion:
+
+- Cold MathJax worker initialization is still the dominant first-use cost.
+- After initialization, individual formula SVG generation is much faster.
+- The worker pool mainly improves documents with multiple formulas queued at once; it does not remove the cold-start cost for the first visible formula.
+- The next useful math-rendering measurement should separate cold start, warm SVG generation, SVG size parsing, and egui image loading costs.
