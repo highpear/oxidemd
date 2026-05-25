@@ -8,11 +8,14 @@ use eframe::egui::{
 };
 
 use crate::bottom_bar::{BottomBarState, render_bottom_bar};
+use crate::document_session::DocumentSession;
 use crate::external_links::handle_external_link_click;
 use crate::i18n::{TranslationKey, tr};
 use crate::metrics;
-use crate::renderer::render_markdown_document;
+use crate::parser::MarkdownDocument;
+use crate::renderer::{RenderOutcome, render_markdown_document};
 use crate::search_panel::{render_search_controls, render_search_results};
+use crate::session::ExternalLinkBehavior;
 use crate::theme::{Theme, ThemeId, theme};
 use crate::top_bar::{TopBarState, render_top_bar};
 
@@ -348,32 +351,14 @@ impl OxideMdApp {
                         );
                     }
 
-                    if let Some(active_heading) = render_outcome.active_heading {
-                        session.active_heading = Some(active_heading);
-                    }
-
-                    if let Some(block_index) = render_outcome
-                        .clicked_anchor
-                        .and_then(|anchor| document.heading_block_for_anchor(&anchor))
-                    {
-                        session.jump_to_heading(block_index);
-                        ctx.request_repaint();
-                    }
-
-                    if let Some(url) = render_outcome.clicked_external_link {
-                        handle_external_link_click(
-                            ctx,
-                            external_link_behavior,
-                            &mut self.pending_external_link,
-                            url,
-                        );
-                    }
-
-                    if render_outcome.needs_scroll_stabilization {
-                        ctx.request_repaint();
-                    } else if render_outcome.did_scroll {
-                        session.pending_block_scroll = None;
-                    }
+                    apply_document_render_outcome(
+                        ctx,
+                        session,
+                        &document,
+                        render_outcome,
+                        external_link_behavior,
+                        &mut self.pending_external_link,
+                    );
 
                     paint_document_frame(ui, &layout, background_shape, document_ui.min_rect());
                     ui.add_space(24.0);
@@ -560,4 +545,35 @@ fn paint_document_frame(
     ui.painter()
         .set(background_shape, layout.frame.paint(fixed_content_rect));
     ui.allocate_rect(actual_frame_rect, egui::Sense::hover());
+}
+
+fn apply_document_render_outcome(
+    ctx: &egui::Context,
+    session: &mut DocumentSession,
+    document: &MarkdownDocument,
+    render_outcome: RenderOutcome,
+    external_link_behavior: ExternalLinkBehavior,
+    pending_external_link: &mut Option<String>,
+) {
+    if let Some(active_heading) = render_outcome.active_heading {
+        session.active_heading = Some(active_heading);
+    }
+
+    if let Some(block_index) = render_outcome
+        .clicked_anchor
+        .and_then(|anchor| document.heading_block_for_anchor(&anchor))
+    {
+        session.jump_to_heading(block_index);
+        ctx.request_repaint();
+    }
+
+    if let Some(url) = render_outcome.clicked_external_link {
+        handle_external_link_click(ctx, external_link_behavior, pending_external_link, url);
+    }
+
+    if render_outcome.needs_scroll_stabilization {
+        ctx.request_repaint();
+    } else if render_outcome.did_scroll {
+        session.pending_block_scroll = None;
+    }
 }
