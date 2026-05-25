@@ -368,6 +368,17 @@ mod tests {
     use eframe::egui::{Color32, Context};
     use std::time::{Duration, Instant};
 
+    const MATH_RENDER_BENCH_EXPRESSIONS: [&str; 8] = [
+        r"e^{i\pi} + 1 = 0",
+        r"\frac{1}{n}",
+        r"x^2 + y^2",
+        r"\sum_{k=1}^{n} k = \frac{n(n+1)}{2}",
+        r"\int_0^1 x^2\,dx = \frac{1}{3}",
+        r"\alpha + \beta + \gamma",
+        r"\sqrt{x^2 + y^2}",
+        r"P(A \mid B)=\frac{P(A \cap B)}{P(B)}",
+    ];
+
     #[test]
     fn reuses_prepared_math_by_key() {
         let mut cache = MathRenderCache::new();
@@ -509,35 +520,99 @@ mod tests {
         let mut cache = MathRenderCache::new();
         let ctx = Context::default();
         let text_color = Color32::from_rgb(34, 34, 34);
-        let expressions = [
-            r"e^{i\pi} + 1 = 0",
-            r"\frac{1}{n}",
-            r"x^2 + y^2",
-            r"\sum_{k=1}^{n} k = \frac{n(n+1)}{2}",
-            r"\int_0^1 x^2\,dx = \frac{1}{3}",
-            r"\alpha + \beta + \gamma",
-            r"\sqrt{x^2 + y^2}",
-            r"P(A \mid B)=\frac{P(A \cap B)}{P(B)}",
-        ];
 
-        for expression in expressions {
+        for expression in MATH_RENDER_BENCH_EXPRESSIONS {
             let prepared = cache.prepare(&ctx, expression, MathRenderMode::Inline, text_color, 1.0);
             assert!(matches!(prepared, PreparedMath::Pending));
         }
 
         let started = Instant::now();
+        wait_for_bench_batch(&mut cache, &ctx, text_color);
+
+        println!(
+            "[perf] math_render_batch: {} ms, {} formulas, {} workers",
+            started.elapsed().as_millis(),
+            MATH_RENDER_BENCH_EXPRESSIONS.len(),
+            super::MAX_ACTIVE_MATH_RENDER_JOBS
+        );
+    }
+
+    #[test]
+    #[ignore = "prints release-mode warm math render latency for a batch of formulas"]
+    fn measures_warm_math_render_batch_latency() {
+        warm_mathjax_workers();
+
+        let mut cache = MathRenderCache::new();
+        let ctx = Context::default();
+        let text_color = Color32::from_rgb(34, 34, 34);
+
+        for expression in MATH_RENDER_BENCH_EXPRESSIONS {
+            let prepared = cache.prepare(&ctx, expression, MathRenderMode::Inline, text_color, 1.0);
+            assert!(matches!(prepared, PreparedMath::Pending));
+        }
+
+        let started = Instant::now();
+        wait_for_bench_batch(&mut cache, &ctx, text_color);
+
+        println!(
+            "[perf] math_render_warm_batch: {} ms, {} formulas, {} workers",
+            started.elapsed().as_millis(),
+            MATH_RENDER_BENCH_EXPRESSIONS.len(),
+            super::MAX_ACTIVE_MATH_RENDER_JOBS
+        );
+    }
+
+    #[test]
+    #[ignore = "prints release-mode colored math SVG preparation latency"]
+    fn measures_colored_math_svg_preparation_latency() {
+        warm_mathjax_workers();
+
+        let raw_results = MATH_RENDER_BENCH_EXPRESSIONS
+            .iter()
+            .map(|expression| super::prepare_math(expression, MathRenderMode::Inline, 1.0))
+            .collect::<Vec<_>>();
+        let key = super::MathCacheKey {
+            mode: MathRenderMode::Inline,
+            zoom_bucket: super::zoom_bucket(1.0),
+        };
+        let text_color = Color32::from_rgb(34, 34, 34);
+
+        let started = Instant::now();
+        let prepared = MATH_RENDER_BENCH_EXPRESSIONS
+            .iter()
+            .zip(raw_results.iter())
+            .map(|(expression, result)| {
+                super::prepare_colored_math(expression, key, result, text_color)
+            })
+            .collect::<Vec<_>>();
+
+        assert!(
+            prepared
+                .iter()
+                .all(|result| matches!(result, PreparedMath::Svg(_) | PreparedMath::Error(_)))
+        );
+        println!(
+            "[perf] math_colored_svg_prepare_batch: {} ms, {} formulas",
+            started.elapsed().as_millis(),
+            prepared.len()
+        );
+    }
+
+    fn wait_for_bench_batch(cache: &mut MathRenderCache, ctx: &Context, text_color: Color32) {
+        let started = Instant::now();
+
         loop {
-            let ready_count = expressions
+            let ready_count = MATH_RENDER_BENCH_EXPRESSIONS
                 .iter()
                 .filter(|expression| {
                     matches!(
-                        cache.prepare(&ctx, expression, MathRenderMode::Inline, text_color, 1.0,),
+                        cache.prepare(ctx, expression, MathRenderMode::Inline, text_color, 1.0,),
                         PreparedMath::Svg(_) | PreparedMath::Error(_)
                     )
                 })
                 .count();
 
-            if ready_count == expressions.len() {
+            if ready_count == MATH_RENDER_BENCH_EXPRESSIONS.len() {
                 break;
             }
 
@@ -547,12 +622,12 @@ mod tests {
             );
             std::thread::sleep(Duration::from_millis(5));
         }
+    }
 
-        println!(
-            "[perf] math_render_batch: {} ms, {} formulas, {} workers",
-            started.elapsed().as_millis(),
-            expressions.len(),
-            super::MAX_ACTIVE_MATH_RENDER_JOBS
-        );
+    fn warm_mathjax_workers() {
+        for expression in ["x", "y"] {
+            let result = super::prepare_math(expression, MathRenderMode::Inline, 1.0);
+            assert!(matches!(result, super::RawMathResult::Svg(_)));
+        }
     }
 }

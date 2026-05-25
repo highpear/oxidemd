@@ -537,10 +537,15 @@ Change:
 Result:
 
 - Command: `cargo test --release math::tests::measures_math_render_batch_latency -- --ignored --nocapture`
-- Batch result: 566 ms for 8 inline formulas with 2 workers.
+- Cold batch result: 588 ms for 8 inline formulas with 2 workers.
 - Individual render logs:
-  - First two formulas: 476 ms and 477 ms, including cold MathJax worker initialization.
-  - Remaining formulas: 10-28 ms each after workers were initialized.
+  - First two formulas: 482 ms and 507 ms, including cold MathJax worker initialization.
+  - Remaining formulas: 10-31 ms each after workers were initialized.
+- Warm command: `cargo test --release math::tests::measures_warm_math_render_batch_latency -- --ignored --nocapture`
+- Warm batch result: 94 ms for 8 inline formulas with 2 workers.
+- Warm individual render logs: 5-29 ms each.
+- Colored SVG preparation command: `cargo test --release math::tests::measures_colored_math_svg_preparation_latency -- --ignored --nocapture`
+- Colored SVG preparation result: 0 ms for 8 formulas.
 - Validation: `cargo test --release math::tests -- --nocapture` passed with 5 tests and logged two cold small-formula renders at 462 ms and 466 ms.
 
 Conclusion:
@@ -548,4 +553,5 @@ Conclusion:
 - Cold MathJax worker initialization is still the dominant first-use cost.
 - After initialization, individual formula SVG generation is much faster.
 - The worker pool mainly improves documents with multiple formulas queued at once; it does not remove the cold-start cost for the first visible formula.
-- The next useful math-rendering measurement should separate cold start, warm SVG generation, SVG size parsing, and egui image loading costs.
+- SVG recoloring and size parsing are not currently visible as a meaningful batch cost in this measurement.
+- The next useful math-rendering optimization should consider whether to prewarm one MathJax worker after startup or keep the current lazy behavior to avoid startup overhead.
