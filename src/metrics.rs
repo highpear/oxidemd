@@ -76,8 +76,12 @@ pub fn log_math_render(source_len: usize, duration: Duration, outcome: &str) {
     );
 }
 
-pub fn log_math_prewarm(duration: Duration) {
-    eprintln!("[perf] math_prewarm: {} ms", duration.as_millis());
+pub fn log_math_prewarm(duration: Duration, outcome: &str) {
+    eprintln!(
+        "[perf] math_prewarm: {} ms, {}",
+        duration.as_millis(),
+        outcome
+    );
 }
 
 fn format_byte_len(byte_len: usize) -> String {

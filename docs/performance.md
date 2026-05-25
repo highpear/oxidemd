@@ -547,23 +547,25 @@ Result:
 - Colored SVG preparation command: `cargo test --release math::tests::measures_colored_math_svg_preparation_latency -- --ignored --nocapture`
 - Colored SVG preparation result: 0 ms for 8 formulas.
 - Validation: `cargo test --release math::tests -- --nocapture` passed with 5 tests and logged two cold small-formula renders at 462 ms and 466 ms.
+- Debug-profile comparison: `cargo test math::tests::measures_math_render_batch_latency -- --ignored --nocapture` reported 5098 ms for the same 8-formula batch, with the two cold worker renders at 4357 ms and 4400 ms.
 
 Conclusion:
 
 - Cold MathJax worker initialization is still the dominant first-use cost.
 - After initialization, individual formula SVG generation is much faster.
+- Debug builds are not representative for math rendering latency; use release builds for manual math-rendering checks.
 - The worker pool mainly improves documents with multiple formulas queued at once; it does not remove the cold-start cost for the first visible formula.
 - SVG recoloring and size parsing are not currently visible as a meaningful batch cost in this measurement.
 - The next useful math-rendering optimization should consider whether to prewarm one MathJax worker after startup or keep the current lazy behavior to avoid startup overhead.
 
-### 2026-05-25: Prewarm MathJax For Math Documents
+### 2026-05-25: Prewarm MathJax After Startup
 
 Change:
 
-- Detect whether a loaded Markdown document contains inline or display math.
-- Start a background prewarm for the first MathJax worker only when a math-containing document is opened.
-- Keep the second worker lazy so non-math documents do not pay MathJax initialization cost, and math-heavy documents can still initialize additional capacity on demand.
-- Log prewarm completion as `[perf] math_prewarm`.
+- Start a background prewarm for the MathJax worker pool after app startup.
+- Force each worker through a tiny TeX render so MathJax's internal JavaScript workers have actually completed cold initialization.
+- Keep math SVG render jobs queued while prewarm is in progress so the UI can show placeholders immediately instead of competing with cold workers.
+- Log prewarm completion as `[perf] math_prewarm: <ms>, <outcome>`.
 
 Result:
 
@@ -573,6 +575,6 @@ Result:
 
 Conclusion:
 
-- The app now avoids unconditional MathJax startup work for ordinary Markdown files.
-- Math documents can begin initializing one MathJax worker before the first visible formula asks for SVG rendering.
-- The remaining tradeoff is timing-dependent: if a formula renders before prewarm completes, it can still wait on the same worker initialization, but it should not be worse than lazy initialization.
+- The app now starts MathJax initialization before the user opens math through the file dialog or drag and drop.
+- CLI-opened or restored math documents can still show placeholders before `[perf] math_prewarm` appears, but actual SVG jobs wait until the worker pool is warm.
+- This intentionally spends background CPU and memory even for sessions that never open math, in exchange for reducing the common first-formula delay.

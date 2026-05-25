@@ -108,6 +108,8 @@ impl OxideMdApp {
             startup_started: Some(startup_started),
         };
 
+        prewarm_math_renderer(app.ui_context.clone());
+
         let restored_files = if reset_session {
             None
         } else {
@@ -375,9 +377,6 @@ impl OxideMdApp {
 
         match self.load_document_session(&path) {
             Ok(loaded) => {
-                if loaded.session.document.contains_math() {
-                    prewarm_math_renderer();
-                }
                 if update_recent_files {
                     remember_recent_file(&mut self.recent_files, &path);
                 }

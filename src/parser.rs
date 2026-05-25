@@ -506,12 +506,6 @@ impl InlineContent {
         trim_trailing_normalized_space(&mut text);
         text
     }
-
-    fn contains_math(&self) -> bool {
-        self.spans
-            .iter()
-            .any(|span| matches!(span, InlineSpan::Math(_)))
-    }
 }
 
 impl Block {
@@ -541,30 +535,11 @@ impl Block {
             }
         }
     }
-
-    fn contains_math(&self) -> bool {
-        match self {
-            Block::Heading { content, .. } | Block::Paragraph(content) => content.contains_math(),
-            Block::UnorderedList(items) => items.iter().any(InlineContent::contains_math),
-            Block::OrderedList { items, .. } => items.iter().any(InlineContent::contains_math),
-            Block::BlockQuote(lines) => lines.iter().any(InlineContent::contains_math),
-            Block::MathBlock { .. } => true,
-            Block::Table { headers, rows, .. } => {
-                headers.iter().any(InlineContent::contains_math)
-                    || rows.iter().flatten().any(InlineContent::contains_math)
-            }
-            Block::CodeBlock { .. } | Block::DiagramBlock { .. } => false,
-        }
-    }
 }
 
 impl MarkdownDocument {
     pub fn headings(&self) -> &[HeadingNavItem] {
         &self.headings
-    }
-
-    pub fn contains_math(&self) -> bool {
-        self.blocks.iter().any(Block::contains_math)
     }
 
     pub fn heading_block_for_anchor(&self, anchor: &str) -> Option<usize> {
@@ -689,20 +664,6 @@ mod tests {
             &document.blocks[0],
             Block::MathBlock { expression } if expression == "a^2 + b^2 = c^2"
         ));
-    }
-
-    #[test]
-    fn detects_math_content() {
-        let document = parse_markdown("Euler wrote $e^{i\\pi} + 1 = 0$ in one line.");
-
-        assert!(document.contains_math());
-    }
-
-    #[test]
-    fn ignores_non_math_content_when_detecting_math() {
-        let document = parse_markdown("# Title\n\n```rust\nlet price = \"$5\";\n```");
-
-        assert!(!document.contains_math());
     }
 
     #[test]

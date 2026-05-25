@@ -14,10 +14,12 @@ use crate::svg::{SvgAsset, apply_current_color};
 const INLINE_MATH_BASE_FONT_SIZE: f32 = 16.0;
 const BLOCK_MATH_BASE_FONT_SIZE: f32 = 24.0;
 const MAX_ACTIVE_MATH_RENDER_JOBS: usize = 2;
+const MATHJAX_PREWARM_EXPRESSIONS: [&str; MAX_ACTIVE_MATH_RENDER_JOBS] = ["x", "y"];
 static MATHJAX_WORKERS: [OnceLock<mathjax_svg_rs::MathJax>; MAX_ACTIVE_MATH_RENDER_JOBS] =
     [const { OnceLock::new() }, const { OnceLock::new() }];
 static NEXT_MATHJAX_WORKER: AtomicUsize = AtomicUsize::new(0);
 static MATHJAX_PREWARM_REQUESTED: AtomicBool = AtomicBool::new(false);
+static MATHJAX_PREWARM_DONE: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum MathRenderMode {
@@ -126,7 +128,7 @@ impl MathRenderCache {
         zoom_factor: f32,
     ) -> PreparedMath {
         self.drain_finished_jobs();
-        self.start_queued_jobs(ctx.clone());
+        self.start_queued_jobs_if_ready(ctx.clone());
 
         let key = MathCacheKey {
             mode,
@@ -174,9 +176,18 @@ impl MathRenderCache {
             mode,
             zoom_factor,
         });
-        self.start_queued_jobs(ctx.clone());
+        self.start_queued_jobs_if_ready(ctx.clone());
 
         PreparedMath::Pending
+    }
+
+    fn start_queued_jobs_if_ready(&mut self, ctx: egui::Context) {
+        if is_math_prewarm_in_progress() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(16));
+            return;
+        }
+
+        self.start_queued_jobs(ctx);
     }
 
     fn start_queued_jobs(&mut self, ctx: egui::Context) {
@@ -230,16 +241,45 @@ impl MathRenderCache {
     }
 }
 
-pub fn prewarm_math_renderer() {
+pub fn prewarm_math_renderer(ctx: egui::Context) {
     if MATHJAX_PREWARM_REQUESTED.swap(true, Ordering::Relaxed) {
         return;
     }
 
-    thread::spawn(|| {
+    thread::spawn(move || {
         let started = Instant::now();
-        let _ = mathjax_worker(0);
-        metrics::log_math_prewarm(started.elapsed());
+        let results = (0..MAX_ACTIVE_MATH_RENDER_JOBS)
+            .map(|worker_index| {
+                thread::spawn(move || {
+                    mathjax_worker(worker_index).render_tex(
+                        MATHJAX_PREWARM_EXPRESSIONS[worker_index],
+                        &mathjax_svg_rs::Options {
+                            font_size: INLINE_MATH_BASE_FONT_SIZE.into(),
+                            ..Default::default()
+                        },
+                    )
+                })
+            })
+            .map(|handle| {
+                handle
+                    .join()
+                    .unwrap_or_else(|_| Err("prewarm panicked".to_owned()))
+            })
+            .collect::<Vec<_>>();
+        let outcome = if results.iter().all(Result::is_ok) {
+            "ok"
+        } else {
+            "error"
+        };
+        MATHJAX_PREWARM_DONE.store(true, Ordering::Relaxed);
+        metrics::log_math_prewarm(started.elapsed(), outcome);
+        ctx.request_repaint();
     });
+}
+
+fn is_math_prewarm_in_progress() -> bool {
+    MATHJAX_PREWARM_REQUESTED.load(Ordering::Relaxed)
+        && !MATHJAX_PREWARM_DONE.load(Ordering::Relaxed)
 }
 
 fn prepare_math(expression: &str, mode: MathRenderMode, zoom_factor: f32) -> RawMathResult {
