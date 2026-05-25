@@ -302,17 +302,7 @@ impl OxideMdApp {
                     let layout = document_panel_layout(ui, &theme, zoom_factor);
                     let background_shape = ui.painter().add(egui::Shape::Noop);
 
-                    let mut document_ui = ui.new_child(
-                        UiBuilder::new()
-                            .max_rect(layout.content_max_rect)
-                            .layout(Layout::top_down(Align::Min)),
-                    );
-                    let mut document_clip_rect = document_ui.clip_rect();
-                    document_clip_rect.min.x = layout.content_max_rect.left();
-                    document_clip_rect.max.x = layout.content_max_rect.right();
-                    document_ui.set_clip_rect(document_clip_rect);
-                    document_ui.set_min_width(layout.content_width);
-                    document_ui.set_max_width(layout.content_width);
+                    let mut document_ui = new_document_content_ui(ui, &layout);
 
                     let render_measurement = take_document_render_measurement(session, &document);
                     session.block_height_cache.prepare(
@@ -498,6 +488,22 @@ fn log_document_render_measurement(render_measurement: Option<DocumentRenderMeas
         render_measurement.block_count,
         render_measurement.heading_count,
     );
+}
+
+fn new_document_content_ui(ui: &mut egui::Ui, layout: &DocumentPanelLayout) -> egui::Ui {
+    let mut document_ui = ui.new_child(
+        UiBuilder::new()
+            .max_rect(layout.content_max_rect)
+            .layout(Layout::top_down(Align::Min)),
+    );
+    let mut document_clip_rect = document_ui.clip_rect();
+    document_clip_rect.min.x = layout.content_max_rect.left();
+    document_clip_rect.max.x = layout.content_max_rect.right();
+    document_ui.set_clip_rect(document_clip_rect);
+    document_ui.set_min_width(layout.content_width);
+    document_ui.set_max_width(layout.content_width);
+
+    document_ui
 }
 
 fn document_panel_layout(ui: &egui::Ui, theme: &Theme, zoom_factor: f32) -> DocumentPanelLayout {
