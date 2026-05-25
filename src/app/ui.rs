@@ -8,7 +8,7 @@ use eframe::egui::{
 };
 
 use crate::bottom_bar::{BottomBarState, render_bottom_bar};
-use crate::document_session::DocumentSession;
+use crate::document_session::{DocumentSession, PendingRenderMeasurement};
 use crate::external_links::handle_external_link_click;
 use crate::i18n::{TranslationKey, tr};
 use crate::metrics;
@@ -32,6 +32,13 @@ struct DocumentPanelLayout {
     content_min: egui::Pos2,
     content_max_rect: egui::Rect,
     content_width: f32,
+}
+
+struct DocumentRenderMeasurement {
+    measurement: PendingRenderMeasurement,
+    started: Instant,
+    block_count: usize,
+    heading_count: usize,
 }
 
 impl OxideMdApp {
@@ -307,10 +314,7 @@ impl OxideMdApp {
                     document_ui.set_min_width(layout.content_width);
                     document_ui.set_max_width(layout.content_width);
 
-                    let render_measurement = session.take_pending_render_measurement();
-                    let render_started = render_measurement.as_ref().map(|_| Instant::now());
-                    let block_count = document.blocks.len();
-                    let heading_count = document.headings().len();
+                    let render_measurement = take_document_render_measurement(session, &document);
                     session.block_height_cache.prepare(
                         session.fingerprint,
                         &document,
@@ -340,16 +344,7 @@ impl OxideMdApp {
                         active_search_block,
                     );
 
-                    if let (Some(measurement), Some(started)) = (render_measurement, render_started)
-                    {
-                        metrics::log_document_render(
-                            measurement.reason.as_log_label(),
-                            &measurement.path,
-                            started.elapsed(),
-                            block_count,
-                            heading_count,
-                        );
-                    }
+                    log_document_render_measurement(render_measurement);
 
                     apply_document_render_outcome(
                         ctx,
@@ -475,6 +470,34 @@ impl OxideMdApp {
                     });
             });
     }
+}
+
+fn take_document_render_measurement(
+    session: &mut DocumentSession,
+    document: &MarkdownDocument,
+) -> Option<DocumentRenderMeasurement> {
+    session
+        .take_pending_render_measurement()
+        .map(|measurement| DocumentRenderMeasurement {
+            measurement,
+            started: Instant::now(),
+            block_count: document.blocks.len(),
+            heading_count: document.headings().len(),
+        })
+}
+
+fn log_document_render_measurement(render_measurement: Option<DocumentRenderMeasurement>) {
+    let Some(render_measurement) = render_measurement else {
+        return;
+    };
+
+    metrics::log_document_render(
+        render_measurement.measurement.reason.as_log_label(),
+        &render_measurement.measurement.path,
+        render_measurement.started.elapsed(),
+        render_measurement.block_count,
+        render_measurement.heading_count,
+    );
 }
 
 fn document_panel_layout(ui: &egui::Ui, theme: &Theme, zoom_factor: f32) -> DocumentPanelLayout {
