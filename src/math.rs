@@ -1,4 +1,6 @@
 use std::collections::{HashMap, VecDeque};
+use std::sync::OnceLock;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::Instant;
@@ -39,8 +41,8 @@ struct ColoredMathCacheKey {
 }
 
 pub struct MathRenderCache {
-    entries: HashMap<(MathCacheKey, String), MathRenderState>,
-    colored_entries: HashMap<(ColoredMathCacheKey, String), PreparedMath>,
+    entries: HashMap<MathCacheKey, HashMap<String, MathRenderState>>,
+    colored_entries: HashMap<ColoredMathCacheKey, HashMap<String, PreparedMath>>,
     queued_jobs: VecDeque<MathRenderJob>,
     active_job_count: usize,
     result_sender: Sender<MathWorkerResult>,
@@ -126,31 +128,41 @@ impl MathRenderCache {
             mode,
             zoom_bucket: zoom_bucket(zoom_factor),
         };
-        let entry_key = (key, expression.to_owned());
-        let colored_key = (
-            ColoredMathCacheKey {
-                base: key,
-                text_color: text_color.to_array(),
-            },
-            expression.to_owned(),
-        );
+        let colored_key = ColoredMathCacheKey {
+            base: key,
+            text_color: text_color.to_array(),
+        };
 
-        if let Some(result) = self.colored_entries.get(&colored_key) {
+        if let Some(result) = self
+            .colored_entries
+            .get(&colored_key)
+            .and_then(|entries| entries.get(expression))
+        {
             return result.clone();
         }
 
-        if let Some(state) = self.entries.get(&entry_key) {
+        if let Some(state) = self
+            .entries
+            .get(&key)
+            .and_then(|entries| entries.get(expression))
+        {
             return match state {
                 MathRenderState::Pending => PreparedMath::Pending,
                 MathRenderState::Ready(result) => {
                     let prepared = prepare_colored_math(expression, key, result, text_color);
-                    self.colored_entries.insert(colored_key, prepared.clone());
+                    self.colored_entries
+                        .entry(colored_key)
+                        .or_default()
+                        .insert(expression.to_owned(), prepared.clone());
                     prepared
                 }
             };
         }
 
-        self.entries.insert(entry_key, MathRenderState::Pending);
+        self.entries
+            .entry(key)
+            .or_default()
+            .insert(expression.to_owned(), MathRenderState::Pending);
         self.queued_jobs.push_back(MathRenderJob {
             generation: self.generation,
             key,
@@ -204,10 +216,10 @@ impl MathRenderCache {
             }
 
             finished_current_jobs += 1;
-            self.entries.insert(
-                (result.key, result.expression),
-                MathRenderState::Ready(result.result),
-            );
+            self.entries
+                .entry(result.key)
+                .or_default()
+                .insert(result.expression, MathRenderState::Ready(result.result));
         }
 
         self.active_job_count = self.active_job_count.saturating_sub(finished_current_jobs);
@@ -239,7 +251,7 @@ fn prepare_svg_math(
         expression.to_owned()
     };
 
-    let svg = match mathjax_svg_rs::render_tex(
+    let svg = match render_tex_with_pool(
         &render_expression,
         &mathjax_svg_rs::Options {
             font_size: font_size.into(),
@@ -259,6 +271,21 @@ fn prepare_svg_math(
         },
         font_size_bucket: font_size_bucket(font_size),
     })
+}
+
+fn render_tex_with_pool(
+    expression: &str,
+    options: &mathjax_svg_rs::Options,
+) -> Result<String, String> {
+    static MATHJAX_WORKERS: [OnceLock<mathjax_svg_rs::MathJax>; MAX_ACTIVE_MATH_RENDER_JOBS] =
+        [const { OnceLock::new() }, const { OnceLock::new() }];
+    static NEXT_MATHJAX_WORKER: AtomicUsize = AtomicUsize::new(0);
+
+    let worker_index =
+        NEXT_MATHJAX_WORKER.fetch_add(1, Ordering::Relaxed) % MAX_ACTIVE_MATH_RENDER_JOBS;
+    let worker = MATHJAX_WORKERS[worker_index].get_or_init(mathjax_svg_rs::MathJax::new);
+
+    worker.render_tex(expression, options)
 }
 
 fn prepare_colored_math(
