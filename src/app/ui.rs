@@ -24,6 +24,13 @@ use super::{
     scaled_document_horizontal_padding, scaled_document_vertical_padding, scaled_margin,
 };
 
+struct DocumentPanelLayout {
+    frame: Frame,
+    content_min: egui::Pos2,
+    content_max_rect: egui::Rect,
+    content_width: f32,
+}
+
 impl OxideMdApp {
     pub(super) fn render_top_bar(&mut self, ctx: &egui::Context) {
         let theme = theme(self.theme_id);
@@ -282,62 +289,20 @@ impl OxideMdApp {
                 .id_salt(("document_scroll", document_id))
                 .show(ui, |ui| {
                     ui.add_space(18.0);
-                    let content_rect = ui.max_rect();
-                    let frame_width = scaled_document_frame_max_width(zoom_factor);
-                    let frame_left = if content_rect.width() > frame_width {
-                        content_rect.center().x - frame_width * 0.5
-                    } else {
-                        content_rect.left()
-                    };
-                    let frame_rect = egui::Rect::from_min_size(
-                        egui::pos2(frame_left, ui.cursor().top()),
-                        Vec2::new(frame_width, 0.0),
-                    );
-                    let horizontal_padding = scaled_document_horizontal_padding(zoom_factor);
-                    let vertical_padding = scaled_document_vertical_padding(zoom_factor);
-
-                    let document_frame = Frame::new()
-                        .fill(theme.content_background)
-                        .stroke(egui::Stroke::new(
-                            DOCUMENT_FRAME_STROKE_WIDTH,
-                            theme.content_border,
-                        ))
-                        .shadow(egui::epaint::Shadow {
-                            offset: [0, 8],
-                            blur: 28,
-                            spread: 0,
-                            color: theme.content_shadow,
-                        })
-                        .corner_radius(egui::CornerRadius::same(12))
-                        .inner_margin(Margin::symmetric(
-                            scaled_margin(32, zoom_factor),
-                            scaled_margin(28, zoom_factor),
-                        ));
+                    let layout = document_panel_layout(ui, &theme, zoom_factor);
                     let background_shape = ui.painter().add(egui::Shape::Noop);
-                    let content_width =
-                        (frame_width - horizontal_padding - DOCUMENT_FRAME_STROKE_WIDTH * 2.0)
-                            .max(0.0)
-                            .min(scaled_document_body_max_width(zoom_factor));
-                    let content_min = egui::pos2(
-                        frame_rect.left() + horizontal_padding * 0.5 + DOCUMENT_FRAME_STROKE_WIDTH,
-                        frame_rect.top() + vertical_padding * 0.5 + DOCUMENT_FRAME_STROKE_WIDTH,
-                    );
-                    let content_max_rect = egui::Rect::from_min_max(
-                        content_min,
-                        egui::pos2(content_min.x + content_width, content_rect.bottom()),
-                    );
 
                     let mut document_ui = ui.new_child(
                         UiBuilder::new()
-                            .max_rect(content_max_rect)
+                            .max_rect(layout.content_max_rect)
                             .layout(Layout::top_down(Align::Min)),
                     );
                     let mut document_clip_rect = document_ui.clip_rect();
-                    document_clip_rect.min.x = content_max_rect.left();
-                    document_clip_rect.max.x = content_max_rect.right();
+                    document_clip_rect.min.x = layout.content_max_rect.left();
+                    document_clip_rect.max.x = layout.content_max_rect.right();
                     document_ui.set_clip_rect(document_clip_rect);
-                    document_ui.set_min_width(content_width);
-                    document_ui.set_max_width(content_width);
+                    document_ui.set_min_width(layout.content_width);
+                    document_ui.set_max_width(layout.content_width);
 
                     let render_measurement = session.take_pending_render_measurement();
                     let render_started = render_measurement.as_ref().map(|_| Instant::now());
@@ -347,7 +312,7 @@ impl OxideMdApp {
                         session.fingerprint,
                         &document,
                         zoom_factor,
-                        content_width,
+                        layout.content_width,
                     );
                     let block_height_cache = &mut session.block_height_cache;
                     let crate::document_session::BlockHeightCache {
@@ -410,15 +375,7 @@ impl OxideMdApp {
                         session.pending_block_scroll = None;
                     }
 
-                    let used_content_rect = document_ui.min_rect();
-                    let fixed_content_rect = egui::Rect::from_min_size(
-                        content_min,
-                        Vec2::new(content_width, used_content_rect.height()),
-                    );
-                    let actual_frame_rect = document_frame.outer_rect(fixed_content_rect);
-                    ui.painter()
-                        .set(background_shape, document_frame.paint(fixed_content_rect));
-                    ui.allocate_rect(actual_frame_rect, egui::Sense::hover());
+                    paint_document_frame(ui, &layout, background_shape, document_ui.min_rect());
                     ui.add_space(24.0);
                 });
         });
@@ -533,4 +490,74 @@ impl OxideMdApp {
                     });
             });
     }
+}
+
+fn document_panel_layout(ui: &egui::Ui, theme: &Theme, zoom_factor: f32) -> DocumentPanelLayout {
+    let content_rect = ui.max_rect();
+    let frame_width = scaled_document_frame_max_width(zoom_factor);
+    let frame_left = if content_rect.width() > frame_width {
+        content_rect.center().x - frame_width * 0.5
+    } else {
+        content_rect.left()
+    };
+    let frame_rect = egui::Rect::from_min_size(
+        egui::pos2(frame_left, ui.cursor().top()),
+        Vec2::new(frame_width, 0.0),
+    );
+    let horizontal_padding = scaled_document_horizontal_padding(zoom_factor);
+    let vertical_padding = scaled_document_vertical_padding(zoom_factor);
+    let content_width = (frame_width - horizontal_padding - DOCUMENT_FRAME_STROKE_WIDTH * 2.0)
+        .max(0.0)
+        .min(scaled_document_body_max_width(zoom_factor));
+    let content_min = egui::pos2(
+        frame_rect.left() + horizontal_padding * 0.5 + DOCUMENT_FRAME_STROKE_WIDTH,
+        frame_rect.top() + vertical_padding * 0.5 + DOCUMENT_FRAME_STROKE_WIDTH,
+    );
+    let content_max_rect = egui::Rect::from_min_max(
+        content_min,
+        egui::pos2(content_min.x + content_width, content_rect.bottom()),
+    );
+
+    DocumentPanelLayout {
+        frame: document_panel_frame(theme, zoom_factor),
+        content_min,
+        content_max_rect,
+        content_width,
+    }
+}
+
+fn document_panel_frame(theme: &Theme, zoom_factor: f32) -> Frame {
+    Frame::new()
+        .fill(theme.content_background)
+        .stroke(egui::Stroke::new(
+            DOCUMENT_FRAME_STROKE_WIDTH,
+            theme.content_border,
+        ))
+        .shadow(egui::epaint::Shadow {
+            offset: [0, 8],
+            blur: 28,
+            spread: 0,
+            color: theme.content_shadow,
+        })
+        .corner_radius(egui::CornerRadius::same(12))
+        .inner_margin(Margin::symmetric(
+            scaled_margin(32, zoom_factor),
+            scaled_margin(28, zoom_factor),
+        ))
+}
+
+fn paint_document_frame(
+    ui: &mut egui::Ui,
+    layout: &DocumentPanelLayout,
+    background_shape: egui::layers::ShapeIdx,
+    used_content_rect: egui::Rect,
+) {
+    let fixed_content_rect = egui::Rect::from_min_size(
+        layout.content_min,
+        Vec2::new(layout.content_width, used_content_rect.height()),
+    );
+    let actual_frame_rect = layout.frame.outer_rect(fixed_content_rect);
+    ui.painter()
+        .set(background_shape, layout.frame.paint(fixed_content_rect));
+    ui.allocate_rect(actual_frame_rect, egui::Sense::hover());
 }
