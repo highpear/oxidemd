@@ -10,6 +10,7 @@ use crate::document_workspace::{DocumentId, DocumentWorkspace};
 use crate::export::write_html_export;
 use crate::external_links::render_external_link_confirmation;
 use crate::i18n::{Language, TranslationKey, tr};
+use crate::math::prewarm_math_renderer;
 use crate::metrics;
 use crate::reload_worker::{ReloadWorkerHandle, spawn_reload_worker};
 use crate::session::{
@@ -374,6 +375,9 @@ impl OxideMdApp {
 
         match self.load_document_session(&path) {
             Ok(loaded) => {
+                if loaded.session.document.contains_math() {
+                    prewarm_math_renderer();
+                }
                 if update_recent_files {
                     remember_recent_file(&mut self.recent_files, &path);
                 }

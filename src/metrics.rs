@@ -76,6 +76,10 @@ pub fn log_math_render(source_len: usize, duration: Duration, outcome: &str) {
     );
 }
 
+pub fn log_math_prewarm(duration: Duration) {
+    eprintln!("[perf] math_prewarm: {} ms", duration.as_millis());
+}
+
 fn format_byte_len(byte_len: usize) -> String {
     const KIB: f64 = 1024.0;
     const MIB: f64 = KIB * 1024.0;

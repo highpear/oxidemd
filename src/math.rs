@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::Instant;
@@ -14,6 +14,10 @@ use crate::svg::{SvgAsset, apply_current_color};
 const INLINE_MATH_BASE_FONT_SIZE: f32 = 16.0;
 const BLOCK_MATH_BASE_FONT_SIZE: f32 = 24.0;
 const MAX_ACTIVE_MATH_RENDER_JOBS: usize = 2;
+static MATHJAX_WORKERS: [OnceLock<mathjax_svg_rs::MathJax>; MAX_ACTIVE_MATH_RENDER_JOBS] =
+    [const { OnceLock::new() }, const { OnceLock::new() }];
+static NEXT_MATHJAX_WORKER: AtomicUsize = AtomicUsize::new(0);
+static MATHJAX_PREWARM_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum MathRenderMode {
@@ -226,6 +230,18 @@ impl MathRenderCache {
     }
 }
 
+pub fn prewarm_math_renderer() {
+    if MATHJAX_PREWARM_REQUESTED.swap(true, Ordering::Relaxed) {
+        return;
+    }
+
+    thread::spawn(|| {
+        let started = Instant::now();
+        let _ = mathjax_worker(0);
+        metrics::log_math_prewarm(started.elapsed());
+    });
+}
+
 fn prepare_math(expression: &str, mode: MathRenderMode, zoom_factor: f32) -> RawMathResult {
     match mode {
         MathRenderMode::Inline => {
@@ -277,15 +293,15 @@ fn render_tex_with_pool(
     expression: &str,
     options: &mathjax_svg_rs::Options,
 ) -> Result<String, String> {
-    static MATHJAX_WORKERS: [OnceLock<mathjax_svg_rs::MathJax>; MAX_ACTIVE_MATH_RENDER_JOBS] =
-        [const { OnceLock::new() }, const { OnceLock::new() }];
-    static NEXT_MATHJAX_WORKER: AtomicUsize = AtomicUsize::new(0);
-
     let worker_index =
         NEXT_MATHJAX_WORKER.fetch_add(1, Ordering::Relaxed) % MAX_ACTIVE_MATH_RENDER_JOBS;
-    let worker = MATHJAX_WORKERS[worker_index].get_or_init(mathjax_svg_rs::MathJax::new);
+    let worker = mathjax_worker(worker_index);
 
     worker.render_tex(expression, options)
+}
+
+fn mathjax_worker(index: usize) -> &'static mathjax_svg_rs::MathJax {
+    MATHJAX_WORKERS[index].get_or_init(mathjax_svg_rs::MathJax::new)
 }
 
 fn prepare_colored_math(
