@@ -16,6 +16,7 @@ pub struct TopBarAction {
     pub open_recent_file: Option<PathBuf>,
     pub switch_tab: Option<DocumentId>,
     pub close_tab: Option<DocumentId>,
+    pub move_tab: Option<TabMoveAction>,
     pub clear_recent_files: bool,
     pub export_html: bool,
     pub switch_language: bool,
@@ -24,6 +25,17 @@ pub struct TopBarAction {
     pub toggle_heading_panel: bool,
     pub show_shortcuts_help: bool,
     pub copy_path: bool,
+}
+
+pub struct TabMoveAction {
+    pub document_id: DocumentId,
+    pub target_document_id: DocumentId,
+    pub position: TabMovePosition,
+}
+
+pub enum TabMovePosition {
+    Before,
+    After,
 }
 
 pub struct TopBarState<'a> {
@@ -204,16 +216,31 @@ pub fn render_top_bar(ctx: &egui::Context, state: TopBarState<'_>) -> TopBarActi
             ui.horizontal_wrapped(|ui| {
                 for tab in state.document_tabs {
                     let tab_label = tab_file_label(tab.path);
-                    let response = ui.add_sized(
-                        [TAB_LABEL_MAX_WIDTH, ui.spacing().interact_size.y],
-                        egui::Button::selectable(tab.is_active, tab_label).truncate(),
-                    );
+                    let drag_source =
+                        ui.dnd_drag_source(egui::Id::new(("document_tab", tab.id)), tab.id, |ui| {
+                            ui.add_sized(
+                                [TAB_LABEL_MAX_WIDTH, ui.spacing().interact_size.y],
+                                egui::Button::selectable(tab.is_active, tab_label).truncate(),
+                            )
+                        });
+                    let response = drag_source
+                        .inner
+                        .on_hover_text(tab.path.display().to_string());
 
-                    if response
-                        .on_hover_text(tab.path.display().to_string())
-                        .clicked()
-                    {
+                    if response.clicked() {
                         action.switch_tab = Some(tab.id);
+                    }
+
+                    if let Some(dragged_tab_id) =
+                        drag_source.response.dnd_release_payload::<DocumentId>()
+                    {
+                        if *dragged_tab_id != tab.id {
+                            action.move_tab = Some(TabMoveAction {
+                                document_id: *dragged_tab_id,
+                                target_document_id: tab.id,
+                                position: tab_drop_position(ctx, &drag_source.response),
+                            });
+                        }
                     }
 
                     if ui
@@ -250,4 +277,15 @@ fn tab_file_label(path: &Path) -> String {
         .and_then(|name| name.to_str())
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| path.display().to_string())
+}
+
+fn tab_drop_position(ctx: &egui::Context, response: &egui::Response) -> TabMovePosition {
+    if ctx
+        .pointer_interact_pos()
+        .is_some_and(|position| position.x >= response.rect.center().x)
+    {
+        TabMovePosition::After
+    } else {
+        TabMovePosition::Before
+    }
 }

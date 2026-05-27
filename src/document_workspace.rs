@@ -115,6 +115,57 @@ impl DocumentWorkspace {
         true
     }
 
+    pub fn move_document_before(
+        &mut self,
+        document_id: DocumentId,
+        target_document_id: DocumentId,
+    ) -> bool {
+        self.move_document_to_target(
+            document_id,
+            target_document_id,
+            DocumentMovePosition::Before,
+        )
+    }
+
+    pub fn move_document_after(
+        &mut self,
+        document_id: DocumentId,
+        target_document_id: DocumentId,
+    ) -> bool {
+        self.move_document_to_target(document_id, target_document_id, DocumentMovePosition::After)
+    }
+
+    fn move_document_to_target(
+        &mut self,
+        document_id: DocumentId,
+        target_document_id: DocumentId,
+        position: DocumentMovePosition,
+    ) -> bool {
+        if document_id == target_document_id {
+            return false;
+        }
+
+        let Some(source_index) = self.index_for_id(document_id) else {
+            return false;
+        };
+        let Some(target_index) = self.index_for_id(target_document_id) else {
+            return false;
+        };
+        let active_document_id = self.active_document_id();
+
+        let entry = self.documents.remove(source_index);
+        let target_index = match position {
+            DocumentMovePosition::Before if source_index < target_index => target_index - 1,
+            DocumentMovePosition::Before => target_index,
+            DocumentMovePosition::After if source_index < target_index => target_index,
+            DocumentMovePosition::After => target_index + 1,
+        };
+        self.documents.insert(target_index, entry);
+        self.active_index = active_document_id.and_then(|id| self.index_for_id(id));
+
+        true
+    }
+
     pub fn close(&mut self, document_id: DocumentId) -> Option<DocumentSession> {
         let index = self.index_for_id(document_id)?;
         let entry = self.documents.remove(index);
@@ -201,6 +252,11 @@ impl DocumentWorkspace {
             .iter()
             .position(|entry| entry.id == document_id)
     }
+}
+
+enum DocumentMovePosition {
+    Before,
+    After,
 }
 
 fn comparable_file_path(path: &Path) -> std::path::PathBuf {
@@ -390,6 +446,53 @@ mod tests {
         assert_eq!(tabs[1].id, second_id);
         assert!(tabs[1].is_active);
         assert_eq!(tabs[2].id, third_id);
+    }
+
+    #[test]
+    fn moves_document_before_target_and_preserves_active_document() {
+        let mut workspace = DocumentWorkspace::new();
+        let first_path = test_markdown_path("first", "# First");
+        let second_path = test_markdown_path("second", "# Second");
+        let third_path = test_markdown_path("third", "# Third");
+
+        let first_id = workspace.open_document(test_session(&first_path));
+        let second_id = workspace.open_document(test_session(&second_path));
+        let third_id = workspace.open_document(test_session(&third_path));
+
+        assert!(workspace.switch_to(second_id));
+        assert!(workspace.move_document_before(third_id, first_id));
+
+        assert_eq!(
+            workspace.document_ids(),
+            vec![third_id, first_id, second_id]
+        );
+        assert_eq!(workspace.active_document_id(), Some(second_id));
+        assert_eq!(workspace.current_file(), Some(second_path.as_path()));
+
+        let tabs = workspace.document_tabs();
+        assert!(!tabs[0].is_active);
+        assert!(!tabs[1].is_active);
+        assert!(tabs[2].is_active);
+    }
+
+    #[test]
+    fn moving_document_after_target_preserves_expected_order() {
+        let mut workspace = DocumentWorkspace::new();
+        let first_path = test_markdown_path("first", "# First");
+        let second_path = test_markdown_path("second", "# Second");
+        let third_path = test_markdown_path("third", "# Third");
+
+        let first_id = workspace.open_document(test_session(&first_path));
+        let second_id = workspace.open_document(test_session(&second_path));
+        let third_id = workspace.open_document(test_session(&third_path));
+
+        assert!(workspace.move_document_after(first_id, third_id));
+
+        assert_eq!(
+            workspace.document_ids(),
+            vec![second_id, third_id, first_id]
+        );
+        assert_eq!(workspace.active_document_id(), Some(third_id));
     }
 
     fn test_session(path: &Path) -> DocumentSession {

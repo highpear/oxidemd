@@ -17,7 +17,7 @@ use crate::renderer::{RenderOutcome, render_markdown_document};
 use crate::search_panel::{render_search_controls, render_search_results};
 use crate::session::ExternalLinkBehavior;
 use crate::theme::{Theme, ThemeId, theme};
-use crate::top_bar::{TopBarState, render_top_bar};
+use crate::top_bar::{TabMovePosition, TopBarState, render_top_bar};
 
 use super::{
     DOCUMENT_FRAME_STROKE_WIDTH, HEADING_NAV_ITEM_INDENT, HEADING_PANEL_DEFAULT_WIDTH,
@@ -89,6 +89,19 @@ impl OxideMdApp {
 
         if let Some(document_id) = action.switch_tab {
             self.switch_to_document(document_id);
+        }
+
+        if let Some(tab_move) = action.move_tab {
+            match tab_move.position {
+                TabMovePosition::Before => {
+                    self.documents
+                        .move_document_before(tab_move.document_id, tab_move.target_document_id);
+                }
+                TabMovePosition::After => {
+                    self.documents
+                        .move_document_after(tab_move.document_id, tab_move.target_document_id);
+                }
+            }
         }
 
         if let Some(document_id) = action.close_tab {
