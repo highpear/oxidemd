@@ -115,6 +115,10 @@ impl DocumentWorkspace {
         true
     }
 
+    pub fn clear_active_document(&mut self) {
+        self.active_index = None;
+    }
+
     pub fn move_document_before(
         &mut self,
         document_id: DocumentId,
@@ -347,6 +351,27 @@ mod tests {
         assert_eq!(workspace.current_file(), Some(first_path.as_path()));
         assert!(!workspace.switch_to(DocumentId(999)));
         assert_eq!(workspace.active_document_id(), Some(first_id));
+    }
+
+    #[test]
+    fn clears_active_document_without_closing_open_documents() {
+        let mut workspace = DocumentWorkspace::new();
+        let first_path = test_markdown_path("first", "# First");
+        let second_path = test_markdown_path("second", "# Second");
+
+        let first_id = workspace.open_document(test_session(&first_path));
+        let second_id = workspace.open_document(test_session(&second_path));
+
+        workspace.clear_active_document();
+
+        assert_eq!(workspace.active_document_id(), None);
+        assert_eq!(workspace.current_file(), None);
+        assert_eq!(workspace.document_ids(), vec![first_id, second_id]);
+
+        let tabs = workspace.document_tabs();
+        assert_eq!(tabs.len(), 2);
+        assert!(!tabs[0].is_active);
+        assert!(!tabs[1].is_active);
     }
 
     #[test]

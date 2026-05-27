@@ -14,6 +14,7 @@ const TAB_LABEL_MAX_WIDTH: f32 = 180.0;
 pub struct TopBarAction {
     pub open_file: bool,
     pub open_recent_file: Option<PathBuf>,
+    pub new_tab: bool,
     pub switch_tab: Option<DocumentId>,
     pub close_tab: Option<DocumentId>,
     pub move_tab: Option<TabMoveAction>,
@@ -224,25 +225,23 @@ pub fn render_top_bar(ctx: &egui::Context, state: TopBarState<'_>) -> TopBarActi
                             )
                         });
                     let response = drag_source
-                        .inner
+                        .response
                         .on_hover_text(tab.path.display().to_string());
 
-                    if response.clicked() {
+                    if tab_primary_clicked(ctx, &response) {
                         action.switch_tab = Some(tab.id);
                     }
 
-                    if tab_middle_clicked(ctx, &drag_source.response) {
+                    if tab_middle_clicked(ctx, &response) {
                         action.close_tab = Some(tab.id);
                     }
 
-                    if let Some(dragged_tab_id) =
-                        drag_source.response.dnd_release_payload::<DocumentId>()
-                    {
+                    if let Some(dragged_tab_id) = response.dnd_release_payload::<DocumentId>() {
                         if *dragged_tab_id != tab.id {
                             action.move_tab = Some(TabMoveAction {
                                 document_id: *dragged_tab_id,
                                 target_document_id: tab.id,
-                                position: tab_drop_position(ctx, &drag_source.response),
+                                position: tab_drop_position(ctx, &response),
                             });
                         }
                     }
@@ -254,6 +253,26 @@ pub fn render_top_bar(ctx: &egui::Context, state: TopBarState<'_>) -> TopBarActi
                     {
                         action.close_tab = Some(tab.id);
                     }
+                }
+
+                if state.current_file.is_none() {
+                    ui.add_sized(
+                        [TAB_LABEL_MAX_WIDTH, ui.spacing().interact_size.y],
+                        egui::Button::selectable(
+                            true,
+                            tr(state.language, TranslationKey::LabelStart),
+                        )
+                        .truncate(),
+                    )
+                    .on_hover_text(tr(state.language, TranslationKey::ActionNewTab));
+                }
+
+                if ui
+                    .small_button("+")
+                    .on_hover_text(tr(state.language, TranslationKey::ActionNewTab))
+                    .clicked()
+                {
+                    action.new_tab = true;
                 }
             });
         }
@@ -297,4 +316,9 @@ fn tab_drop_position(ctx: &egui::Context, response: &egui::Response) -> TabMoveP
 fn tab_middle_clicked(ctx: &egui::Context, response: &egui::Response) -> bool {
     response.contains_pointer()
         && ctx.input(|input| input.pointer.button_clicked(egui::PointerButton::Middle))
+}
+
+fn tab_primary_clicked(ctx: &egui::Context, response: &egui::Response) -> bool {
+    response.contains_pointer()
+        && ctx.input(|input| input.pointer.button_clicked(egui::PointerButton::Primary))
 }

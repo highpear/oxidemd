@@ -87,6 +87,10 @@ impl OxideMdApp {
             self.open_recent_file(path);
         }
 
+        if action.new_tab {
+            self.show_home_tab();
+        }
+
         if let Some(document_id) = action.switch_tab {
             self.switch_to_document(document_id);
         }

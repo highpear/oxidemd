@@ -200,6 +200,8 @@ impl OxideMdApp {
             && let Some(document_id) = self.documents.document_id_for_path(&active_file)
         {
             self.switch_to_document(document_id);
+        } else {
+            self.documents.clear_active_document();
         }
     }
 
@@ -320,6 +322,12 @@ impl OxideMdApp {
         self.recent_files.clear();
         self.reload_status = ReloadStatus::Idle;
         self.set_status_message(tr(self.language, TranslationKey::StatusRecentFilesCleared));
+    }
+
+    fn show_home_tab(&mut self) {
+        self.documents.clear_active_document();
+        self.reload_status = ReloadStatus::Idle;
+        self.set_status_message(tr(self.language, TranslationKey::StatusNoFile));
     }
 
     fn handle_file_drops(&mut self, ctx: &egui::Context) {
