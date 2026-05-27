@@ -112,6 +112,18 @@ impl OxideMdApp {
             self.close_document(document_id);
         }
 
+        if let Some(document_id) = action.close_other_tabs {
+            self.close_other_documents(document_id);
+        }
+
+        if let Some(document_id) = action.close_tabs_to_right {
+            self.close_documents_to_right(document_id);
+        }
+
+        if let Some(path) = action.copy_tab_path {
+            self.copy_file_path(ctx, &path);
+        }
+
         if action.clear_recent_files {
             self.clear_recent_files();
         }

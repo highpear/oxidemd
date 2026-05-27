@@ -13,6 +13,8 @@ pub enum TranslationKey {
     ActionCopyTex,
     ActionCopyPath,
     ActionClearRecentFiles,
+    ActionCloseOthers,
+    ActionCloseTabsToRight,
     ActionExportHtml,
     ActionHideSections,
     ActionOpenExternalLink,
@@ -115,6 +117,16 @@ const TRANSLATIONS: &[TranslationEntry] = &[
         TranslationKey::ActionClearRecentFiles,
         "Clear Recent Files",
         "履歴をクリア",
+    ),
+    entry(
+        TranslationKey::ActionCloseOthers,
+        "Close Others",
+        "他のタブを閉じる",
+    ),
+    entry(
+        TranslationKey::ActionCloseTabsToRight,
+        "Close Tabs to the Right",
+        "右側のタブを閉じる",
     ),
     entry(TranslationKey::ActionExportHtml, "HTML...", "HTML..."),
     entry(

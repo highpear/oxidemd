@@ -17,7 +17,10 @@ pub struct TopBarAction {
     pub new_tab: bool,
     pub switch_tab: Option<DocumentId>,
     pub close_tab: Option<DocumentId>,
+    pub close_other_tabs: Option<DocumentId>,
+    pub close_tabs_to_right: Option<DocumentId>,
     pub move_tab: Option<TabMoveAction>,
+    pub copy_tab_path: Option<PathBuf>,
     pub clear_recent_files: bool,
     pub export_html: bool,
     pub switch_language: bool,
@@ -215,7 +218,7 @@ pub fn render_top_bar(ctx: &egui::Context, state: TopBarState<'_>) -> TopBarActi
         if !state.document_tabs.is_empty() {
             ui.separator();
             ui.horizontal_wrapped(|ui| {
-                for tab in state.document_tabs {
+                for (tab_index, tab) in state.document_tabs.iter().enumerate() {
                     let tab_label = tab_file_label(tab.path);
                     let drag_source =
                         ui.dnd_drag_source(egui::Id::new(("document_tab", tab.id)), tab.id, |ui| {
@@ -227,6 +230,11 @@ pub fn render_top_bar(ctx: &egui::Context, state: TopBarState<'_>) -> TopBarActi
                     let response = drag_source
                         .response
                         .on_hover_text(tab.path.display().to_string());
+                    let context_response = ui.interact(
+                        response.rect,
+                        egui::Id::new(("document_tab_context", tab.id)),
+                        egui::Sense::click(),
+                    );
 
                     if tab_primary_clicked(ctx, &response) {
                         action.switch_tab = Some(tab.id);
@@ -245,6 +253,53 @@ pub fn render_top_bar(ctx: &egui::Context, state: TopBarState<'_>) -> TopBarActi
                             });
                         }
                     }
+
+                    context_response.context_menu(|ui| {
+                        if ui
+                            .button(tr(state.language, TranslationKey::ActionClose))
+                            .clicked()
+                        {
+                            action.close_tab = Some(tab.id);
+                            ui.close();
+                        }
+
+                        if ui
+                            .add_enabled(
+                                state.document_tabs.len() > 1,
+                                egui::Button::new(tr(
+                                    state.language,
+                                    TranslationKey::ActionCloseOthers,
+                                )),
+                            )
+                            .clicked()
+                        {
+                            action.close_other_tabs = Some(tab.id);
+                            ui.close();
+                        }
+
+                        if ui
+                            .add_enabled(
+                                tab_index + 1 < state.document_tabs.len(),
+                                egui::Button::new(tr(
+                                    state.language,
+                                    TranslationKey::ActionCloseTabsToRight,
+                                )),
+                            )
+                            .clicked()
+                        {
+                            action.close_tabs_to_right = Some(tab.id);
+                            ui.close();
+                        }
+
+                        ui.separator();
+                        if ui
+                            .button(tr(state.language, TranslationKey::ActionCopyPath))
+                            .clicked()
+                        {
+                            action.copy_tab_path = Some(tab.path.to_path_buf());
+                            ui.close();
+                        }
+                    });
 
                     if ui
                         .small_button("x")

@@ -300,9 +300,13 @@ impl OxideMdApp {
             return;
         };
 
+        self.copy_file_path(ctx, &path);
+    }
+
+    fn copy_file_path(&mut self, ctx: &egui::Context, path: &Path) {
         ctx.copy_text(path.display().to_string());
         self.reload_status = ReloadStatus::Idle;
-        self.set_status_with_path(TranslationKey::StatusPathCopied, &path);
+        self.set_status_with_path(TranslationKey::StatusPathCopied, path);
     }
 
     fn open_recent_file(&mut self, path: PathBuf) {
@@ -572,6 +576,26 @@ impl OxideMdApp {
             return;
         }
 
+        self.update_status_after_tab_change();
+    }
+
+    fn close_other_documents(&mut self, document_id: DocumentId) {
+        if !self.documents.close_other_documents(document_id) {
+            return;
+        }
+
+        self.update_status_after_tab_change();
+    }
+
+    fn close_documents_to_right(&mut self, document_id: DocumentId) {
+        if !self.documents.close_documents_to_right(document_id) {
+            return;
+        }
+
+        self.update_status_after_tab_change();
+    }
+
+    fn update_status_after_tab_change(&mut self) {
         self.reload_status = ReloadStatus::Idle;
         if let Some(path) = self.current_file().map(Path::to_path_buf) {
             self.set_status_with_path(TranslationKey::StatusLoaded, &path);

@@ -187,6 +187,38 @@ impl DocumentWorkspace {
         Some(entry.session)
     }
 
+    pub fn close_other_documents(&mut self, document_id: DocumentId) -> bool {
+        let Some(index) = self.index_for_id(document_id) else {
+            return false;
+        };
+
+        let entry = self.documents.remove(index);
+        self.documents.clear();
+        self.documents.push(entry);
+        self.active_index = Some(0);
+        true
+    }
+
+    pub fn close_documents_to_right(&mut self, document_id: DocumentId) -> bool {
+        let Some(index) = self.index_for_id(document_id) else {
+            return false;
+        };
+        let first_removed_index = index + 1;
+
+        if first_removed_index >= self.documents.len() {
+            return false;
+        }
+
+        let active_document_id = self.active_document_id();
+        self.documents.truncate(first_removed_index);
+
+        self.active_index = active_document_id
+            .and_then(|id| self.index_for_id(id))
+            .or(Some(index));
+
+        true
+    }
+
     pub fn take_active_session(&mut self) -> Option<ActiveDocumentSession> {
         let index = self.active_index()?;
         let entry = self.documents.remove(index);
@@ -518,6 +550,64 @@ mod tests {
             vec![second_id, third_id, first_id]
         );
         assert_eq!(workspace.active_document_id(), Some(third_id));
+    }
+
+    #[test]
+    fn closes_other_documents_and_selects_target_document() {
+        let mut workspace = DocumentWorkspace::new();
+        let first_path = test_markdown_path("first", "# First");
+        let second_path = test_markdown_path("second", "# Second");
+        let third_path = test_markdown_path("third", "# Third");
+
+        let first_id = workspace.open_document(test_session(&first_path));
+        let second_id = workspace.open_document(test_session(&second_path));
+        workspace.open_document(test_session(&third_path));
+
+        assert!(workspace.close_other_documents(second_id));
+
+        assert_eq!(workspace.document_ids(), vec![second_id]);
+        assert_eq!(workspace.active_document_id(), Some(second_id));
+        assert_eq!(workspace.current_file(), Some(second_path.as_path()));
+        assert!(!workspace.close_other_documents(first_id));
+    }
+
+    #[test]
+    fn closes_documents_to_right_and_preserves_active_document_when_kept() {
+        let mut workspace = DocumentWorkspace::new();
+        let first_path = test_markdown_path("first", "# First");
+        let second_path = test_markdown_path("second", "# Second");
+        let third_path = test_markdown_path("third", "# Third");
+
+        let first_id = workspace.open_document(test_session(&first_path));
+        let second_id = workspace.open_document(test_session(&second_path));
+        workspace.open_document(test_session(&third_path));
+
+        assert!(workspace.switch_to(first_id));
+        assert!(workspace.close_documents_to_right(second_id));
+
+        assert_eq!(workspace.document_ids(), vec![first_id, second_id]);
+        assert_eq!(workspace.active_document_id(), Some(first_id));
+        assert!(!workspace.close_documents_to_right(second_id));
+    }
+
+    #[test]
+    fn closes_documents_to_right_and_selects_target_when_active_was_closed() {
+        let mut workspace = DocumentWorkspace::new();
+        let first_path = test_markdown_path("first", "# First");
+        let second_path = test_markdown_path("second", "# Second");
+        let third_path = test_markdown_path("third", "# Third");
+
+        let first_id = workspace.open_document(test_session(&first_path));
+        let second_id = workspace.open_document(test_session(&second_path));
+        let third_id = workspace.open_document(test_session(&third_path));
+
+        assert_eq!(workspace.active_document_id(), Some(third_id));
+        assert!(workspace.close_documents_to_right(first_id));
+
+        assert_eq!(workspace.document_ids(), vec![first_id]);
+        assert_eq!(workspace.active_document_id(), Some(first_id));
+        assert_eq!(workspace.current_file(), Some(first_path.as_path()));
+        assert!(!workspace.close_documents_to_right(second_id));
     }
 
     fn test_session(path: &Path) -> DocumentSession {
