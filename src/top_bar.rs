@@ -231,6 +231,10 @@ pub fn render_top_bar(ctx: &egui::Context, state: TopBarState<'_>) -> TopBarActi
                         action.switch_tab = Some(tab.id);
                     }
 
+                    if tab_middle_clicked(ctx, &drag_source.response) {
+                        action.close_tab = Some(tab.id);
+                    }
+
                     if let Some(dragged_tab_id) =
                         drag_source.response.dnd_release_payload::<DocumentId>()
                     {
@@ -288,4 +292,9 @@ fn tab_drop_position(ctx: &egui::Context, response: &egui::Response) -> TabMoveP
     } else {
         TabMovePosition::Before
     }
+}
+
+fn tab_middle_clicked(ctx: &egui::Context, response: &egui::Response) -> bool {
+    response.contains_pointer()
+        && ctx.input(|input| input.pointer.button_clicked(egui::PointerButton::Middle))
 }
