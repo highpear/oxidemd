@@ -9,8 +9,9 @@ use eframe::egui::{
 
 use crate::bottom_bar::{BottomBarAction, BottomBarState, render_bottom_bar};
 use crate::document_session::{DocumentSession, PendingRenderMeasurement};
+use crate::document_workspace::DocumentId;
 use crate::external_links::handle_external_link_click;
-use crate::i18n::{TranslationKey, tr};
+use crate::i18n::{Language, TranslationKey, tr};
 use crate::metrics;
 use crate::parser::MarkdownDocument;
 use crate::renderer::{RenderOutcome, render_markdown_document};
@@ -325,69 +326,22 @@ impl OxideMdApp {
         };
         let document_id = active_document.id();
         let session = &mut *active_document;
-        let document = Arc::clone(&session.document);
-        let document_base_dir = session.base_dir().map(Path::to_path_buf);
-        let active_search_block = session.search.active_block();
-        let search_query = session.search.active_query().map(str::to_owned);
-        let pending_block_scroll = session.pending_block_scroll;
         let language = self.settings.language;
         let zoom_factor = self.settings.zoom_factor;
         let external_link_behavior = self.settings.external_link_behavior;
 
         CentralPanel::default().show(ctx, |ui| {
-            ScrollArea::both()
-                .id_salt(("document_scroll", document_id))
-                .show(ui, |ui| {
-                    ui.add_space(18.0);
-                    let layout = document_panel_layout(ui, &theme, zoom_factor);
-                    let background_shape = ui.painter().add(egui::Shape::Noop);
-
-                    let mut document_ui = new_document_content_ui(ui, &layout);
-
-                    let render_measurement = take_document_render_measurement(session, &document);
-                    session.block_height_cache.prepare(
-                        session.fingerprint,
-                        &document,
-                        zoom_factor,
-                        layout.content_width,
-                    );
-                    let block_height_cache = &mut session.block_height_cache;
-                    let crate::document_session::BlockHeightCache {
-                        heights: block_heights,
-                        estimated_heights: estimated_block_heights,
-                        ..
-                    } = block_height_cache;
-                    let render_outcome = render_markdown_document(
-                        &mut document_ui,
-                        &document,
-                        language,
-                        &theme,
-                        zoom_factor,
-                        document_base_dir.as_deref(),
-                        &mut session.image_cache,
-                        &mut session.math_render_cache,
-                        &mut session.diagram_render_cache,
-                        block_heights,
-                        estimated_block_heights,
-                        pending_block_scroll,
-                        search_query.as_deref(),
-                        active_search_block,
-                    );
-
-                    log_document_render_measurement(render_measurement);
-
-                    apply_document_render_outcome(
-                        ctx,
-                        session,
-                        &document,
-                        render_outcome,
-                        external_link_behavior,
-                        &mut self.pending_external_link,
-                    );
-
-                    paint_document_frame(ui, &layout, background_shape, document_ui.min_rect());
-                    ui.add_space(24.0);
-                });
+            render_active_document(
+                ui,
+                ctx,
+                document_id,
+                session,
+                &theme,
+                language,
+                zoom_factor,
+                external_link_behavior,
+                &mut self.pending_external_link,
+            );
         });
 
         self.documents.restore_active_session(active_document);
@@ -540,6 +494,78 @@ fn log_document_render_measurement(render_measurement: Option<DocumentRenderMeas
         render_measurement.block_count,
         render_measurement.heading_count,
     );
+}
+
+fn render_active_document(
+    ui: &mut egui::Ui,
+    ctx: &egui::Context,
+    document_id: DocumentId,
+    session: &mut DocumentSession,
+    theme: &Theme,
+    language: Language,
+    zoom_factor: f32,
+    external_link_behavior: ExternalLinkBehavior,
+    pending_external_link: &mut Option<String>,
+) {
+    let document = Arc::clone(&session.document);
+    let document_base_dir = session.base_dir().map(Path::to_path_buf);
+    let active_search_block = session.search.active_block();
+    let search_query = session.search.active_query().map(str::to_owned);
+    let pending_block_scroll = session.pending_block_scroll;
+
+    ScrollArea::both()
+        .id_salt(("document_scroll", document_id))
+        .show(ui, |ui| {
+            ui.add_space(18.0);
+            let layout = document_panel_layout(ui, theme, zoom_factor);
+            let background_shape = ui.painter().add(egui::Shape::Noop);
+
+            let mut document_ui = new_document_content_ui(ui, &layout);
+
+            let render_measurement = take_document_render_measurement(session, &document);
+            session.block_height_cache.prepare(
+                session.fingerprint,
+                &document,
+                zoom_factor,
+                layout.content_width,
+            );
+            let block_height_cache = &mut session.block_height_cache;
+            let crate::document_session::BlockHeightCache {
+                heights: block_heights,
+                estimated_heights: estimated_block_heights,
+                ..
+            } = block_height_cache;
+            let render_outcome = render_markdown_document(
+                &mut document_ui,
+                &document,
+                language,
+                theme,
+                zoom_factor,
+                document_base_dir.as_deref(),
+                &mut session.image_cache,
+                &mut session.math_render_cache,
+                &mut session.diagram_render_cache,
+                block_heights,
+                estimated_block_heights,
+                pending_block_scroll,
+                search_query.as_deref(),
+                active_search_block,
+            );
+
+            log_document_render_measurement(render_measurement);
+
+            apply_document_render_outcome(
+                ctx,
+                session,
+                &document,
+                render_outcome,
+                external_link_behavior,
+                pending_external_link,
+            );
+
+            paint_document_frame(ui, &layout, background_shape, document_ui.min_rect());
+            ui.add_space(24.0);
+        });
 }
 
 fn new_document_content_ui(ui: &mut egui::Ui, layout: &DocumentPanelLayout) -> egui::Ui {
