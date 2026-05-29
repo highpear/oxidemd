@@ -51,7 +51,11 @@ done
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 release_exe="$repo_root/target/release/oxidemd"
-output_dir="${TMPDIR:-/tmp}/oxidemd-performance"
+temp_root="${TMPDIR:-/tmp}"
+if [ "$(uname -s)" = "Darwin" ] && [ -d /private/tmp ]; then
+    temp_root="/private/tmp"
+fi
+output_dir="$temp_root/oxidemd-performance"
 section_file="$output_dir/large-document-section.md"
 
 if [ "$skip_build" -eq 0 ]; then

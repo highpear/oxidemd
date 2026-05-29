@@ -10,6 +10,10 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 
 function Get-TempRoot {
+    if ($IsMacOS -and (Test-Path -LiteralPath "/private/tmp")) {
+        return "/private/tmp"
+    }
+
     if (![string]::IsNullOrWhiteSpace($env:TEMP)) {
         return $env:TEMP
     }

@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+temp_root="${TMPDIR:-/tmp}"
+if [ "$(uname -s)" = "Darwin" ] && [ -d /private/tmp ]; then
+    temp_root="/private/tmp"
+fi
+
 sample_path="samples/mermaid-evaluation.md"
-output_path="${TMPDIR:-/tmp}/oxidemd-mermaid-cli-comparison"
-native_output_path="${TMPDIR:-/tmp}/oxidemd-mermaid-native-comparison"
+output_path="$temp_root/oxidemd-mermaid-cli-comparison"
+native_output_path="$temp_root/oxidemd-mermaid-native-comparison"
 mermaid_cli_command="mmdc"
 
 usage() {

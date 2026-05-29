@@ -50,8 +50,11 @@ $env:TEMP\oxidemd-performance
 macOS:
 
 ```bash
-${TMPDIR:-/tmp}/oxidemd-performance
+/private/tmp/oxidemd-performance
 ```
+
+The macOS helper uses `/private/tmp` by default because the per-user `TMPDIR`
+under `/var/folders` may not deliver file watcher reload events consistently.
 
 The generated Markdown files are deleted by default. Keep them for inspection
 with:
@@ -114,7 +117,7 @@ Then open it from the command line:
 macOS:
 
 ```bash
-large_file="${TMPDIR:-/tmp}/oxidemd-large.md"
+large_file="/private/tmp/oxidemd-large.md"
 : > "$large_file"
 
 for i in $(seq 1 2000); do
@@ -158,6 +161,30 @@ lines when comparing changes.
 Record representative measurements here before optimizing large file behavior.
 Keep Windows and macOS measurements in separate subsections or clearly label
 each result with the OS.
+
+### 2026-05-30 macOS Baseline Verification
+
+- OS: macOS 26.5, arm64
+- CPU: Apple M1 Pro
+- Build: release
+- Command: `tools/run-performance-baseline.sh --skip-build`
+- Temp root: `/private/tmp`
+- 1 MiB size: 1.00 MiB / 1,049,010 bytes
+- 1 MiB initial load: 12 ms total, 12 ms parse
+- 1 MiB first render after load: 22 ms, 11975 blocks, 2395 headings
+- 1 MiB reload after edit: 12 ms total, 12 ms parse
+- 1 MiB first render after reload: 0 ms, 11977 blocks, 2396 headings
+- 1 MiB skipped reload: 0 ms total
+- 5 MiB size: 5.00 MiB / 5,243,298 bytes
+- 5 MiB initial load: 71 ms total, 67 ms parse
+- 5 MiB first render after load: 23 ms, 59855 blocks, 11971 headings
+- 5 MiB reload after edit: 77 ms total, 74 ms parse
+- 5 MiB first render after reload: 4 ms, 59857 blocks, 11972 headings
+- 5 MiB skipped reload: 5 ms total
+- Notes: Running the same script with the default per-user macOS `TMPDIR`
+  under `/var/folders` captured initial load and render logs, but timed out
+  waiting for the reload log. `/private/tmp` delivered reload and skipped
+  reload events normally.
 
 ### Mermaid SVG Rendering Prototype
 

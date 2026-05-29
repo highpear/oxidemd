@@ -400,7 +400,7 @@ cargo test --release diagram::tests::exports_mermaid_evaluation_svgs_for_cli_com
 macOS:
 
 ```bash
-OXIDEMD_MERMAID_OUTPUT_DIR="${TMPDIR:-/tmp}/oxidemd-mermaid-native-comparison" \
+OXIDEMD_MERMAID_OUTPUT_DIR="/private/tmp/oxidemd-mermaid-native-comparison" \
   cargo test --release diagram::tests::exports_mermaid_evaluation_svgs_for_cli_comparison -- --ignored --nocapture
 ```
 
