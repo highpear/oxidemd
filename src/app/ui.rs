@@ -42,6 +42,14 @@ struct DocumentRenderMeasurement {
     heading_count: usize,
 }
 
+struct DocumentRenderContext<'a> {
+    egui_context: &'a egui::Context,
+    theme: &'a Theme,
+    language: Language,
+    zoom_factor: f32,
+    external_link_behavior: ExternalLinkBehavior,
+}
+
 impl OxideMdApp {
     pub(super) fn render_top_bar(&mut self, ctx: &egui::Context) {
         let theme = theme(self.settings.theme_id);
@@ -326,20 +334,20 @@ impl OxideMdApp {
         };
         let document_id = active_document.id();
         let session = &mut *active_document;
-        let language = self.settings.language;
-        let zoom_factor = self.settings.zoom_factor;
-        let external_link_behavior = self.settings.external_link_behavior;
+        let render_context = DocumentRenderContext {
+            egui_context: ctx,
+            theme: &theme,
+            language: self.settings.language,
+            zoom_factor: self.settings.zoom_factor,
+            external_link_behavior: self.settings.external_link_behavior,
+        };
 
         CentralPanel::default().show(ctx, |ui| {
             render_active_document(
                 ui,
-                ctx,
                 document_id,
                 session,
-                &theme,
-                language,
-                zoom_factor,
-                external_link_behavior,
+                &render_context,
                 &mut self.pending_external_link,
             );
         });
@@ -498,13 +506,9 @@ fn log_document_render_measurement(render_measurement: Option<DocumentRenderMeas
 
 fn render_active_document(
     ui: &mut egui::Ui,
-    ctx: &egui::Context,
     document_id: DocumentId,
     session: &mut DocumentSession,
-    theme: &Theme,
-    language: Language,
-    zoom_factor: f32,
-    external_link_behavior: ExternalLinkBehavior,
+    render_context: &DocumentRenderContext<'_>,
     pending_external_link: &mut Option<String>,
 ) {
     let document = Arc::clone(&session.document);
@@ -517,7 +521,8 @@ fn render_active_document(
         .id_salt(("document_scroll", document_id))
         .show(ui, |ui| {
             ui.add_space(18.0);
-            let layout = document_panel_layout(ui, theme, zoom_factor);
+            let layout =
+                document_panel_layout(ui, render_context.theme, render_context.zoom_factor);
             let background_shape = ui.painter().add(egui::Shape::Noop);
 
             let mut document_ui = new_document_content_ui(ui, &layout);
@@ -526,7 +531,7 @@ fn render_active_document(
             session.block_height_cache.prepare(
                 session.fingerprint,
                 &document,
-                zoom_factor,
+                render_context.zoom_factor,
                 layout.content_width,
             );
             let block_height_cache = &mut session.block_height_cache;
@@ -538,9 +543,9 @@ fn render_active_document(
             let render_outcome = render_markdown_document(
                 &mut document_ui,
                 &document,
-                language,
-                theme,
-                zoom_factor,
+                render_context.language,
+                render_context.theme,
+                render_context.zoom_factor,
                 document_base_dir.as_deref(),
                 &mut session.image_cache,
                 &mut session.math_render_cache,
@@ -555,11 +560,11 @@ fn render_active_document(
             log_document_render_measurement(render_measurement);
 
             apply_document_render_outcome(
-                ctx,
+                render_context.egui_context,
                 session,
                 &document,
                 render_outcome,
-                external_link_behavior,
+                render_context.external_link_behavior,
                 pending_external_link,
             );
 
