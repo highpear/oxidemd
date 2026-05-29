@@ -27,27 +27,56 @@ Use the helper script to generate temporary 1 MiB and 5 MiB Markdown files,
 start OxideMD, capture perf logs, trigger one content reload, trigger one
 unchanged reload, and print the collected log lines:
 
+Windows:
+
 ```powershell
 .\tools\run-performance-baseline.ps1
 ```
 
+macOS:
+
+```bash
+./tools/run-performance-baseline.sh
+```
+
 Generated files and logs are written under:
+
+Windows:
 
 ```powershell
 $env:TEMP\oxidemd-performance
 ```
 
+macOS:
+
+```bash
+${TMPDIR:-/tmp}/oxidemd-performance
+```
+
 The generated Markdown files are deleted by default. Keep them for inspection
 with:
+
+Windows:
 
 ```powershell
 .\tools\run-performance-baseline.ps1 -KeepGeneratedFiles
 ```
 
+macOS:
+
+```bash
+./tools/run-performance-baseline.sh --keep-generated-files
+```
+
+Record Windows and macOS baselines separately. GUI stack, font fallback, file
+watching, and OS scheduling can make the numbers meaningfully different.
+
 ## Measure a Large Markdown File
 
 Use an existing large document when possible. If you need a temporary test file,
-generate one outside the repository:
+generate one outside the repository.
+
+Windows:
 
 ```powershell
 $section = @"
@@ -82,6 +111,24 @@ Then open it from the command line:
 .\target\release\oxidemd.exe $env:TEMP\oxidemd-large.md
 ```
 
+macOS:
+
+```bash
+large_file="${TMPDIR:-/tmp}/oxidemd-large.md"
+: > "$large_file"
+
+for i in $(seq 1 2000); do
+  cat >> "$large_file" <<'MARKDOWN'
+# Large Document Section
+
+This paragraph gives OxideMD enough ordinary prose to parse and render.
+
+MARKDOWN
+done
+
+./target/release/oxidemd "$large_file"
+```
+
 Example log shape:
 
 ```text
@@ -98,16 +145,19 @@ Example log shape:
 - Search responsiveness on common terms
 - TOC usability with many headings
 - Mermaid diagram render logs when opening `samples/mermaid-evaluation.md`
-- Mermaid CLI visual comparison with `tools/compare-mermaid-cli.ps1` when
-  `mmdc` is available; export OxideMD reference SVGs first with
+- Mermaid CLI visual comparison with `tools/compare-mermaid-cli.ps1` on
+  Windows or `tools/compare-mermaid-cli.sh` on macOS when `mmdc` is available;
+  export OxideMD reference SVGs first with
   `cargo test --release diagram::tests::exports_mermaid_evaluation_svgs_for_cli_comparison -- --ignored --nocapture`
 
-Record the file size, build profile, and observed log lines when comparing
-changes.
+Record the OS, machine model or CPU, file size, build profile, and observed log
+lines when comparing changes.
 
 ## Baseline Results
 
 Record representative measurements here before optimizing large file behavior.
+Keep Windows and macOS measurements in separate subsections or clearly label
+each result with the OS.
 
 ### Mermaid SVG Rendering Prototype
 

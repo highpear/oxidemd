@@ -1,11 +1,23 @@
 param(
     [string]$SamplePath = "samples/mermaid-evaluation.md",
-    [string]$OutputPath = "$env:TEMP\oxidemd-mermaid-cli-comparison",
-    [string]$NativeOutputPath = "$env:TEMP\oxidemd-mermaid-native-comparison",
+    [string]$OutputPath,
+    [string]$NativeOutputPath,
     [string]$MermaidCliCommand = "mmdc"
 )
 
 $ErrorActionPreference = "Stop"
+
+function Get-TempRoot {
+    if (![string]::IsNullOrWhiteSpace($env:TEMP)) {
+        return $env:TEMP
+    }
+
+    if (![string]::IsNullOrWhiteSpace($env:TMPDIR)) {
+        return $env:TMPDIR
+    }
+
+    return [System.IO.Path]::GetTempPath()
+}
 
 function Resolve-MermaidCli {
     param([string]$CommandName)
@@ -13,6 +25,10 @@ function Resolve-MermaidCli {
     $command = Get-Command $CommandName -ErrorAction SilentlyContinue
     if ($command) {
         return $command.Source
+    }
+
+    if ([string]::IsNullOrWhiteSpace($env:APPDATA)) {
+        return $null
     }
 
     $fnmRoot = Join-Path $env:APPDATA "fnm\node-versions"
@@ -29,17 +45,25 @@ function Resolve-MermaidCli {
     return $null
 }
 
+$tempRoot = Get-TempRoot
+if ([string]::IsNullOrWhiteSpace($OutputPath)) {
+    $OutputPath = Join-Path $tempRoot "oxidemd-mermaid-cli-comparison"
+}
+if ([string]::IsNullOrWhiteSpace($NativeOutputPath)) {
+    $NativeOutputPath = Join-Path $tempRoot "oxidemd-mermaid-native-comparison"
+}
+
 $resolvedSamplePath = Resolve-Path -Path $SamplePath
 $resolvedOutputPath = [System.IO.Path]::GetFullPath($OutputPath)
 $resolvedNativeOutputPath = [System.IO.Path]::GetFullPath($NativeOutputPath)
-$resolvedTempPath = [System.IO.Path]::GetFullPath($env:TEMP)
+$resolvedTempPath = [System.IO.Path]::GetFullPath($tempRoot)
 
 if ([string]::IsNullOrWhiteSpace($resolvedOutputPath) -or $resolvedOutputPath.Length -le 3) {
     throw "Refusing to use an unsafe output path: $resolvedOutputPath"
 }
 
 if (-not $resolvedOutputPath.StartsWith($resolvedTempPath, [System.StringComparison]::OrdinalIgnoreCase)) {
-    Write-Warning "Output path is outside TEMP: $resolvedOutputPath"
+    Write-Warning "Output path is outside the temp root: $resolvedOutputPath"
 }
 
 if (Test-Path -LiteralPath $resolvedOutputPath) {

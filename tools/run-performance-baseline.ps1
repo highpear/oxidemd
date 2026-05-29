@@ -8,8 +8,35 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-$releaseExe = Join-Path $repoRoot "target\release\oxidemd.exe"
-$outputDir = Join-Path $env:TEMP "oxidemd-performance"
+
+function Get-TempRoot {
+    if (![string]::IsNullOrWhiteSpace($env:TEMP)) {
+        return $env:TEMP
+    }
+
+    if (![string]::IsNullOrWhiteSpace($env:TMPDIR)) {
+        return $env:TMPDIR
+    }
+
+    return [System.IO.Path]::GetTempPath()
+}
+
+function Get-ReleaseExecutable {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepoRoot
+    )
+
+    $exeName = "oxidemd"
+    if ($IsWindows -or $env:OS -eq "Windows_NT") {
+        $exeName = "oxidemd.exe"
+    }
+
+    return Join-Path (Join-Path $RepoRoot "target") (Join-Path "release" $exeName)
+}
+
+$releaseExe = Get-ReleaseExecutable -RepoRoot $repoRoot
+$outputDir = Join-Path (Get-TempRoot) "oxidemd-performance"
 
 function New-MarkdownFixture {
     param(

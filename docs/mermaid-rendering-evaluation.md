@@ -372,24 +372,41 @@ Release-test measurement for the evaluation sample now covers flowchart,
 sequence, class, state, a larger flowchart, invalid input fallback, and finished
 result cache reuse. Results are recorded in `docs/performance.md`.
 
-Use `tools/compare-mermaid-cli.ps1` on a machine with Mermaid CLI available to
-generate reference SVG output from `samples/mermaid-evaluation.md`:
+Use the Mermaid CLI comparison helper on a machine with Mermaid CLI available to
+generate reference SVG output from `samples/mermaid-evaluation.md`.
+
+Windows:
 
 ```powershell
 .\tools\compare-mermaid-cli.ps1
 ```
 
+macOS:
+
+```bash
+./tools/compare-mermaid-cli.sh
+```
+
 OxideMD's SVG output can be exported from the same sample set with an ignored
-test:
+test.
+
+Windows:
 
 ```powershell
 $env:OXIDEMD_MERMAID_OUTPUT_DIR = "$env:TEMP\oxidemd-mermaid-native-comparison"
 cargo test --release diagram::tests::exports_mermaid_evaluation_svgs_for_cli_comparison -- --ignored --nocapture
 ```
 
+macOS:
+
+```bash
+OXIDEMD_MERMAID_OUTPUT_DIR="${TMPDIR:-/tmp}/oxidemd-mermaid-native-comparison" \
+  cargo test --release diagram::tests::exports_mermaid_evaluation_svgs_for_cli_comparison -- --ignored --nocapture
+```
+
 The script writes extracted `.mmd` files, Mermaid CLI SVG output, and a
-Markdown comparison report under `%TEMP%\oxidemd-mermaid-cli-comparison` by
-default. If the OxideMD SVG output directory exists, it also writes
+Markdown comparison report under the platform temp directory by default. If the
+OxideMD SVG output directory exists, it also writes
 `visual-comparison.html` with side-by-side native and CLI SVGs. Generated
 comparison files should not be committed.
 

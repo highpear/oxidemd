@@ -105,9 +105,11 @@ src/
 * For performance-sensitive changes, use `docs/performance.md` as the source of truth for benchmark steps
 * Prefer release builds for benchmark measurements
 * Use `tools/run-performance-baseline.ps1` for Windows baseline measurements
+* Use `tools/run-performance-baseline.sh` for macOS baseline measurements
+* Keep Windows and macOS benchmark results recorded separately
 * Record meaningful baseline or comparison results in `docs/performance.md`
 * For Mermaid rendering changes, use `docs/mermaid-rendering-evaluation.md` as the source of truth for renderer constraints, known limitations, and Mermaid CLI comparison steps
-* Use `tools/compare-mermaid-cli.ps1` for Mermaid CLI visual comparison when diagram rendering quality or sizing changes
+* Use `tools/compare-mermaid-cli.ps1` on Windows or `tools/compare-mermaid-cli.sh` on macOS for Mermaid CLI visual comparison when diagram rendering quality or sizing changes
 * Do not commit generated large benchmark Markdown files; generate them outside the repository
 
 ---
