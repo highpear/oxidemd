@@ -77,15 +77,15 @@ impl OxideMdApp {
 
     pub(in crate::app) fn reload_status_label(&self) -> &'static str {
         match self.reload_status {
-            ReloadStatus::Idle => tr(self.language, TranslationKey::ReloadIdle),
-            ReloadStatus::Reloading => tr(self.language, TranslationKey::ReloadReloading),
-            ReloadStatus::Error => tr(self.language, TranslationKey::ReloadError),
+            ReloadStatus::Idle => tr(self.settings.language, TranslationKey::ReloadIdle),
+            ReloadStatus::Reloading => tr(self.settings.language, TranslationKey::ReloadReloading),
+            ReloadStatus::Error => tr(self.settings.language, TranslationKey::ReloadError),
         }
     }
 
     pub(in crate::app) fn request_manual_reload(&mut self) {
         if self.current_file().is_none() {
-            self.set_status_message(tr(self.language, TranslationKey::StatusNoFile));
+            self.set_status_message(tr(self.settings.language, TranslationKey::StatusNoFile));
             return;
         };
 
@@ -174,23 +174,28 @@ impl OxideMdApp {
         self.reload_status = ReloadStatus::Reloading;
         match path {
             Some(path) => self.set_status_with_path(key, path),
-            None => self.set_status_message(tr(self.language, key)),
+            None => self.set_status_message(tr(self.settings.language, key)),
         };
     }
 
     pub(in crate::app) fn set_reload_error(&mut self, key: TranslationKey, error: String) {
         self.reload_status = ReloadStatus::Error;
-        self.set_status_message(format!("{} {}", tr(self.language, key), error));
+        self.set_status_message(format!("{} {}", tr(self.settings.language, key), error));
     }
 
     pub(in crate::app) fn set_status_message(&mut self, message: impl Into<String>) {
-        self.status_message = message.into();
-        self.status_hover_message = None;
+        self.status.set_message(message);
     }
 
     pub(in crate::app) fn set_status_with_path(&mut self, key: TranslationKey, path: &Path) {
-        self.status_message = format!("{} {}", tr(self.language, key), status_path_label(path));
-        self.status_hover_message = Some(format!("{} {}", tr(self.language, key), path.display()));
+        self.status.set_with_hover(
+            format!(
+                "{} {}",
+                tr(self.settings.language, key),
+                status_path_label(path)
+            ),
+            format!("{} {}", tr(self.settings.language, key), path.display()),
+        );
     }
 
     fn enqueue_reload(&mut self, document_id: DocumentId) {
@@ -267,18 +272,20 @@ impl OxideMdApp {
         }
         self.reload_status = ReloadStatus::Error;
         let display_path = status_path_label(&path);
-        self.status_message = format!(
-            "{} {} ({})",
-            tr(self.language, TranslationKey::StatusReloadFailed),
-            display_path,
-            error
+        self.status.set_with_hover(
+            format!(
+                "{} {} ({})",
+                tr(self.settings.language, TranslationKey::StatusReloadFailed),
+                display_path,
+                error
+            ),
+            format!(
+                "{} {} ({})",
+                tr(self.settings.language, TranslationKey::StatusReloadFailed),
+                path.display(),
+                error
+            ),
         );
-        self.status_hover_message = Some(format!(
-            "{} {} ({})",
-            tr(self.language, TranslationKey::StatusReloadFailed),
-            path.display(),
-            error
-        ));
     }
 
     fn is_current_reload(&self, document_id: DocumentId, id: u64) -> bool {

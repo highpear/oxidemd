@@ -43,7 +43,7 @@ struct DocumentRenderMeasurement {
 
 impl OxideMdApp {
     pub(super) fn render_top_bar(&mut self, ctx: &egui::Context) {
-        let theme = theme(self.theme_id);
+        let theme = theme(self.settings.theme_id);
         let (reload_status_background, reload_status_text) = match self.reload_status {
             ReloadStatus::Idle => (theme.status_idle_background, theme.status_idle_text),
             ReloadStatus::Reloading => (theme.status_loading_background, theme.status_loading_text),
@@ -52,12 +52,15 @@ impl OxideMdApp {
         let theme_options = [
             (
                 ThemeId::WarmPaper,
-                tr(self.language, TranslationKey::ThemeWarmPaper),
+                tr(self.settings.language, TranslationKey::ThemeWarmPaper),
             ),
-            (ThemeId::Mist, tr(self.language, TranslationKey::ThemeMist)),
+            (
+                ThemeId::Mist,
+                tr(self.settings.language, TranslationKey::ThemeMist),
+            ),
             (
                 ThemeId::NightOwl,
-                tr(self.language, TranslationKey::ThemeNightOwl),
+                tr(self.settings.language, TranslationKey::ThemeNightOwl),
             ),
         ];
         let document_tabs = self.documents.document_tabs();
@@ -65,11 +68,11 @@ impl OxideMdApp {
         let action = render_top_bar(
             ctx,
             TopBarState {
-                language: self.language,
-                current_theme_id: self.theme_id,
+                language: self.settings.language,
+                current_theme_id: self.settings.theme_id,
                 theme_options: &theme_options,
-                external_link_behavior: self.external_link_behavior,
-                is_heading_panel_visible: self.is_heading_panel_visible,
+                external_link_behavior: self.settings.external_link_behavior,
+                is_heading_panel_visible: self.settings.is_heading_panel_visible,
                 current_file: self.current_file(),
                 document_tabs: &document_tabs,
                 recent_files: &self.recent_files,
@@ -161,15 +164,15 @@ impl OxideMdApp {
         let action = render_bottom_bar(
             ctx,
             BottomBarState {
-                language: self.language,
-                zoom_factor: self.zoom_factor,
+                language: self.settings.language,
+                zoom_factor: self.settings.zoom_factor,
                 min_zoom_factor: MIN_ZOOM_FACTOR,
                 max_zoom_factor: MAX_ZOOM_FACTOR,
                 zoom_step: ZOOM_STEP,
-                status_message: self.status_message.as_str(),
-                status_hover_message: self.status_hover_message.as_deref(),
+                status_message: self.status.message.as_str(),
+                status_hover_message: self.status.hover_message.as_deref(),
             },
-            &mut self.zoom_factor,
+            &mut self.settings.zoom_factor,
         );
 
         if action.zoom_in {
@@ -186,12 +189,12 @@ impl OxideMdApp {
     }
 
     pub(super) fn render_heading_panel(&mut self, ctx: &egui::Context) {
-        if !self.is_heading_panel_visible {
+        if !self.settings.is_heading_panel_visible {
             return;
         }
 
-        let language = self.language;
-        let theme_id = self.theme_id;
+        let language = self.settings.language;
+        let theme_id = self.settings.theme_id;
         let Some(mut active_document) = self.documents.take_active_session() else {
             SidePanel::left("heading_navigation")
                 .resizable(true)
@@ -303,7 +306,7 @@ impl OxideMdApp {
     }
 
     pub(super) fn render_document_panel(&mut self, ctx: &egui::Context) {
-        let theme = theme(self.theme_id);
+        let theme = theme(self.settings.theme_id);
         let Some(mut active_document) = self.documents.take_active_session() else {
             CentralPanel::default().show(ctx, |ui| {
                 if let Some(path) = self.render_home_panel(ui, &theme) {
@@ -319,9 +322,9 @@ impl OxideMdApp {
         let active_search_block = session.search.active_block();
         let search_query = session.search.active_query().map(str::to_owned);
         let pending_block_scroll = session.pending_block_scroll;
-        let language = self.language;
-        let zoom_factor = self.zoom_factor;
-        let external_link_behavior = self.external_link_behavior;
+        let language = self.settings.language;
+        let zoom_factor = self.settings.zoom_factor;
+        let external_link_behavior = self.settings.external_link_behavior;
 
         CentralPanel::default().show(ctx, |ui| {
             ScrollArea::both()
@@ -400,16 +403,19 @@ impl OxideMdApp {
                 .inner_margin(Margin::symmetric(24, 22))
                 .show(ui, |ui| {
                     ui.set_width(panel_width);
-                    ui.heading(tr(self.language, TranslationKey::LabelStart));
+                    ui.heading(tr(self.settings.language, TranslationKey::LabelStart));
                     ui.add_space(8.0);
                     ui.label(
-                        RichText::new(tr(self.language, TranslationKey::MessageRecentFilesPrompt))
-                            .color(theme.text_secondary),
+                        RichText::new(tr(
+                            self.settings.language,
+                            TranslationKey::MessageRecentFilesPrompt,
+                        ))
+                        .color(theme.text_secondary),
                     );
 
                     ui.add_space(16.0);
                     if ui
-                        .button(tr(self.language, TranslationKey::ActionOpen))
+                        .button(tr(self.settings.language, TranslationKey::ActionOpen))
                         .clicked()
                     {
                         self.open_markdown_file();
@@ -418,13 +424,16 @@ impl OxideMdApp {
                     ui.add_space(18.0);
                     ui.separator();
                     ui.add_space(12.0);
-                    ui.strong(tr(self.language, TranslationKey::LabelRecentFiles));
+                    ui.strong(tr(self.settings.language, TranslationKey::LabelRecentFiles));
                     ui.add_space(8.0);
 
                     if self.recent_files.is_empty() {
                         ui.label(
-                            RichText::new(tr(self.language, TranslationKey::MessageNoRecentFiles))
-                                .color(theme.text_secondary),
+                            RichText::new(tr(
+                                self.settings.language,
+                                TranslationKey::MessageNoRecentFiles,
+                            ))
+                            .color(theme.text_secondary),
                         );
                     } else {
                         for path in self.recent_files.iter().take(HOME_RECENT_FILE_LIMIT) {
@@ -442,8 +451,11 @@ impl OxideMdApp {
 
                     ui.add_space(12.0);
                     ui.label(
-                        RichText::new(tr(self.language, TranslationKey::MessageDropMarkdown))
-                            .color(theme.text_secondary),
+                        RichText::new(tr(
+                            self.settings.language,
+                            TranslationKey::MessageDropMarkdown,
+                        ))
+                        .color(theme.text_secondary),
                     );
                 });
         });
@@ -457,7 +469,7 @@ impl OxideMdApp {
             return;
         }
 
-        let theme = theme(self.theme_id);
+        let theme = theme(self.settings.theme_id);
         let viewport_rect = ctx.content_rect();
         let overlay_color = if theme.is_dark {
             egui::Color32::from_rgba_unmultiplied(8, 12, 18, 150)
@@ -482,9 +494,12 @@ impl OxideMdApp {
                     .inner_margin(Margin::symmetric(18, 12))
                     .show(ui, |ui| {
                         ui.label(
-                            RichText::new(tr(self.language, TranslationKey::MessageDropMarkdown))
-                                .color(theme.status_loading_text)
-                                .strong(),
+                            RichText::new(tr(
+                                self.settings.language,
+                                TranslationKey::MessageDropMarkdown,
+                            ))
+                            .color(theme.status_loading_text)
+                            .strong(),
                         );
                     });
             });

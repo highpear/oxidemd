@@ -40,6 +40,19 @@ struct RestoredOpenFiles {
     active_file: Option<PathBuf>,
 }
 
+struct AppSettings {
+    language: Language,
+    theme_id: ThemeId,
+    zoom_factor: f32,
+    is_heading_panel_visible: bool,
+    external_link_behavior: ExternalLinkBehavior,
+}
+
+struct StatusState {
+    message: String,
+    hover_message: Option<String>,
+}
+
 const DEFAULT_ZOOM_FACTOR: f32 = 1.0;
 const MIN_ZOOM_FACTOR: f32 = 0.8;
 const MAX_ZOOM_FACTOR: f32 = 1.8;
@@ -58,21 +71,67 @@ const PREVIEW_WINDOW_FALLBACK_HEIGHT: f32 = 720.0;
 const PREVIEW_WINDOW_MONITOR_MARGIN: f32 = 80.0;
 const HOME_PANEL_MAX_WIDTH: f32 = 520.0;
 const HOME_RECENT_FILE_LIMIT: usize = 6;
+
+impl AppSettings {
+    fn new() -> Self {
+        Self {
+            language: Language::En,
+            theme_id: DEFAULT_THEME_ID,
+            zoom_factor: DEFAULT_ZOOM_FACTOR,
+            is_heading_panel_visible: true,
+            external_link_behavior: ExternalLinkBehavior::AskFirst,
+        }
+    }
+
+    fn switch_language(&mut self) {
+        self.language = match self.language {
+            Language::En => Language::Ja,
+            Language::Ja => Language::En,
+        };
+    }
+
+    fn switch_theme(&mut self) {
+        self.theme_id = self.theme_id.next();
+    }
+
+    fn switch_external_link_behavior(&mut self) {
+        self.external_link_behavior = self.external_link_behavior.next();
+    }
+
+    fn set_zoom_factor(&mut self, zoom_factor: f32) {
+        self.zoom_factor = zoom_factor.clamp(MIN_ZOOM_FACTOR, MAX_ZOOM_FACTOR);
+    }
+}
+
+impl StatusState {
+    fn new(language: Language) -> Self {
+        Self {
+            message: tr(language, TranslationKey::StatusNoFile).to_owned(),
+            hover_message: None,
+        }
+    }
+
+    fn set_message(&mut self, message: impl Into<String>) {
+        self.message = message.into();
+        self.hover_message = None;
+    }
+
+    fn set_with_hover(&mut self, message: String, hover_message: String) {
+        self.message = message;
+        self.hover_message = Some(hover_message);
+    }
+}
+
 pub struct OxideMdApp {
     ui_context: egui::Context,
-    language: Language,
-    theme_id: ThemeId,
-    zoom_factor: f32,
+    settings: AppSettings,
     documents: DocumentWorkspace,
     recent_files: Vec<PathBuf>,
-    status_message: String,
-    status_hover_message: Option<String>,
+    status: StatusState,
     reload_status: ReloadStatus,
     reload_worker: ReloadWorkerHandle,
     queued_reload_id: u64,
-    is_heading_panel_visible: bool,
     show_shortcuts_help: bool,
-    external_link_behavior: ExternalLinkBehavior,
     pending_external_link: Option<String>,
     startup_started: Option<Instant>,
 }
@@ -86,24 +145,20 @@ impl OxideMdApp {
         restore_file: bool,
         reset_session: bool,
     ) -> Self {
-        let language = Language::En;
         debug_assert!(available_themes().contains(&DEFAULT_THEME_ID));
+        let settings = AppSettings::new();
+        let status = StatusState::new(settings.language);
 
         let mut app = Self {
             reload_worker: spawn_reload_worker(ui_context.clone()),
             ui_context,
-            language,
-            theme_id: DEFAULT_THEME_ID,
-            zoom_factor: DEFAULT_ZOOM_FACTOR,
+            settings,
             documents: DocumentWorkspace::new(),
             recent_files: Vec::new(),
-            status_message: tr(language, TranslationKey::StatusNoFile).to_owned(),
-            status_hover_message: None,
+            status,
             reload_status: ReloadStatus::Idle,
             queued_reload_id: 0,
-            is_heading_panel_visible: true,
             show_shortcuts_help: false,
-            external_link_behavior: ExternalLinkBehavior::AskFirst,
             pending_external_link: None,
             startup_started: Some(startup_started),
         };
@@ -115,7 +170,7 @@ impl OxideMdApp {
         } else {
             app.restore_session(storage, restore_file)
         };
-        apply_theme(&app.ui_context, &theme(app.theme_id));
+        apply_theme(&app.ui_context, &theme(app.settings.theme_id));
 
         if let Some(path) = initial_file {
             app.load_initial_file(path);
@@ -134,23 +189,23 @@ impl OxideMdApp {
         let restored = restore_saved_session(storage, MIN_ZOOM_FACTOR, MAX_ZOOM_FACTOR);
 
         if let Some(language) = restored.language {
-            self.language = language;
+            self.settings.language = language;
         }
 
         if let Some(theme_id) = restored.theme_id {
-            self.theme_id = theme_id;
+            self.settings.theme_id = theme_id;
         }
 
         if let Some(zoom_factor) = restored.zoom_factor {
-            self.zoom_factor = zoom_factor;
+            self.settings.zoom_factor = zoom_factor;
         }
 
         if let Some(external_link_behavior) = restored.external_link_behavior {
-            self.external_link_behavior = external_link_behavior;
+            self.settings.external_link_behavior = external_link_behavior;
         }
 
         if let Some(is_heading_panel_visible) = restored.is_heading_panel_visible {
-            self.is_heading_panel_visible = is_heading_panel_visible;
+            self.settings.is_heading_panel_visible = is_heading_panel_visible;
         }
 
         if let Some(recent_files) = restored.recent_files {
@@ -206,38 +261,35 @@ impl OxideMdApp {
     }
 
     fn switch_language(&mut self) {
-        self.language = match self.language {
-            Language::En => Language::Ja,
-            Language::Ja => Language::En,
-        };
+        self.settings.switch_language();
 
         if self.documents.is_empty() {
-            self.set_status_message(tr(self.language, TranslationKey::StatusNoFile));
+            self.set_status_message(tr(self.settings.language, TranslationKey::StatusNoFile));
         }
     }
 
     fn switch_theme(&mut self) {
-        self.theme_id = self.theme_id.next();
+        self.settings.switch_theme();
     }
 
     fn select_theme(&mut self, theme_id: ThemeId) {
-        self.theme_id = theme_id;
+        self.settings.theme_id = theme_id;
     }
 
     fn switch_external_link_behavior(&mut self) {
-        self.external_link_behavior = self.external_link_behavior.next();
+        self.settings.switch_external_link_behavior();
     }
 
     fn toggle_heading_panel(&mut self) {
-        self.is_heading_panel_visible = !self.is_heading_panel_visible;
+        self.settings.is_heading_panel_visible = !self.settings.is_heading_panel_visible;
     }
 
     fn zoom_in(&mut self) {
-        self.set_zoom_factor(self.zoom_factor + ZOOM_STEP);
+        self.set_zoom_factor(self.settings.zoom_factor + ZOOM_STEP);
     }
 
     fn zoom_out(&mut self) {
-        self.set_zoom_factor(self.zoom_factor - ZOOM_STEP);
+        self.set_zoom_factor(self.settings.zoom_factor - ZOOM_STEP);
     }
 
     fn reset_zoom(&mut self) {
@@ -245,7 +297,7 @@ impl OxideMdApp {
     }
 
     fn set_zoom_factor(&mut self, zoom_factor: f32) {
-        self.zoom_factor = zoom_factor.clamp(MIN_ZOOM_FACTOR, MAX_ZOOM_FACTOR);
+        self.settings.set_zoom_factor(zoom_factor);
     }
 
     fn handle_pointer_zoom(&mut self, ctx: &egui::Context) {
@@ -255,7 +307,7 @@ impl OxideMdApp {
             return;
         }
 
-        self.set_zoom_factor(self.zoom_factor * zoom_delta);
+        self.set_zoom_factor(self.settings.zoom_factor * zoom_delta);
     }
 
     fn open_markdown_file(&mut self) {
@@ -270,7 +322,7 @@ impl OxideMdApp {
 
     fn export_current_file_as_html(&mut self) {
         let Some(source_path) = self.current_file().map(Path::to_path_buf) else {
-            self.set_status_message(tr(self.language, TranslationKey::StatusNoFile));
+            self.set_status_message(tr(self.settings.language, TranslationKey::StatusNoFile));
             return;
         };
 
@@ -296,7 +348,7 @@ impl OxideMdApp {
 
     fn copy_current_file_path(&mut self, ctx: &egui::Context) {
         let Some(path) = self.current_file().map(Path::to_path_buf) else {
-            self.set_status_message(tr(self.language, TranslationKey::StatusNoFile));
+            self.set_status_message(tr(self.settings.language, TranslationKey::StatusNoFile));
             return;
         };
 
@@ -325,13 +377,16 @@ impl OxideMdApp {
     fn clear_recent_files(&mut self) {
         self.recent_files.clear();
         self.reload_status = ReloadStatus::Idle;
-        self.set_status_message(tr(self.language, TranslationKey::StatusRecentFilesCleared));
+        self.set_status_message(tr(
+            self.settings.language,
+            TranslationKey::StatusRecentFilesCleared,
+        ));
     }
 
     fn show_home_tab(&mut self) {
         self.documents.clear_active_document();
         self.reload_status = ReloadStatus::Idle;
-        self.set_status_message(tr(self.language, TranslationKey::StatusNoFile));
+        self.set_status_message(tr(self.settings.language, TranslationKey::StatusNoFile));
     }
 
     fn handle_file_drops(&mut self, ctx: &egui::Context) {
@@ -448,7 +503,7 @@ impl OxideMdApp {
         }
 
         let target_width = HEADING_PANEL_MAX_WIDTH
-            + scaled_document_frame_max_width(self.zoom_factor)
+            + scaled_document_frame_max_width(self.settings.zoom_factor)
             + PREVIEW_WINDOW_SIDE_PADDING;
         let current_height = current_size
             .map(|size| size.y)
@@ -486,7 +541,7 @@ impl OxideMdApp {
         }
 
         if shortcuts.focus_search {
-            self.is_heading_panel_visible = true;
+            self.settings.is_heading_panel_visible = true;
             if let Some(session) = self.documents.active_session_mut() {
                 session.search.focus_input = true;
             }
@@ -600,7 +655,7 @@ impl OxideMdApp {
         if let Some(path) = self.current_file().map(Path::to_path_buf) {
             self.set_status_with_path(TranslationKey::StatusLoaded, &path);
         } else {
-            self.set_status_message(tr(self.language, TranslationKey::StatusNoFile));
+            self.set_status_message(tr(self.settings.language, TranslationKey::StatusNoFile));
         }
     }
 }
@@ -610,11 +665,11 @@ impl eframe::App for OxideMdApp {
         save_session(
             storage,
             SessionSaveData {
-                language: self.language,
-                theme_id: self.theme_id,
-                zoom_factor: self.zoom_factor,
-                external_link_behavior: self.external_link_behavior,
-                is_heading_panel_visible: self.is_heading_panel_visible,
+                language: self.settings.language,
+                theme_id: self.settings.theme_id,
+                zoom_factor: self.settings.zoom_factor,
+                external_link_behavior: self.settings.external_link_behavior,
+                is_heading_panel_visible: self.settings.is_heading_panel_visible,
                 current_file: self.current_file(),
                 open_files: self.documents.open_files(),
                 recent_files: &self.recent_files,
@@ -627,7 +682,7 @@ impl eframe::App for OxideMdApp {
             metrics::log_startup(startup_started.elapsed());
         }
 
-        let previous_zoom_factor = self.zoom_factor;
+        let previous_zoom_factor = self.settings.zoom_factor;
 
         self.handle_keyboard_shortcuts(ctx);
         self.handle_pointer_zoom(ctx);
@@ -637,19 +692,23 @@ impl eframe::App for OxideMdApp {
         self.process_reload_results();
         self.reload_if_ready();
 
-        let theme = theme(self.theme_id);
+        let theme = theme(self.settings.theme_id);
         apply_theme(ctx, &theme);
         self.render_top_bar(ctx);
         self.render_bottom_bar(ctx);
         if !self.documents.is_empty()
-            && self.zoom_factor.to_bits() != previous_zoom_factor.to_bits()
+            && self.settings.zoom_factor.to_bits() != previous_zoom_factor.to_bits()
         {
             self.request_window_expansion_for_preview();
         }
         self.render_heading_panel(ctx);
         self.render_document_panel(ctx);
-        render_external_link_confirmation(ctx, self.language, &mut self.pending_external_link);
-        render_shortcuts_help(ctx, self.language, &mut self.show_shortcuts_help);
+        render_external_link_confirmation(
+            ctx,
+            self.settings.language,
+            &mut self.pending_external_link,
+        );
+        render_shortcuts_help(ctx, self.settings.language, &mut self.show_shortcuts_help);
         self.render_drop_overlay(ctx);
     }
 }
