@@ -7,7 +7,7 @@ use eframe::egui::{
     UiBuilder, Vec2,
 };
 
-use crate::bottom_bar::{BottomBarState, render_bottom_bar};
+use crate::bottom_bar::{BottomBarAction, BottomBarState, render_bottom_bar};
 use crate::document_session::{DocumentSession, PendingRenderMeasurement};
 use crate::external_links::handle_external_link_click;
 use crate::i18n::{TranslationKey, tr};
@@ -17,7 +17,7 @@ use crate::renderer::{RenderOutcome, render_markdown_document};
 use crate::search_panel::{render_search_controls, render_search_results};
 use crate::session::ExternalLinkBehavior;
 use crate::theme::{Theme, ThemeId, theme};
-use crate::top_bar::{TabMovePosition, TopBarState, render_top_bar};
+use crate::top_bar::{TabMovePosition, TopBarAction, TopBarState, render_top_bar};
 
 use super::{
     DOCUMENT_FRAME_STROKE_WIDTH, HEADING_NAV_ITEM_INDENT, HEADING_PANEL_DEFAULT_WIDTH,
@@ -82,6 +82,10 @@ impl OxideMdApp {
             },
         );
 
+        self.handle_top_bar_action(ctx, action);
+    }
+
+    fn handle_top_bar_action(&mut self, ctx: &egui::Context, action: TopBarAction) {
         if action.open_file {
             self.open_markdown_file();
         }
@@ -175,6 +179,10 @@ impl OxideMdApp {
             &mut self.settings.zoom_factor,
         );
 
+        self.handle_bottom_bar_action(action);
+    }
+
+    fn handle_bottom_bar_action(&mut self, action: BottomBarAction) {
         if action.zoom_in {
             self.zoom_in();
         }
