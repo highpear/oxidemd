@@ -71,7 +71,7 @@ Currently supported Markdown elements:
 
 The current target is intentionally small:
 
-- Windows-first
+- Windows and macOS local desktop viewing
 - Local Markdown viewing with lightweight tabs
 - Reliable readability over feature breadth
 
@@ -120,30 +120,51 @@ Items such as large file improvements, richer math polish, and Mermaid refinemen
 Shared manual test files live in `samples/`.
 Use `samples/long-form.md` to test longer reading flows such as heading navigation, zoom, theme changes, and live reload on a larger document.
 
-Performance measurement notes live in `docs/performance.md`.
+Performance measurement notes live in `docs/performance.md`. Record Windows and
+macOS baseline results separately.
 
 ## Development Checks
 
 Run formatting before committing Rust changes:
 
-```powershell
+```bash
 cargo fmt
 cargo fmt --check
 ```
 
 The project-wide rustfmt rules live in `rustfmt.toml`.
 
+Run the normal test suite for behavior changes:
+
+```bash
+cargo test
+```
+
+Run a build check for build-sensitive changes:
+
+```bash
+cargo build
+```
+
 ## Command Line
 
 Open a Markdown file in the viewer:
 
+Windows:
+
 ```powershell
-oxidemd path\to\file.md
+.\target\release\oxidemd.exe path\to\file.md
+```
+
+macOS:
+
+```bash
+./target/release/oxidemd path/to/file.md
 ```
 
 Start without reopening the previous file:
 
-```powershell
+```bash
 oxidemd --no-restore-file
 ```
 
@@ -151,12 +172,20 @@ When a Markdown file is provided on the command line, OxideMD opens that file in
 
 Reset saved session settings and recent files:
 
-```powershell
+```bash
 oxidemd --reset-session
 ```
 
 Export Markdown as a standalone HTML file without opening the GUI:
 
+Windows:
+
 ```powershell
 oxidemd --export-html path\to\input.md path\to\output.html
+```
+
+macOS:
+
+```bash
+oxidemd --export-html path/to/input.md path/to/output.html
 ```
