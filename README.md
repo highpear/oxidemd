@@ -18,7 +18,11 @@ The goal is to provide a simple, intuitive, and high-performance experience for 
 
 ## Current Status
 
-The project is in early `v0.1` development.
+The project is in `v0.1` stabilization.
+
+Most core viewer features are implemented. Current work is focused on
+reliability, performance validation, rendering quality, and release readiness
+rather than broad feature expansion.
 
 Current capabilities:
 
@@ -69,35 +73,38 @@ Currently supported Markdown elements:
 
 ## Current Scope
 
-The current target is intentionally small:
+The target remains intentionally small:
 
 - Windows and macOS local desktop viewing
 - Local Markdown viewing with lightweight tabs
 - Reliable readability over feature breadth
 
-Items such as large file improvements, richer math polish, and Mermaid refinement are planned for later phases.
+Further work should keep the app focused on local Markdown reading. Large file
+handling, math rendering polish, Mermaid rendering constraints, and release
+checks are treated as quality and stabilization work unless they require a
+deliberate scope change.
 
 ---
 
-## Planned Features
+## Remaining Focus
 
-### Core Features
+### Stabilization
 
-- Fast Markdown rendering
-- Local file viewing
-- Real-time preview with file watching
+- Validate behavior on Windows and macOS
+- Keep live reload, tabs, search, and session restore reliable
+- Expand manual release checks
 
-### Usability Features
+### Performance
 
-- Familiar UI for non-technical users
-- Further theme expansion
-- Further spacing and typography improvements
-- Keyboard shortcuts
+- Continue measuring large document behavior
+- Address hot-path allocations only when measurements justify it
+- Keep startup, reload, parse, and render timing visible
 
-### Advanced Features
+### Rendering Quality
 
-- Large file improvements
-- External link opening options
+- Refine math rendering behavior where needed
+- Keep Mermaid rendering limitations documented
+- Prefer readable fallbacks when rich rendering is unavailable
 
 ---
 
