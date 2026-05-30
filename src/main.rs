@@ -28,7 +28,7 @@ mod watcher;
 
 use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Instant;
 
@@ -37,7 +37,7 @@ use cli::{parse_args, run_cli_action};
 use eframe::egui::{self, FontData, FontDefinitions, FontFamily, Vec2};
 use theme::{DEFAULT_THEME_ID, apply_theme, theme};
 
-const MEIRYO_FONT_NAME: &str = "meiryo";
+const CJK_FONT_NAME: &str = "cjk_fallback";
 const INITIAL_WINDOW_WIDTH: f32 = 1180.0;
 const INITIAL_WINDOW_HEIGHT: f32 = 760.0;
 
@@ -93,39 +93,75 @@ fn run_gui(launch_options: cli::GuiLaunchOptions) -> eframe::Result<()> {
 }
 
 fn configure_fonts(ctx: &egui::Context) {
-    let Some(font_data) = load_meiryo_font() else {
+    let Some(font_data) = load_cjk_font() else {
         return;
     };
 
     let mut fonts = FontDefinitions::default();
 
     fonts.font_data.insert(
-        MEIRYO_FONT_NAME.to_owned(),
+        CJK_FONT_NAME.to_owned(),
         FontData::from_owned(font_data).into(),
     );
 
     if let Some(family) = fonts.families.get_mut(&FontFamily::Proportional) {
-        family.insert(0, MEIRYO_FONT_NAME.to_owned());
+        family.insert(0, CJK_FONT_NAME.to_owned());
     }
 
     if let Some(family) = fonts.families.get_mut(&FontFamily::Monospace) {
-        family.insert(0, MEIRYO_FONT_NAME.to_owned());
+        family.insert(0, CJK_FONT_NAME.to_owned());
     }
 
     ctx.set_fonts(fonts);
 }
 
-fn load_meiryo_font() -> Option<Vec<u8>> {
-    let candidates = [
+fn load_cjk_font() -> Option<Vec<u8>> {
+    let windows_candidates = [
         PathBuf::from(r"C:\Windows\Fonts\meiryo.ttc"),
         PathBuf::from(r"C:\Windows\Fonts\meiryo.ttf"),
     ];
 
-    for path in candidates {
+    for path in windows_candidates {
+        if let Ok(data) = fs::read(path) {
+            return Some(data);
+        }
+    }
+
+    if let Some(path) = find_japanese_system_font(Path::new("/System/Library/Fonts")) {
+        if let Ok(data) = fs::read(path) {
+            return Some(data);
+        }
+    }
+
+    let fallback_candidates = [
+        PathBuf::from("/System/Library/Fonts/Hiragino Sans GB.ttc"),
+        PathBuf::from("/System/Library/Fonts/AppleSDGothicNeo.ttc"),
+        PathBuf::from("/System/Library/Fonts/CJKSymbolsFallback.ttc"),
+    ];
+
+    for path in fallback_candidates {
         if let Ok(data) = fs::read(path) {
             return Some(data);
         }
     }
 
     None
+}
+
+fn find_japanese_system_font(font_dir: &Path) -> Option<PathBuf> {
+    let entries = fs::read_dir(font_dir).ok()?;
+    let mut candidates = entries
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
+                return false;
+            };
+
+            file_name.contains("ヒラ") && file_name.contains("角") && file_name.ends_with(".ttc")
+        })
+        .collect::<Vec<_>>();
+
+    candidates.sort();
+    candidates.into_iter().next()
 }
