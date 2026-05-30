@@ -88,9 +88,9 @@ pub fn render_shortcuts_help(ctx: &egui::Context, language: Language, is_visible
                     ui.strong(tr(language, TranslationKey::LabelShortcut));
                     ui.end_row();
 
-                    for (action, shortcut) in shortcuts_help_items(language) {
-                        ui.label(action);
-                        ui.monospace(shortcut);
+                    for item in shortcuts_help_items(language) {
+                        ui.label(item.action);
+                        ui.monospace(item.shortcut);
                         ui.end_row();
                     }
                 });
@@ -111,36 +111,66 @@ pub fn render_shortcuts_help(ctx: &egui::Context, language: Language, is_visible
     }
 }
 
-fn shortcuts_help_items(language: Language) -> [(&'static str, &'static str); 11] {
-    [
-        (tr(language, TranslationKey::ShortcutOpenFile), "Ctrl+O"),
-        (tr(language, TranslationKey::ShortcutFocusSearch), "Ctrl+F"),
-        (
-            tr(language, TranslationKey::ShortcutSearchNext),
-            "F3 / Enter",
-        ),
-        (
-            tr(language, TranslationKey::ShortcutSearchPrevious),
-            "Shift+F3",
-        ),
-        (
-            tr(language, TranslationKey::ShortcutReloadFile),
-            "Ctrl+R / F5",
-        ),
-        (tr(language, TranslationKey::ShortcutSwitchTheme), "Ctrl+T"),
-        (
-            tr(language, TranslationKey::ShortcutSwitchLanguage),
-            "Ctrl+L",
-        ),
-        (
-            tr(language, TranslationKey::ShortcutZoomIn),
-            "Ctrl++ / Ctrl+= / Ctrl+Wheel up",
-        ),
-        (
-            tr(language, TranslationKey::ShortcutZoomOut),
-            "Ctrl+- / Ctrl+Wheel down",
-        ),
-        (tr(language, TranslationKey::ShortcutResetZoom), "Ctrl+0"),
-        (tr(language, TranslationKey::ShortcutShowHelp), "F1"),
+struct ShortcutHelpItem {
+    action: &'static str,
+    shortcut: String,
+}
+
+fn shortcuts_help_items(language: Language) -> Vec<ShortcutHelpItem> {
+    let command = command_modifier_label();
+
+    vec![
+        ShortcutHelpItem {
+            action: tr(language, TranslationKey::ShortcutOpenFile),
+            shortcut: format!("{command}+O"),
+        },
+        ShortcutHelpItem {
+            action: tr(language, TranslationKey::ShortcutFocusSearch),
+            shortcut: format!("{command}+F"),
+        },
+        ShortcutHelpItem {
+            action: tr(language, TranslationKey::ShortcutSearchNext),
+            shortcut: "F3 / Enter".to_owned(),
+        },
+        ShortcutHelpItem {
+            action: tr(language, TranslationKey::ShortcutSearchPrevious),
+            shortcut: "Shift+F3".to_owned(),
+        },
+        ShortcutHelpItem {
+            action: tr(language, TranslationKey::ShortcutReloadFile),
+            shortcut: format!("{command}+R / F5"),
+        },
+        ShortcutHelpItem {
+            action: tr(language, TranslationKey::ShortcutSwitchTheme),
+            shortcut: format!("{command}+T"),
+        },
+        ShortcutHelpItem {
+            action: tr(language, TranslationKey::ShortcutSwitchLanguage),
+            shortcut: format!("{command}+L"),
+        },
+        ShortcutHelpItem {
+            action: tr(language, TranslationKey::ShortcutZoomIn),
+            shortcut: format!("{command}++ / {command}+= / {command}+Wheel up"),
+        },
+        ShortcutHelpItem {
+            action: tr(language, TranslationKey::ShortcutZoomOut),
+            shortcut: format!("{command}+- / {command}+Wheel down"),
+        },
+        ShortcutHelpItem {
+            action: tr(language, TranslationKey::ShortcutResetZoom),
+            shortcut: format!("{command}+0"),
+        },
+        ShortcutHelpItem {
+            action: tr(language, TranslationKey::ShortcutShowHelp),
+            shortcut: "F1".to_owned(),
+        },
     ]
+}
+
+fn command_modifier_label() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "Cmd"
+    } else {
+        "Ctrl"
+    }
 }
