@@ -108,8 +108,10 @@ fn configure_fonts(ctx: &egui::Context) {
         family.insert(0, CJK_FONT_NAME.to_owned());
     }
 
+    // Keep the CJK font as a fallback for monospace text so ASCII code keeps
+    // the default fixed-width glyphs while Japanese text still renders.
     if let Some(family) = fonts.families.get_mut(&FontFamily::Monospace) {
-        family.insert(0, CJK_FONT_NAME.to_owned());
+        family.push(CJK_FONT_NAME.to_owned());
     }
 
     ctx.set_fonts(fonts);
