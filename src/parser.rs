@@ -232,6 +232,14 @@ where
                 let content = collect_inline_content(parser, TagEnd::Paragraph);
                 spans.extend(content.spans);
             }
+            Event::Start(Tag::List(_)) => {
+                for item in collect_list_items(parser) {
+                    if !spans.is_empty() {
+                        spans.push(InlineSpan::LineBreak);
+                    }
+                    spans.extend(item.spans);
+                }
+            }
             Event::End(TagEnd::Item) => break,
             _ => push_inline_span(&mut spans, parser, event),
         }
@@ -253,6 +261,12 @@ where
                 if !content.is_empty() {
                     lines.push(content);
                 }
+            }
+            Event::Start(Tag::BlockQuote(_)) => {
+                lines.extend(collect_blockquote_lines(parser));
+            }
+            Event::Start(Tag::List(_)) => {
+                lines.extend(collect_list_items(parser));
             }
             Event::End(TagEnd::BlockQuote(_)) => break,
             _ => {}
@@ -686,6 +700,67 @@ mod tests {
             Block::DiagramBlock { language, source }
                 if language == "mmd" && source == "graph LR\n  A --> B"
         ));
+    }
+
+    #[test]
+    fn keeps_list_items_after_nested_list() {
+        let document = parse_markdown("- a\n  - b\n- c\n");
+
+        let Block::UnorderedList(items) = &document.blocks[0] else {
+            panic!("expected unordered list");
+        };
+
+        let texts: Vec<String> = items.iter().map(|item| item.plain_text()).collect();
+        assert_eq!(texts, vec!["a b", "c"]);
+    }
+
+    #[test]
+    fn keeps_ordered_list_items_after_nested_list() {
+        let document = parse_markdown("1. a\n   1. b\n2. c\n");
+
+        let Block::OrderedList { start, items } = &document.blocks[0] else {
+            panic!("expected ordered list");
+        };
+
+        let texts: Vec<String> = items.iter().map(|item| item.plain_text()).collect();
+        assert_eq!(*start, 1);
+        assert_eq!(texts, vec!["a b", "c"]);
+    }
+
+    #[test]
+    fn keeps_deeply_nested_list_content() {
+        let document = parse_markdown("- a\n  - b\n    - c\n- d\n");
+
+        let Block::UnorderedList(items) = &document.blocks[0] else {
+            panic!("expected unordered list");
+        };
+
+        let texts: Vec<String> = items.iter().map(|item| item.plain_text()).collect();
+        assert_eq!(texts, vec!["a b c", "d"]);
+    }
+
+    #[test]
+    fn keeps_blockquote_lines_after_nested_blockquote() {
+        let document = parse_markdown("> outer\n>\n> > inner\n>\n> after\n");
+
+        let Block::BlockQuote(lines) = &document.blocks[0] else {
+            panic!("expected blockquote");
+        };
+
+        let texts: Vec<String> = lines.iter().map(|line| line.plain_text()).collect();
+        assert_eq!(texts, vec!["outer", "inner", "after"]);
+    }
+
+    #[test]
+    fn keeps_list_content_inside_blockquote() {
+        let document = parse_markdown("> intro\n>\n> - one\n> - two\n");
+
+        let Block::BlockQuote(lines) = &document.blocks[0] else {
+            panic!("expected blockquote");
+        };
+
+        let texts: Vec<String> = lines.iter().map(|line| line.plain_text()).collect();
+        assert_eq!(texts, vec!["intro", "one", "two"]);
     }
 
     #[test]
