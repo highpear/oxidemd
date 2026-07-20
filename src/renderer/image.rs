@@ -31,7 +31,7 @@ pub(super) fn render_image_span(
         return;
     };
 
-    match render_resources.image_cache.load(ui.ctx(), &path) {
+    match render_resources.image_cache.prepare(ui.ctx(), &path) {
         ImageLoadState::Loaded(texture) => {
             let max_width = ui.available_width().max(120.0);
             ui.add(
@@ -39,6 +39,18 @@ pub(super) fn render_image_span(
                     .max_width(max_width)
                     .fit_to_original_size(zoom_factor)
                     .alt_text(alt),
+            );
+        }
+        ImageLoadState::Pending => {
+            render_image_message(
+                ui,
+                tr(
+                    render_resources.ui_language,
+                    TranslationKey::MessageImageLoading,
+                ),
+                alt.trim(),
+                theme,
+                zoom_factor,
             );
         }
         ImageLoadState::Failed(error) => {
@@ -95,8 +107,13 @@ fn render_image_message(ui: &mut Ui, prefix: &str, detail: &str, theme: &Theme, 
         .corner_radius(egui::CornerRadius::same(6))
         .inner_margin(egui::Margin::symmetric(10, 8))
         .show(ui, |ui| {
+            let text = if detail.is_empty() {
+                prefix.to_owned()
+            } else {
+                format!("{} {}", prefix, detail)
+            };
             ui.label(
-                RichText::new(format!("{} {}", prefix, detail))
+                RichText::new(text)
                     .size(QUOTE_TEXT_SIZE * zoom_factor)
                     .color(theme.text_secondary),
             );

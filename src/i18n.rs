@@ -48,6 +48,7 @@ pub enum TranslationKey {
     MessageDropMarkdown,
     MessageEmpty,
     MessageExternalLinkPrompt,
+    MessageImageLoading,
     MessageImageLoadFailed,
     MessageImageUnsupported,
     MessageDiagramPreviewPending,
@@ -208,6 +209,11 @@ const TRANSLATIONS: &[TranslationEntry] = &[
         TranslationKey::MessageExternalLinkPrompt,
         "Open this external link?",
         "この外部リンクを開きますか？",
+    ),
+    entry(
+        TranslationKey::MessageImageLoading,
+        "Loading image...",
+        "画像を読み込み中...",
     ),
     entry(
         TranslationKey::MessageImageLoadFailed,

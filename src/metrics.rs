@@ -67,6 +67,15 @@ pub fn log_diagram_render(language: &str, source_len: usize, duration: Duration,
     );
 }
 
+pub fn log_image_load(path: &Path, duration: Duration, outcome: &str) {
+    eprintln!(
+        "[perf] image_load: {} ms, {}, {}",
+        duration.as_millis(),
+        outcome,
+        path.display()
+    );
+}
+
 pub fn log_math_render(source_len: usize, duration: Duration, outcome: &str) {
     eprintln!(
         "[perf] math_render: {} ms, {} source bytes, {}",
