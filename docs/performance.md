@@ -655,3 +655,26 @@ Conclusion:
 - The app now starts MathJax initialization before the user opens math through the file dialog or drag and drop.
 - CLI-opened or restored math documents can still show placeholders before `[perf] math_prewarm` appears, but actual SVG jobs wait until the worker pool is warm.
 - This intentionally spends background CPU and memory even for sessions that never open math, in exchange for reducing the common first-formula delay.
+
+### 2026-07-20: Remove the Large-Document Virtualization Threshold
+
+Change:
+
+- Drop the `block_count < LARGE_DOCUMENT_BLOCK_THRESHOLD` condition from `should_skip_block` so viewport virtualization applies to documents of every size, not just documents with 2,000 or more blocks.
+- Keep the `scroll_to_block == Some(block_index)` guard so heading, search, and TOC navigation still render their target block.
+- Delete the now-unused `LARGE_DOCUMENT_BLOCK_THRESHOLD` constant and the now-unused `block_count` parameter of `should_skip_block`.
+- Keep `VIRTUAL_RENDER_OVERSCAN` (1,200.0) unchanged. Estimated block heights, the measured height cache, and scroll stabilization were already always active regardless of document size, so this only changes which blocks get laid out.
+
+Result:
+
+- Mid-size fixture: 1,750 blocks, 350 headings, generated from the "Measure a Large Markdown File" section template (350 repetitions), 148.7 KiB.
+- Command: manual `Start-Process -RedirectStandardError` runs of `.\target\release\oxidemd.exe <file>`, 3 runs before and 3 runs after the change.
+- Before (unmodified HEAD): render_after_load 16 ms, 16 ms, 15 ms.
+- After (this change): render_after_load 0 ms, 0 ms, 0 ms.
+- `cargo test`: 63 passed, 4 ignored.
+- `cargo build --release`: passed with no warnings.
+
+Conclusion:
+
+- Removing the threshold gives mid-size documents (well under the old 2,000-block cutoff) the same first-render benefit large documents already had, since the supporting virtualization machinery was unconditionally active anyway.
+- Behavioral side effect: off-screen math, Mermaid, and image render jobs in mid-size documents now start only when the user scrolls near their block instead of all being kicked off at load time. This matches large-document behavior and should reduce unnecessary background work for documents that are opened but never scrolled through in full.

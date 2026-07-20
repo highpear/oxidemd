@@ -39,7 +39,6 @@ pub(super) const INLINE_MATH_LINE_HEIGHT_MULTIPLIER: f32 = 1.7;
 pub(super) const INLINE_MATH_BASELINE_OFFSET_MULTIPLIER: f32 = 0.16;
 pub(super) const INLINE_MATH_PLACEHOLDER_MIN_WIDTH: f32 = 28.0;
 pub(super) const BLOCK_MATH_PLACEHOLDER_MIN_HEIGHT: f32 = 42.0;
-const LARGE_DOCUMENT_BLOCK_THRESHOLD: usize = 2_000;
 const VIRTUAL_RENDER_OVERSCAN: f32 = 1_200.0;
 pub(super) const ESTIMATED_CHARS_PER_LINE: usize = 90;
 pub(super) const COPY_FEEDBACK_DURATION_SECONDS: f64 = 1.2;
@@ -89,7 +88,6 @@ pub fn render_markdown_document(
         let block_bottom = block_top + block_height;
 
         if should_skip_block(
-            document.blocks.len(),
             scroll_to_block,
             block_index,
             block_top,
@@ -262,7 +260,6 @@ pub fn render_markdown_document(
 }
 
 fn should_skip_block(
-    block_count: usize,
     scroll_to_block: Option<usize>,
     block_index: usize,
     block_top: f32,
@@ -270,7 +267,7 @@ fn should_skip_block(
     viewport_top: f32,
     viewport_bottom: f32,
 ) -> bool {
-    if block_count < LARGE_DOCUMENT_BLOCK_THRESHOLD || scroll_to_block == Some(block_index) {
+    if scroll_to_block == Some(block_index) {
         return false;
     }
 
