@@ -153,6 +153,10 @@ Run a build check for build-sensitive changes:
 cargo build
 ```
 
+## License
+
+OxideMD is licensed under the [MIT License](LICENSE).
+
 ## Command Line
 
 Open a Markdown file in the viewer:
