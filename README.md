@@ -156,6 +156,18 @@ cargo build
 ## License
 
 OxideMD is licensed under the [MIT License](LICENSE).
+Third-party software and font notices are listed in
+[THIRD_PARTY_LICENSES.html](THIRD_PARTY_LICENSES.html).
+
+Regenerate the third-party notices after changing dependencies:
+
+```bash
+cargo install --locked --features cli --version 0.9.1 cargo-about
+./tools/generate-third-party-licenses.sh
+```
+
+On Windows, run `tools/generate-third-party-licenses.ps1` instead. Release
+packages must include both `LICENSE` and `THIRD_PARTY_LICENSES.html`.
 
 ## Command Line
 

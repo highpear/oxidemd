@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>OxideMD Third-Party Licenses</title>
+    <style>
+        :root { color-scheme: light dark; }
+        body {
+            font-family: system-ui, sans-serif;
+            line-height: 1.5;
+            margin: 0;
+        }
+        main {
+            margin: 0 auto;
+            max-width: 960px;
+            padding: 2rem;
+        }
+        pre {
+            border: 1px solid #8886;
+            border-radius: 0.4rem;
+            overflow-x: auto;
+            padding: 1rem;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+<main>
+    <h1>OxideMD Third-Party Licenses</h1>
+    <p>
+        OxideMD includes third-party software and fonts. The following notices
+        apply to those components and do not change the MIT license of OxideMD.
+    </p>
+
+    <h2>Embedded font notices</h2>
+    <ul>
+        <li>
+            Hack Regular: Copyright 2018 Source Foundry Authors. Portions are
+            Copyright 2003 Bitstream, Inc. Hack is licensed under the MIT
+            License; the Bitstream Vera terms are reproduced below.
+        </li>
+        <li>
+            Noto Emoji Regular: Copyright 2013 Google LLC. Licensed under the
+            SIL Open Font License 1.1 reproduced below.
+        </li>
+        <li>
+            Ubuntu Light: Copyright 2010 Canonical Ltd. Designed by Dalton
+            Maag Ltd. Licensed under the Ubuntu Font Licence 1.0 reproduced
+            below. Ubuntu and Canonical are registered trademarks of
+            Canonical Ltd.
+        </li>
+        <li>
+            emoji-icon-font: Copyright 2014 John Slegers. Licensed under the
+            MIT License reproduced below.
+        </li>
+    </ul>
+
+    <h3>Bitstream Vera License</h3>
+    <pre>Copyright (c) 2003 by Bitstream, Inc. All Rights Reserved. Bitstream Vera is a trademark of Bitstream, Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of the fonts accompanying this license ("Fonts") and associated documentation files (the "Font Software"), to reproduce and distribute the Font Software, including without limitation the rights to use, copy, merge, publish, distribute, and/or sell copies of the Font Software, and to permit persons to whom the Font Software is furnished to do so, subject to the following conditions:
+
+The above copyright and trademark notices and this permission notice shall be included in all copies of one or more of the Font Software typefaces.
+
+The Font Software may be modified, altered, or added to, and in particular the designs of glyphs or characters in the Fonts may be modified and additional glyphs or characters may be added to the Fonts, only if the fonts are renamed to names not containing either the words "Bitstream" or the word "Vera".
+
+This License becomes null and void to the extent applicable to Fonts or Font Software that has been modified and is distributed under the "Bitstream Vera" names.
+
+The Font Software may be sold as part of a larger software package but no copy of one or more of the Font Software typefaces may be sold by itself.
+
+THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL BITSTREAM OR THE GNOME FOUNDATION BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM OTHER DEALINGS IN THE FONT SOFTWARE.
+
+Except as contained in this notice, the names of Gnome, the Gnome Foundation, and Bitstream Inc., shall not be used in advertising or otherwise to promote the sale, use or other dealings in this Font Software without prior written authorization from the Gnome Foundation or Bitstream Inc., respectively. For further information, contact: fonts at gnome dot org.</pre>
+
+    <h2>License overview</h2>
+    <ul>
+        {{#each overview}}
+        <li><a href="#{{id}}">{{name}}</a> ({{count}} components)</li>
+        {{/each}}
+    </ul>
+
+    <h2>Notices and license texts</h2>
+    {{#each licenses}}
+    <section>
+        {{#if first_of_kind}}
+        <h3 id="{{id}}">{{name}}</h3>
+        {{/if}}
+        <p>Used by:</p>
+        <ul>
+            {{#each used_by}}
+            <li>
+                <a href="{{#if crate.repository}}{{crate.repository}}{{else}}https://crates.io/crates/{{crate.name}}{{/if}}">
+                    {{crate.name}} {{crate.version}}
+                </a>
+            </li>
+            {{/each}}
+        </ul>
+        <pre>{{text}}</pre>
+    </section>
+    {{/each}}
+</main>
+</body>
+</html>
