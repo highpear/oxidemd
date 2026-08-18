@@ -70,13 +70,13 @@ pub fn apply_theme(ctx: &egui::Context, theme: &Theme) {
     style.visuals.faint_bg_color = theme.top_bar_background;
     style.visuals.override_text_color = Some(theme.text_primary);
     style.visuals.widgets.noninteractive.bg_fill = theme.top_bar_background;
-    style.visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, theme.content_border);
+    style.visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0_f32, theme.content_border);
     style.visuals.widgets.inactive.bg_fill = theme.widget_inactive_background;
-    style.visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, theme.content_border);
+    style.visuals.widgets.inactive.bg_stroke = Stroke::new(1.0_f32, theme.content_border);
     style.visuals.widgets.hovered.bg_fill = theme.widget_hovered_background;
-    style.visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, theme.content_border);
+    style.visuals.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, theme.content_border);
     style.visuals.widgets.active.bg_fill = theme.widget_active_background;
-    style.visuals.widgets.active.bg_stroke = Stroke::new(1.0, theme.content_border);
+    style.visuals.widgets.active.bg_stroke = Stroke::new(1.0_f32, theme.content_border);
     style.visuals.widgets.open.bg_fill = theme.top_bar_background;
     style.visuals.hyperlink_color = theme.link;
     style.visuals.window_corner_radius = CornerRadius::same(10);

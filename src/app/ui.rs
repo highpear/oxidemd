@@ -368,7 +368,7 @@ impl OxideMdApp {
             let panel_width = ui.available_width().min(HOME_PANEL_MAX_WIDTH);
             Frame::new()
                 .fill(theme.content_background)
-                .stroke(egui::Stroke::new(1.0, theme.content_border))
+                .stroke(egui::Stroke::new(1.0_f32, theme.content_border))
                 .corner_radius(egui::CornerRadius::same(10))
                 .inner_margin(Margin::symmetric(24, 22))
                 .show(ui, |ui| {
@@ -459,7 +459,7 @@ impl OxideMdApp {
             .show(ctx, |ui| {
                 Frame::new()
                     .fill(theme.status_loading_background)
-                    .stroke(egui::Stroke::new(1.0, theme.content_border))
+                    .stroke(egui::Stroke::new(1.0_f32, theme.content_border))
                     .corner_radius(egui::CornerRadius::same(8))
                     .inner_margin(Margin::symmetric(18, 12))
                     .show(ui, |ui| {

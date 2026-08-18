@@ -50,7 +50,7 @@ pub(super) fn render_math_block(
 
     Frame::new()
         .fill(theme.widget_inactive_background)
-        .stroke(Stroke::new(1.0, theme.content_border))
+        .stroke(Stroke::new(1.0_f32, theme.content_border))
         .corner_radius(egui::CornerRadius::same(6))
         .inner_margin(egui::Margin::symmetric(
             scale_margin(MATH_BLOCK_PADDING_X, zoom_factor),
@@ -131,7 +131,7 @@ pub(super) fn render_diagram_block(
 
     Frame::new()
         .fill(theme.widget_inactive_background)
-        .stroke(Stroke::new(1.0, theme.content_border))
+        .stroke(Stroke::new(1.0_f32, theme.content_border))
         .corner_radius(egui::CornerRadius::same(6))
         .inner_margin(egui::Margin::symmetric(
             scale_margin(MATH_BLOCK_PADDING_X, zoom_factor),
@@ -382,7 +382,7 @@ fn render_math_block_placeholder(ui: &mut Ui, expression: &str, theme: &Theme, z
             rect,
             egui::CornerRadius::same(5),
             theme.widget_inactive_background,
-            Stroke::new(1.0, theme.content_border),
+            Stroke::new(1.0_f32, theme.content_border),
             egui::StrokeKind::Inside,
         );
 

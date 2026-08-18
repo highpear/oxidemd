@@ -186,7 +186,7 @@ fn render_code_block_header(
 fn render_code_language_label(ui: &mut Ui, language: &str, theme: &Theme, zoom_factor: f32) {
     Frame::new()
         .fill(theme.top_bar_background)
-        .stroke(Stroke::new(1.0, theme.content_border))
+        .stroke(Stroke::new(1.0_f32, theme.content_border))
         .corner_radius(egui::CornerRadius::same(scale_margin(6, zoom_factor) as u8))
         .inner_margin(egui::Margin::symmetric(
             scale_margin(8, zoom_factor),

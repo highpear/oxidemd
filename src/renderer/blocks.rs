@@ -104,7 +104,7 @@ pub(super) fn render_blockquote(
 ) {
     Frame::new()
         .fill(theme.quote_background)
-        .stroke(Stroke::new(1.0, theme.quote_border))
+        .stroke(Stroke::new(1.0_f32, theme.quote_border))
         .inner_margin(egui::Margin::symmetric(
             scale_margin(16, zoom_factor),
             scale_margin(14, zoom_factor),
@@ -146,7 +146,7 @@ pub(super) fn render_table(
     }
 
     Frame::new()
-        .stroke(Stroke::new(1.0, theme.content_border))
+        .stroke(Stroke::new(1.0_f32, theme.content_border))
         .corner_radius(egui::CornerRadius::same(6))
         .inner_margin(egui::Margin::symmetric(8, 8))
         .show(ui, |ui| {

@@ -103,7 +103,7 @@ fn is_remote_or_data_uri(destination: &str) -> bool {
 fn render_image_message(ui: &mut Ui, prefix: &str, detail: &str, theme: &Theme, zoom_factor: f32) {
     Frame::new()
         .fill(theme.widget_inactive_background)
-        .stroke(Stroke::new(1.0, theme.content_border))
+        .stroke(Stroke::new(1.0_f32, theme.content_border))
         .corner_radius(egui::CornerRadius::same(6))
         .inner_margin(egui::Margin::symmetric(10, 8))
         .show(ui, |ui| {
